@@ -12,7 +12,7 @@
 ** This file contains code to implement the "sqlite" command line
 ** utility for accessing SQLite databases.
 **
-** $Id: shell.c,v 1.178 2008/05/05 16:27:24 drh Exp $
+** $Id: shell.c,v 1.184 2008/07/11 17:23:25 drh Exp $
 */
 #include <stdlib.h>
 #include <string.h>
@@ -79,10 +79,10 @@ static void beginTimer(void){
   }
 }
 
-/* Return the difference of two time_structs in microseconds */
-static int timeDiff(struct timeval *pStart, struct timeval *pEnd){
-  return (pEnd->tv_usec - pStart->tv_usec) + 
-         1000000*(pEnd->tv_sec - pStart->tv_sec);
+/* Return the difference of two time_structs in seconds */
+static double timeDiff(struct timeval *pStart, struct timeval *pEnd){
+  return (pEnd->tv_usec - pStart->tv_usec)*0.000001 + 
+         (double)(pEnd->tv_sec - pStart->tv_sec);
 }
 
 /*
@@ -93,8 +93,8 @@ static void endTimer(void){
     struct rusage sEnd;
     getrusage(RUSAGE_SELF, &sEnd);
     printf("CPU Time: user %f sys %f\n",
-       0.000001*timeDiff(&sBegin.ru_utime, &sEnd.ru_utime),
-       0.000001*timeDiff(&sBegin.ru_stime, &sEnd.ru_stime));
+       timeDiff(&sBegin.ru_utime, &sEnd.ru_utime),
+       timeDiff(&sBegin.ru_stime, &sEnd.ru_stime));
   }
 }
 #define BEGIN_TIMER beginTimer()
@@ -1946,7 +1946,7 @@ int main(int argc, char **argv){
     }
   }
   if( i<argc ){
-#ifdef OS_OS2
+#if defined(SQLITE_OS_OS2) && SQLITE_OS_OS2
     data.zDbFilename = (const char *)convertCpPathToUtf8( argv[i++] );
 #else
     data.zDbFilename = argv[i++];
@@ -2062,7 +2062,8 @@ int main(int argc, char **argv){
       int nHistory;
       printf(
         "SQLite version %s\n"
-        "Enter \".help\" for instructions\n",
+        "Enter \".help\" for instructions\n"
+        "Enter SQL statements terminated with a \";\"\n",
         sqlite3_libversion()
       );
       zHome = find_home_dir();

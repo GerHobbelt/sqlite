@@ -8,7 +8,7 @@
 #
 
 AC_PREREQ(2.61)
-AC_INIT(sqlite, 3.5.9, http://www.sqlite.org)
+AC_INIT(sqlite, 3.6.1, http://www.sqlite.org)
 AC_CONFIG_SRCDIR([sqlite3.c])
 
 # Use automake.
@@ -101,4 +101,3 @@ AC_SUBST(DYNAMIC_EXTENSION_FLAGS)
 #-----------------------------------------------------------------------
 
 AC_OUTPUT
-
