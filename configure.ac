@@ -8,7 +8,7 @@
 #
 
 AC_PREREQ(2.61)
-AC_INIT(sqlite, 3.6.10, http://www.sqlite.org)
+AC_INIT(sqlite, 3.6.11, http://www.sqlite.org)
 AC_CONFIG_SRCDIR([sqlite3.c])
 
 # Use automake.
@@ -24,7 +24,8 @@ AC_PROG_LIBTOOL
 # Check for library functions that SQLite can optionally use.
 AC_CHECK_FUNCS([fdatasync usleep fullfsync localtime_r gmtime_r])
 
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile sqlite3.pc])
+AC_SUBST(BUILD_CFLAGS)
 
 #-----------------------------------------------------------------------
 #   --enable-readline

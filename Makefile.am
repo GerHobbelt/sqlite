@@ -12,3 +12,6 @@ sqlite3_DEPENDENCIES = $(top_builddir)/libsqlite3.la
 
 include_HEADERS = sqlite3.h sqlite3ext.h
 
+EXTRA_DIST = sqlite3.pc
+pkgconfigdir = ${libdir}/pkgconfig
+pkgconfig_DATA = sqlite3.pc
