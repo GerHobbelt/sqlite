@@ -8,7 +8,7 @@
 #
 
 AC_PREREQ(2.61)
-AC_INIT(sqlite, 3.6.11, http://www.sqlite.org)
+AC_INIT(sqlite, 3.6.12, http://www.sqlite.org)
 AC_CONFIG_SRCDIR([sqlite3.c])
 
 # Use automake.
@@ -63,7 +63,7 @@ AC_SUBST(THREADSAFE_FLAGS)
 #-----------------------------------------------------------------------
 #   --enable-dynamic-extensions
 #
-AC_ARG_ENABLE(tempstore, [AS_HELP_STRING(
+AC_ARG_ENABLE(dynamic-extensions, [AS_HELP_STRING(
   [--enable-dynamic-extensions], [support loadable extensions [default=yes]])], 
   [], [enable_dynamic_extensions=yes])
 if test x"$enable_dynamic_extensions" != "xno"; then
@@ -72,7 +72,7 @@ else
   DYNAMIC_EXTENSION_FLAGS=-DSQLITE_OMIT_LOAD_EXTENSION=1
 fi
 AC_MSG_CHECKING([for whether to support dynamic extensions])
-AC_MSG_RESULT($enable_threadsafe)
+AC_MSG_RESULT($enable_dynamic_extensions)
 AC_SUBST(DYNAMIC_EXTENSION_FLAGS)
 #-----------------------------------------------------------------------
 
