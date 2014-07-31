@@ -46,6 +46,18 @@
 #endif
 #include <ctype.h>
 
+/* Used to get the current process ID */
+#if !defined(_WIN32)
+# include <unistd.h>
+# define GETPID getpid
+#elif !defined(_WIN32_WCE)
+# ifndef SQLITE_AMALGAMATION
+#  define WIN32_LEAN_AND_MEAN
+#  include <windows.h>
+# endif
+# define GETPID (int)GetCurrentProcessId
+#endif
+
 /*
  * Windows needs to know which symbols to export.  Unix does not.
  * BUILD_sqlite should be undefined for Unix.
@@ -417,13 +429,12 @@ static int safeToUseEvalObjv(Tcl_Interp *interp, Tcl_Obj *pCmd){
 */
 static SqlFunc *findSqlFunc(SqliteDb *pDb, const char *zName){
   SqlFunc *p, *pNew;
-  int i;
-  pNew = (SqlFunc*)Tcl_Alloc( sizeof(*pNew) + strlen30(zName) + 1 );
+  int nName = strlen30(zName);
+  pNew = (SqlFunc*)Tcl_Alloc( sizeof(*pNew) + nName + 1 );
   pNew->zName = (char*)&pNew[1];
-  for(i=0; zName[i]; i++){ pNew->zName[i] = tolower(zName[i]); }
-  pNew->zName[i] = 0;
+  memcpy(pNew->zName, zName, nName+1);
   for(p=pDb->pFunc; p; p=p->pNext){ 
-    if( strcmp(p->zName, pNew->zName)==0 ){
+    if( sqlite3_stricmp(p->zName, pNew->zName)==0 ){
       Tcl_Free((char*)pNew);
       return p;
     }
@@ -867,7 +878,7 @@ static int auth_callback(
   const char *zArg3,
   const char *zArg4
 ){
-  char *zCode;
+  const char *zCode;
   Tcl_DString str;
   int rc;
   const char *zReply;
@@ -908,6 +919,7 @@ static int auth_callback(
     case SQLITE_DROP_VTABLE       : zCode="SQLITE_DROP_VTABLE"; break;
     case SQLITE_FUNCTION          : zCode="SQLITE_FUNCTION"; break;
     case SQLITE_SAVEPOINT         : zCode="SQLITE_SAVEPOINT"; break;
+    case SQLITE_RECURSIVE         : zCode="SQLITE_RECURSIVE"; break;
     default                       : zCode="????"; break;
   }
   Tcl_DStringInit(&str);
@@ -992,7 +1004,7 @@ static int DbTransPostCmd(
   Tcl_Interp *interp,                  /* Tcl interpreter */
   int result                           /* Result of evaluating SCRIPT */
 ){
-  static const char *azEnd[] = {
+  static const char *const azEnd[] = {
     "RELEASE _tcl_transaction",        /* rc==TCL_ERROR, nTransaction!=0 */
     "COMMIT",                          /* rc!=TCL_ERROR, nTransaction==0 */
     "ROLLBACK TO _tcl_transaction ; RELEASE _tcl_transaction",
@@ -1018,7 +1030,7 @@ static int DbTransPostCmd(
       ** this method's logic. Not clear how this would be best handled.
       */
     if( rc!=TCL_ERROR ){
-      Tcl_AppendResult(interp, sqlite3_errmsg(pDb->db), 0);
+      Tcl_AppendResult(interp, sqlite3_errmsg(pDb->db), (char*)0);
       rc = TCL_ERROR;
     }
     sqlite3_exec(pDb->db, "ROLLBACK", 0, 0, 0);
@@ -1076,13 +1088,14 @@ static int dbPrepareAndBind(
   int nSql;                       /* Length of zSql in bytes */
   int nVar;                       /* Number of variables in statement */
   int iParm = 0;                  /* Next free entry in apParm */
+  char c;
   int i;
   Tcl_Interp *interp = pDb->interp;
 
   *ppPreStmt = 0;
 
   /* Trim spaces from the start of zSql and calculate the remaining length. */
-  while( isspace(zSql[0]) ){ zSql++; }
+  while( (c = zSql[0])==' ' || c=='\t' || c=='\r' || c=='\n' ){ zSql++; }
   nSql = strlen30(zSql);
 
   for(pPreStmt = pDb->stmtList; pPreStmt; pPreStmt=pPreStmt->pNext){
@@ -1523,9 +1536,9 @@ static int DbUseNre(void){
 */
 # define SQLITE_TCL_NRE 0
 # define DbUseNre() 0
-# define Tcl_NRAddCallback(a,b,c,d,e,f) 0
+# define Tcl_NRAddCallback(a,b,c,d,e,f) (void)0
 # define Tcl_NREvalObj(a,b,c) 0
-# define Tcl_NRCreateCommand(a,b,c,d,e,f) 0
+# define Tcl_NRCreateCommand(a,b,c,d,e,f) (void)0
 #endif
 
 /*
@@ -1667,7 +1680,8 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   */
   case DB_AUTHORIZER: {
 #ifdef SQLITE_OMIT_AUTHORIZATION
-    Tcl_AppendResult(interp, "authorization not available in this build", 0);
+    Tcl_AppendResult(interp, "authorization not available in this build",
+                     (char*)0);
     return TCL_ERROR;
 #else
     if( objc>3 ){
@@ -1675,7 +1689,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       return TCL_ERROR;
     }else if( objc==2 ){
       if( pDb->zAuth ){
-        Tcl_AppendResult(interp, pDb->zAuth, 0);
+        Tcl_AppendResult(interp, pDb->zAuth, (char*)0);
       }
     }else{
       char *zAuth;
@@ -1761,7 +1775,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       return TCL_ERROR;
     }else if( objc==2 ){
       if( pDb->zBusy ){
-        Tcl_AppendResult(interp, pDb->zBusy, 0);
+        Tcl_AppendResult(interp, pDb->zBusy, (char*)0);
       }
     }else{
       char *zBusy;
@@ -1815,7 +1829,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       }else{
         if( TCL_ERROR==Tcl_GetIntFromObj(interp, objv[3], &n) ){
           Tcl_AppendResult( interp, "cannot convert \"", 
-               Tcl_GetStringFromObj(objv[3],0), "\" to integer", 0);
+               Tcl_GetStringFromObj(objv[3],0), "\" to integer", (char*)0);
           return TCL_ERROR;
         }else{
           if( n<0 ){
@@ -1829,7 +1843,8 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       }
     }else{
       Tcl_AppendResult( interp, "bad option \"", 
-          Tcl_GetStringFromObj(objv[2],0), "\": must be flush or size", 0);
+          Tcl_GetStringFromObj(objv[2],0), "\": must be flush or size",
+          (char*)0);
       return TCL_ERROR;
     }
     break;
@@ -1926,10 +1941,10 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       return TCL_ERROR;
     }else if( objc==2 ){
       if( pDb->zCommit ){
-        Tcl_AppendResult(interp, pDb->zCommit, 0);
+        Tcl_AppendResult(interp, pDb->zCommit, (char*)0);
       }
     }else{
-      char *zCommit;
+      const char *zCommit;
       int len;
       if( pDb->zCommit ){
         Tcl_Free(pDb->zCommit);
@@ -2002,14 +2017,14 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     char *zSql;                 /* An SQL statement */
     char *zLine;                /* A single line of input from the file */
     char **azCol;               /* zLine[] broken up into columns */
-    char *zCommit;              /* How to commit changes */
+    const char *zCommit;        /* How to commit changes */
     FILE *in;                   /* The input file */
     int lineno = 0;             /* Line number of input file */
     char zLineNum[80];          /* Line number print buffer */
     Tcl_Obj *pResult;           /* interp result */
 
-    char *zSep;
-    char *zNull;
+    const char *zSep;
+    const char *zNull;
     if( objc<5 || objc>7 ){
       Tcl_WrongNumArgs(interp, 2, objv, 
          "CONFLICT-ALGORITHM TABLE FILENAME ?SEPARATOR? ?NULLINDICATOR?");
@@ -2031,7 +2046,8 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     nSep = strlen30(zSep);
     nNull = strlen30(zNull);
     if( nSep==0 ){
-      Tcl_AppendResult(interp,"Error: non-null separator required for copy",0);
+      Tcl_AppendResult(interp,"Error: non-null separator required for copy",
+                       (char*)0);
       return TCL_ERROR;
     }
     if(strcmp(zConflict, "rollback") != 0 &&
@@ -2041,19 +2057,19 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
        strcmp(zConflict, "replace" ) != 0 ) {
       Tcl_AppendResult(interp, "Error: \"", zConflict, 
             "\", conflict-algorithm must be one of: rollback, "
-            "abort, fail, ignore, or replace", 0);
+            "abort, fail, ignore, or replace", (char*)0);
       return TCL_ERROR;
     }
     zSql = sqlite3_mprintf("SELECT * FROM '%q'", zTable);
     if( zSql==0 ){
-      Tcl_AppendResult(interp, "Error: no such table: ", zTable, 0);
+      Tcl_AppendResult(interp, "Error: no such table: ", zTable, (char*)0);
       return TCL_ERROR;
     }
     nByte = strlen30(zSql);
     rc = sqlite3_prepare(pDb->db, zSql, -1, &pStmt, 0);
     sqlite3_free(zSql);
     if( rc ){
-      Tcl_AppendResult(interp, "Error: ", sqlite3_errmsg(pDb->db), 0);
+      Tcl_AppendResult(interp, "Error: ", sqlite3_errmsg(pDb->db), (char*)0);
       nCol = 0;
     }else{
       nCol = sqlite3_column_count(pStmt);
@@ -2064,7 +2080,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     }
     zSql = malloc( nByte + 50 + nCol*2 );
     if( zSql==0 ) {
-      Tcl_AppendResult(interp, "Error: can't malloc()", 0);
+      Tcl_AppendResult(interp, "Error: can't malloc()", (char*)0);
       return TCL_ERROR;
     }
     sqlite3_snprintf(nByte+50, zSql, "INSERT OR %q INTO '%q' VALUES(?",
@@ -2079,7 +2095,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     rc = sqlite3_prepare(pDb->db, zSql, -1, &pStmt, 0);
     free(zSql);
     if( rc ){
-      Tcl_AppendResult(interp, "Error: ", sqlite3_errmsg(pDb->db), 0);
+      Tcl_AppendResult(interp, "Error: ", sqlite3_errmsg(pDb->db), (char*)0);
       sqlite3_finalize(pStmt);
       return TCL_ERROR;
     }
@@ -2091,7 +2107,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     }
     azCol = malloc( sizeof(azCol[0])*(nCol+1) );
     if( azCol==0 ) {
-      Tcl_AppendResult(interp, "Error: can't malloc()", 0);
+      Tcl_AppendResult(interp, "Error: can't malloc()", (char*)0);
       fclose(in);
       return TCL_ERROR;
     }
@@ -2119,7 +2135,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
           sqlite3_snprintf(nErr, zErr,
              "Error: %s line %d: expected %d columns of data but found %d",
              zFile, lineno, nCol, i+1);
-          Tcl_AppendResult(interp, zErr, 0);
+          Tcl_AppendResult(interp, zErr, (char*)0);
           free(zErr);
         }
         zCommit = "ROLLBACK";
@@ -2139,7 +2155,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       rc = sqlite3_reset(pStmt);
       free(zLine);
       if( rc!=SQLITE_OK ){
-        Tcl_AppendResult(interp,"Error: ", sqlite3_errmsg(pDb->db), 0);
+        Tcl_AppendResult(interp,"Error: ", sqlite3_errmsg(pDb->db), (char*)0);
         zCommit = "ROLLBACK";
         break;
       }
@@ -2157,7 +2173,8 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     }else{
       /* failure, append lineno where failed */
       sqlite3_snprintf(sizeof(zLineNum), zLineNum,"%d",lineno);
-      Tcl_AppendResult(interp,", failed while processing line: ",zLineNum,0);
+      Tcl_AppendResult(interp,", failed while processing line: ",zLineNum,
+                       (char*)0);
       rc = TCL_ERROR;
     }
     break;
@@ -2183,7 +2200,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     break;
 #else
     Tcl_AppendResult(interp, "extension loading is turned off at compile-time",
-                     0);
+                     (char*)0);
     return TCL_ERROR;
 #endif
   }
@@ -2341,7 +2358,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   */
   case DB_INCRBLOB: {
 #ifdef SQLITE_OMIT_INCRBLOB
-    Tcl_AppendResult(interp, "incrblob not available in this build", 0);
+    Tcl_AppendResult(interp, "incrblob not available in this build", (char*)0);
     return TCL_ERROR;
 #else
     int isReadonly = 0;
@@ -2448,7 +2465,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   case DB_PROGRESS: {
     if( objc==2 ){
       if( pDb->zProgress ){
-        Tcl_AppendResult(interp, pDb->zProgress, 0);
+        Tcl_AppendResult(interp, pDb->zProgress, (char*)0);
       }
     }else if( objc==4 ){
       char *zProgress;
@@ -2494,7 +2511,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       return TCL_ERROR;
     }else if( objc==2 ){
       if( pDb->zProfile ){
-        Tcl_AppendResult(interp, pDb->zProfile, 0);
+        Tcl_AppendResult(interp, pDb->zProfile, (char*)0);
       }
     }else{
       char *zProfile;
@@ -2539,7 +2556,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     pKey = Tcl_GetByteArrayFromObj(objv[2], &nKey);
     rc = sqlite3_rekey(pDb->db, pKey, nKey);
     if( rc ){
-      Tcl_AppendResult(interp, sqlite3_errstr(rc), 0);
+      Tcl_AppendResult(interp, sqlite3_errstr(rc), (char*)0);
       rc = TCL_ERROR;
     }
 #endif
@@ -2680,7 +2697,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       return TCL_ERROR;
     }else if( objc==2 ){
       if( pDb->zTrace ){
-        Tcl_AppendResult(interp, pDb->zTrace, 0);
+        Tcl_AppendResult(interp, pDb->zTrace, (char*)0);
       }
     }else{
       char *zTrace;
@@ -2751,7 +2768,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     rc = sqlite3_exec(pDb->db, zBegin, 0, 0, 0);
     pDb->disableAuth--;
     if( rc!=SQLITE_OK ){
-      Tcl_AppendResult(interp, sqlite3_errmsg(pDb->db), 0);
+      Tcl_AppendResult(interp, sqlite3_errmsg(pDb->db), (char*)0);
       return TCL_ERROR;
     }
     pDb->nTransaction++;
@@ -2763,7 +2780,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     ** or savepoint.  */
     if( DbUseNre() ){
       Tcl_NRAddCallback(interp, DbTransPostCmd, cd, 0, 0, 0);
-      Tcl_NREvalObj(interp, pScript, 0);
+      (void)Tcl_NREvalObj(interp, pScript, 0);
     }else{
       rc = DbTransPostCmd(&cd, interp, Tcl_EvalObjEx(interp, pScript, 0));
     }
@@ -2775,7 +2792,8 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   */
   case DB_UNLOCK_NOTIFY: {
 #ifndef SQLITE_ENABLE_UNLOCK_NOTIFY
-    Tcl_AppendResult(interp, "unlock_notify not available in this build", 0);
+    Tcl_AppendResult(interp, "unlock_notify not available in this build",
+                     (char*)0);
     rc = TCL_ERROR;
 #else
     if( objc!=2 && objc!=3 ){
@@ -2798,7 +2816,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       }
   
       if( sqlite3_unlock_notify(pDb->db, xNotify, pNotifyArg) ){
-        Tcl_AppendResult(interp, sqlite3_errmsg(pDb->db), 0);
+        Tcl_AppendResult(interp, sqlite3_errmsg(pDb->db), (char*)0);
         rc = TCL_ERROR;
       }
     }
@@ -2927,14 +2945,14 @@ static int DbMain(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   if( objc==2 ){
     zArg = Tcl_GetStringFromObj(objv[1], 0);
     if( strcmp(zArg,"-version")==0 ){
-      Tcl_AppendResult(interp,sqlite3_version,0);
+      Tcl_AppendResult(interp,sqlite3_libversion(), (char*)0);
       return TCL_OK;
     }
     if( strcmp(zArg,"-has-codec")==0 ){
 #ifdef SQLITE_HAS_CODEC
-      Tcl_AppendResult(interp,"1",0);
+      Tcl_AppendResult(interp,"1",(char*)0);
 #else
-      Tcl_AppendResult(interp,"0",0);
+      Tcl_AppendResult(interp,"0",(char*)0);
 #endif
       return TCL_OK;
     }
@@ -3009,7 +3027,7 @@ static int DbMain(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   zErrMsg = 0;
   p = (SqliteDb*)Tcl_Alloc( sizeof(*p) );
   if( p==0 ){
-    Tcl_SetResult(interp, "malloc failed", TCL_STATIC);
+    Tcl_SetResult(interp, (char *)"malloc failed", TCL_STATIC);
     return TCL_ERROR;
   }
   memset(p, 0, sizeof(*p));
@@ -3055,7 +3073,7 @@ static int DbMain(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
 */
 #ifndef USE_TCL_STUBS
 # undef  Tcl_InitStubs
-# define Tcl_InitStubs(a,b,c)
+# define Tcl_InitStubs(a,b,c) TCL_VERSION
 #endif
 
 /*
@@ -3079,19 +3097,18 @@ static int DbMain(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
 ** The EXTERN macros are required by TCL in order to work on windows.
 */
 EXTERN int Sqlite3_Init(Tcl_Interp *interp){
-  Tcl_InitStubs(interp, "8.4", 0);
-  Tcl_CreateObjCommand(interp, "sqlite3", (Tcl_ObjCmdProc*)DbMain, 0, 0);
-  Tcl_PkgProvide(interp, "sqlite3", PACKAGE_VERSION);
-
+  int rc = Tcl_InitStubs(interp, "8.4", 0)==0 ? TCL_ERROR : TCL_OK;
+  if( rc==TCL_OK ){
+    Tcl_CreateObjCommand(interp, "sqlite3", (Tcl_ObjCmdProc*)DbMain, 0, 0);
 #ifndef SQLITE_3_SUFFIX_ONLY
-  /* The "sqlite" alias is undocumented.  It is here only to support
-  ** legacy scripts.  All new scripts should use only the "sqlite3"
-  ** command.
-  */
-  Tcl_CreateObjCommand(interp, "sqlite", (Tcl_ObjCmdProc*)DbMain, 0, 0);
+    /* The "sqlite" alias is undocumented.  It is here only to support
+    ** legacy scripts.  All new scripts should use only the "sqlite3"
+    ** command. */
+    Tcl_CreateObjCommand(interp, "sqlite", (Tcl_ObjCmdProc*)DbMain, 0, 0);
 #endif
-
-  return TCL_OK;
+    rc = Tcl_PkgProvide(interp, "sqlite3", PACKAGE_VERSION);
+  }
+  return rc;
 }
 EXTERN int Tclsqlite3_Init(Tcl_Interp *interp){ return Sqlite3_Init(interp); }
 EXTERN int Sqlite3_Unload(Tcl_Interp *interp, int flags){ return TCL_OK; }
@@ -3365,13 +3382,11 @@ static void MD5Final(unsigned char digest[16], MD5Context *ctx){
         byteReverse(ctx->in, 14);
 
         /* Append length in bits and transform */
-        ((uint32 *)ctx->in)[ 14 ] = ctx->bits[0];
-        ((uint32 *)ctx->in)[ 15 ] = ctx->bits[1];
+        memcpy(ctx->in + 14*4, ctx->bits, 8);
 
         MD5Transform(ctx->buf, (uint32 *)ctx->in);
         byteReverse((unsigned char *)ctx->buf, 4);
         memcpy(digest, ctx->buf, 16);
-        memset(ctx, 0, sizeof(ctx));    /* In case it is sensitive */
 }
 
 /*
@@ -3419,7 +3434,7 @@ static int md5_cmd(void*cd, Tcl_Interp *interp, int argc, const char **argv){
 
   if( argc!=2 ){
     Tcl_AppendResult(interp,"wrong # args: should be \"", argv[0], 
-        " TEXT\"", 0);
+        " TEXT\"", (char*)0);
     return TCL_ERROR;
   }
   MD5Init(&ctx);
@@ -3444,13 +3459,13 @@ static int md5file_cmd(void*cd, Tcl_Interp*interp, int argc, const char **argv){
 
   if( argc!=2 ){
     Tcl_AppendResult(interp,"wrong # args: should be \"", argv[0], 
-        " FILENAME\"", 0);
+        " FILENAME\"", (char*)0);
     return TCL_ERROR;
   }
   in = fopen(argv[1],"rb");
   if( in==0 ){
     Tcl_AppendResult(interp,"unable to open file \"", argv[1], 
-         "\" for reading", 0);
+         "\" for reading", (char*)0);
     return TCL_ERROR;
   }
   MD5Init(&ctx);
@@ -3752,13 +3767,23 @@ static void init_all(Tcl_Interp *interp){
 #define TCLSH_MAIN main   /* Needed to fake out mktclapp */
 int TCLSH_MAIN(int argc, char **argv){
   Tcl_Interp *interp;
-  
+
+#if !defined(_WIN32_WCE)
+  if( getenv("BREAK") ){
+    fprintf(stderr,
+        "attach debugger to process %d and press any key to continue.\n",
+        GETPID());
+    fgetc(stdin);
+  }
+#endif
+
   /* Call sqlite3_shutdown() once before doing anything else. This is to
   ** test that sqlite3_shutdown() can be safely called by a process before
   ** sqlite3_initialize() is. */
   sqlite3_shutdown();
 
   Tcl_FindExecutable(argv[0]);
+  Tcl_SetSystemEncoding(NULL, "utf-8");
   interp = Tcl_CreateInterp();
 
 #if TCLSH==2
