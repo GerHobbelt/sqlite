@@ -712,7 +712,8 @@ static int robust_open(const char *z, int f, mode_t m){
         osFchmod(fd, m);
       }
     }
-#if defined(FD_CLOEXEC) && (!defined(O_CLOEXEC) || O_CLOEXEC==0)
+#if defined(FD_CLOEXEC)
+	// Even though O_CLOEXEC is defined does not mean the kernel supports it.
     osFcntl(fd, F_SETFD, osFcntl(fd, F_GETFD, 0) | FD_CLOEXEC);
 #endif
   }
