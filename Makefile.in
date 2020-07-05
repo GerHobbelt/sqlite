@@ -199,7 +199,7 @@ LIBOBJS0 = alter.lo analyze.lo attach.lo auth.lo \
          vdbe.lo vdbeapi.lo vdbeaux.lo vdbeblob.lo vdbemem.lo vdbesort.lo \
          vdbetrace.lo vdbevtab.lo \
          wal.lo walker.lo where.lo wherecode.lo whereexpr.lo \
-         window.lo utf.lo vtab.lo
+         window.lo utf.lo vtab.lo migemo.lo
 
 # Object files for the amalgamation.
 #
@@ -355,6 +355,8 @@ SRC += \
 SRC += \
   $(TOP)/ext/rbu/sqlite3rbu.h \
   $(TOP)/ext/rbu/sqlite3rbu.c
+SRC += \
+  $(TOP)/ext/misc/migemo.c
 SRC += \
   $(TOP)/ext/misc/stmt.c
 
@@ -1262,6 +1264,9 @@ userauth.lo:	$(TOP)/ext/userauth/userauth.c $(HDR) $(EXTHDR)
 sqlite3session.lo:	$(TOP)/ext/session/sqlite3session.c $(HDR) $(EXTHDR)
 	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)/ext/session/sqlite3session.c
 
+migemo.lo:	$(TOP)/ext/misc/migemo.c
+	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)/ext/misc/migemo.c
+
 stmt.lo:	$(TOP)/ext/misc/stmt.c
 	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)/ext/misc/stmt.c
 
@@ -1533,7 +1538,7 @@ checksymbols: sqlite3.o
 	echo '0 errors out of 1 tests'
 
 # Build the amalgamation-autoconf package.  The amalamgation-tarball target builds
-# a tarball named for the version number.  Ex:  sqlite-autoconf-3110000.tar.gz.
+# a tarball named for the version number.  Ex:  sqlite-autoconf-3110000.tar.xz.
 # The snapshot-tarball target builds a tarball named by the SHA1 hash
 #
 amalgamation-tarball: sqlite3.c sqlite3rc.h
@@ -1624,7 +1629,7 @@ tidy:
 	rm -f *.lo *.la *.o *.c *.da *.bb *.bbg gmon.* *.rws sqlite3$(TEXE)
 	rm -f fts5.h keywordhash.h opcodes.h sqlite3.h sqlite3ext.h sqlite3session.h
 	rm -rf .libs .deps tsrc .target_source
-	rm -f lemon$(BEXE) sqlite*.tar.gz
+	rm -f lemon$(BEXE) sqlite*.tar.[gx]z
 	rm -f mkkeywordhash$(BEXE) mksourceid$(BEXE)
 	rm -f parse.* fts5parse.*
 	rm -f tclsqlite3$(TEXE) $(TESTPROGS)
