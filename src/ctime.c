@@ -275,6 +275,9 @@ static const char * const sqlite3azCompileOpt[] = {
 #if SQLITE_ENABLE_MEMSYS5
   "ENABLE_MEMSYS5",
 #endif
+#if SQLITE_ENABLE_MIGEMO
+  "ENABLE_MIGEMO",
+#endif
 #if SQLITE_ENABLE_MULTIPLEX
   "ENABLE_MULTIPLEX",
 #endif
@@ -680,6 +683,9 @@ static const char * const sqlite3azCompileOpt[] = {
 #endif
 #if SQLITE_PCACHE_SEPARATE_HEADER
   "PCACHE_SEPARATE_HEADER",
+#endif
+#if SQLITE_PCRE2_JIT
+  "PCRE2_JIT",
 #endif
 #if SQLITE_PERFORMANCE_TRACE
   "PERFORMANCE_TRACE",
