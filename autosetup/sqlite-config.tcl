@@ -159,6 +159,7 @@ proc sqlite-config-bootstrap {buildMode} {
         geopoly              => {Enable the GEOPOLY extension}
         rtree                => {Enable the RTREE extension}
         session              => {Enable the SESSION extension}
+        migemo               => {Enable the MIGEMO extension}
         all                  => {Enable FTS4, FTS5, Geopoly, RTree, Sessions}
       }
     }
@@ -566,6 +567,13 @@ proc sqlite-handle-common-feature-flags {} {
     rtree        -DSQLITE_ENABLE_RTREE   {}
     session      {-DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK} {}
     update-limit -DSQLITE_ENABLE_UPDATE_DELETE_LIMIT {}
+    migemo       {} {
+      if {"" ne [get-define LDFLAGS_MIGEMO ""]} {
+        expr 1
+      } else {
+        expr 0
+      }
+    }
     memsys5      -DSQLITE_ENABLE_MEMSYS5 {}
     memsys3      {} {
       if {[opt-bool memsys5]} {
@@ -1766,5 +1774,31 @@ proc sqlite-dump-defines {} {
       undefine OPT_FEATURE_FLAGS.list
       undefine OPT_SHELL.list
     }
+  }
+}
+
+proc sqlite-handle-migemo {} {
+  proj-if-opt-truthy migemo {
+    cc-check-includes migemo.h
+    proj-check-function-in-lib migemo_open migemo
+    if {[have-feature migemo_open]} {
+      define LDFLAGS_MIGEMO [get-define lib_migemo_open]
+      undefine lib_migemo_open
+      sqlite-add-feature-flag -DSQLITE_ENABLE_MIGEMO
+      msg-result "Enabling migemo SQL functions [get-define LDFLAGS_MIGEMO]"
+    }
+
+    cc-with { -declare {#define PCRE2_CODE_UNIT_WIDTH 8} } {
+      proj-check-function-in-lib pcre2_jit_compile_8 pcre2-8
+    }
+    if {[have-feature pcre2_jit_compile_8]} {
+      define LDFLAGS_PCRE2 [get-define lib_pcre2_jit_compile_8]
+      undefine lib_pcre2_jit_compile_8
+      sqlite-add-feature-flag -DSQLITE_PCRE2_JIT
+      msg-result "Enabling pcre2 functions [get-define LDFLAGS_PCRE2]"
+    }
+  } {
+    define LDFLAGS_MIGEMO ""
+    define LDFLAGS_PCRE2 ""
   }
 }
