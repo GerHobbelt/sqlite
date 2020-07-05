@@ -1,0 +1,30 @@
+name: Release
+
+on:
+  push:
+    tags: ['version-*.*.*-migemo', 'version-*.*.*-migemo-r*']
+
+jobs:
+  build:
+
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Configure
+      run: ./configure
+
+    - name: Make
+      run: make sqlite3.c
+
+    - name: Archive
+      run: xz sqlite3.c
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: sqlite3.c.xz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
