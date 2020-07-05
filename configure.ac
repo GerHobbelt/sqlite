@@ -678,6 +678,30 @@ else
 fi
 
 #########
+# See whether we should enable MIGEMO
+AC_ARG_ENABLE(migemo, AC_HELP_STRING([--enable-migemo],[Enable the MIGEMO extension]))
+if test "${enable_migemo}" = "yes" -o "${enable_all}" = "yes" ; then
+  OPT_FEATURE_FLAGS="${OPT_FEATURE_FLAGS} -DSQLITE_ENABLE_MIGEMO"
+  AC_CHECK_LIB(migemo, migemo_open,
+               [LIBS="$LIBS -lmigemo"],
+               [AC_MSG_ERROR([migemo is not found])])
+  AC_CHECK_LIB(pcre2-8, pcre2_compile_8,
+               [LIBS="$LIBS -lpcre2-8"
+                AC_RUN_IFELSE([AC_LANG_PROGRAM([[
+                                                 #define PCRE2_CODE_UNIT_WIDTH 8
+                                                 #include <pcre2.h>
+                                               ]],
+                                               [[
+                                                 int hasjit;
+                                                 pcre2_config(PCRE2_CONFIG_JIT, &hasjit);
+                                                 if (hasjit == 0) exit(1);
+                                               ]])],
+                              [OPT_FEATURE_FLAGS="${OPT_FEATURE_FLAGS} -DSQLITE_PCRE2_JIT"],
+                              [])],
+               [AC_MSG_ERROR([pcre2 is not found])])
+fi
+
+#########
 # See whether we should enable the LIMIT clause on UPDATE and DELETE
 # statements.
 AC_ARG_ENABLE(update-limit, AC_HELP_STRING([--enable-update-limit],

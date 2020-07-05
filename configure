@@ -912,6 +912,7 @@ enable_fts3
 enable_fts4
 enable_fts5
 enable_json1
+enable_migemo
 enable_update_limit
 enable_geopoly
 enable_rtree
@@ -1567,6 +1568,7 @@ Optional Features:
   --enable-fts4           Enable the FTS4 extension
   --enable-fts5           Enable the FTS5 extension
   --enable-json1          Enable the JSON1 extension
+  --enable-migemo         Enable the MIGEMO extension
   --enable-update-limit   Enable the UPDATE/DELETE LIMIT clause
   --enable-geopoly        Enable the GEOPOLY extension
   --enable-rtree          Enable the RTREE extension
@@ -11717,6 +11719,138 @@ $as_echo "yes" >&6; }
 else
   { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
+fi
+
+#########
+# See whether we should enable MIGEMO
+# Check whether --enable-migemo was given.
+if test "${enable_migemo+set}" = set; then :
+  enableval=$enable_migemo;
+fi
+
+if test "${enable_migemo}" = "yes" -o "${enable_all}" = "yes" ; then
+  OPT_FEATURE_FLAGS="${OPT_FEATURE_FLAGS} -DSQLITE_ENABLE_MIGEMO"
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for migemo_open in -lmigemo" >&5
+$as_echo_n "checking for migemo_open in -lmigemo... " >&6; }
+if ${ac_cv_lib_migemo_migemo_open+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lmigemo  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char migemo_open ();
+int
+main ()
+{
+return migemo_open ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_lib_migemo_migemo_open=yes
+else
+  ac_cv_lib_migemo_migemo_open=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_migemo_migemo_open" >&5
+$as_echo "$ac_cv_lib_migemo_migemo_open" >&6; }
+if test "x$ac_cv_lib_migemo_migemo_open" = xyes; then :
+  LIBS="$LIBS -lmigemo"
+else
+  as_fn_error $? "migemo is not found" "$LINENO" 5
+fi
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for pcre2_compile_8 in -lpcre2-8" >&5
+$as_echo_n "checking for pcre2_compile_8 in -lpcre2-8... " >&6; }
+if ${ac_cv_lib_pcre2_8_pcre2_compile_8+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lpcre2-8  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char pcre2_compile_8 ();
+int
+main ()
+{
+return pcre2_compile_8 ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_lib_pcre2_8_pcre2_compile_8=yes
+else
+  ac_cv_lib_pcre2_8_pcre2_compile_8=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_pcre2_8_pcre2_compile_8" >&5
+$as_echo "$ac_cv_lib_pcre2_8_pcre2_compile_8" >&6; }
+if test "x$ac_cv_lib_pcre2_8_pcre2_compile_8" = xyes; then :
+
+                LIBS="$LIBS -lpcre2-8"
+                if test "$cross_compiling" = yes; then :
+  { { $as_echo "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
+$as_echo "$as_me: error: in \`$ac_pwd':" >&2;}
+as_fn_error $? "cannot run test program while cross compiling
+See \`config.log' for more details" "$LINENO" 5; }
+else
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+
+                                                #define PCRE2_CODE_UNIT_WIDTH 8
+                                                #include <pcre2.h>
+
+int
+main ()
+{
+
+                                                 int hasjit;
+                                                 pcre2_config(PCRE2_CONFIG_JIT, &hasjit);
+                                                 if (hasjit == 0) exit(1);
+
+  ;
+  return 0;
+}
+
+_ACEOF
+if ac_fn_c_try_run "$LINENO"; then :
+  OPT_FEATURE_FLAGS="${OPT_FEATURE_FLAGS} -DSQLITE_PCRE2_JIT"
+else
+  OPT_FEATURE_FLAGS="${OPT_FEATURE_FLAGS} -DXXXXX"
+fi
+rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext \
+  conftest.$ac_objext conftest.beam conftest.$ac_ext
+fi
+
+
+else
+  as_fn_error $? "pcre2 is not found" "$LINENO" 5
+fi
+
 fi
 
 #########
