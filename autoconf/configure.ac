@@ -174,6 +174,37 @@ fi
 #-----------------------------------------------------------------------
 
 #-----------------------------------------------------------------------
+#   --enable-migemo
+#
+AC_ARG_ENABLE(migemo, [AS_HELP_STRING(
+  [--enable-migemo], [include migemo support [default=no]])], 
+  [], [])
+AC_MSG_CHECKING([MIGEMO extension])
+if test x"$enable_migemo" = "xyes"; then
+  AC_MSG_RESULT([enabled])
+  BUILD_CFLAGS="$BUILD_CFLAGS -DSQLITE_ENABLE_MIGEMO"
+  AC_SEARCH_LIBS([migemo_open],[migemo],[],[AC_MSG_ERROR([migemo is not found])])
+  AC_SEARCH_LIBS([pcre2_compile_8],[pcre2-8],
+                 [AC_MSG_CHECKING([for PCRE2_CONFIG_JIT])
+                  AC_RUN_IFELSE([AC_LANG_PROGRAM([[
+                                                   #define PCRE2_CODE_UNIT_WIDTH 8
+                                                   #include <pcre2.h>
+                                                 ]],
+                                                 [[
+                                                   int hasjit;
+                                                   pcre2_config(PCRE2_CONFIG_JIT, &hasjit);
+                                                   if (hasjit == 0) exit(1);
+                                                 ]])],
+                                [AC_MSG_RESULT([yes])
+                                 BUILD_CFLAGS="$BUILD_CFLAGS -DSQLITE_PCRE2_JIT"],
+                                [AC_MSG_RESULT([no])])],
+                 [AC_MSG_ERROR([pcre2 is not found])])
+else
+  AC_MSG_RESULT([disabled])
+fi
+#-----------------------------------------------------------------------
+
+#-----------------------------------------------------------------------
 #   --enable-rtree
 #
 AC_ARG_ENABLE(rtree, [AS_HELP_STRING(
