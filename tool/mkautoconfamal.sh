@@ -87,9 +87,9 @@ find . -type f -name '*~' -exec rm -f \{} \;
 find . -type f -name '#*#' -exec rm -f \{} \;
 
 ./configure && make dist
-tar xzf sqlite-$VERSION.tar.gz
+tar xzf sqlite-$VERSION.tar.xz
 mv sqlite-$VERSION $TARBALLNAME
-tar czf $TARBALLNAME.tar.gz $TARBALLNAME
-mv $TARBALLNAME.tar.gz ..
+tar czf $TARBALLNAME.tar.xz $TARBALLNAME
+mv $TARBALLNAME.tar.xz ..
 cd ..
-ls -l $TARBALLNAME.tar.gz
+ls -l $TARBALLNAME.tar.xz
