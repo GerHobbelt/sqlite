@@ -1094,7 +1094,7 @@ checksymbols: sqlite3.o
 	nm -g --defined-only sqlite3.o | grep -v " sqlite3_" ; test $$? -ne 0
 
 # Build the amalgamation-autoconf package.  The amalamgation-tarball target builds
-# a tarball named for the version number.  Ex:  sqlite-autoconf-3110000.tar.gz.
+# a tarball named for the version number.  Ex:  sqlite-autoconf-3110000.tar.xz.
 # The snapshot-tarball target builds a tarball named by the SHA1 hash
 #
 amalgamation-tarball: sqlite3.c sqlite3rc.h
@@ -1113,7 +1113,7 @@ install:	sqlite3 libsqlite3.a sqlite3.h
 
 clean:
 	rm -f *.o sqlite3 sqlite3.exe libsqlite3.a sqlite3.h opcodes.*
-	rm -f lemon lemon.exe lempar.c parse.* sqlite*.tar.gz
+	rm -f lemon lemon.exe lempar.c parse.* sqlite*.tar.[gx]z
 	rm -f mkkeywordhash mkkeywordhash.exe keywordhash.h
 	rm -f $(PUBLISH)
 	rm -f *.da *.bb *.bbg gmon.out
