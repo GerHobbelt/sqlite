@@ -56,6 +56,9 @@ int sqlite3Json1Init(sqlite3*);
 #ifdef SQLITE_ENABLE_STMTVTAB
 int sqlite3StmtVtabInit(sqlite3*);
 #endif
+#ifdef SQLITE_ENABLE_MIGEMO
+int sqlite3MigemoInit(sqlite3*);
+#endif
 
 /*
 ** An array of pointers to extension initializer functions for
@@ -95,6 +98,9 @@ static int (*const sqlite3BuiltinExtensions[])(sqlite3*) = {
 #endif
 #ifdef SQLITE_ENABLE_BYTECODE_VTAB
   sqlite3VdbeBytecodeVtabInit,
+#endif
+#ifdef SQLITE_ENABLE_MIGEMO
+  sqlite3MigemoInit,
 #endif
 };
 
