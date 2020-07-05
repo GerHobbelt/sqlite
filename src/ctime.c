@@ -268,6 +268,9 @@ static const char * const sqlite3azCompileOpt[] = {
 #if SQLITE_ENABLE_MEMSYS5
   "ENABLE_MEMSYS5",
 #endif
+#if SQLITE_ENABLE_MIGEMO
+  "ENABLE_MIGEMO",
+#endif
 #if SQLITE_ENABLE_MULTIPLEX
   "ENABLE_MULTIPLEX",
 #endif

@@ -647,6 +647,19 @@ if test "${enable_json1}" = "yes" -o "${enable_all}" = "yes" ; then
 fi
 
 #########
+# See whether we should enable MIGEMO
+AC_ARG_ENABLE(migemo, AC_HELP_STRING([--enable-migemo],[Enable the MIGEMO extension]))
+if test "${enable_migemo}" = "yes" -o "${enable_all}" = "yes" ; then
+  OPT_FEATURE_FLAGS="${OPT_FEATURE_FLAGS} -DSQLITE_ENABLE_MIGEMO"
+  AC_CHECK_LIB(migemo, migemo_open,
+			   [LIBS="$LIBS -lmigemo"],
+			   [AC_MSG_ERROR([migemo is not found])])
+  AC_CHECK_LIB(pcre2-8, pcre2_compile_8,
+			   [LIBS="$LIBS -lpcre2-8"],
+			   [AC_MSG_ERROR([pcre2 is not found])])
+fi
+
+#########
 # See whether we should enable the LIMIT clause on UPDATE and DELETE
 # statements.
 AC_ARG_ENABLE(update-limit, AC_HELP_STRING([--enable-update-limit],
