@@ -29,6 +29,7 @@ options {
   geopoly              => {Enable the GEOPOLY extension}
   rtree                => {Enable the RTREE extension}
   session              => {Enable the SESSION extension}
+  migemo               => {Enable the MIGEMO extension}
   all                  => {Enable FTS4, FTS5, Geopoly, RTree, Sessions}
   # </lib-feature>
   # <line-editing>
@@ -90,6 +91,7 @@ sqlite-handle-line-editing
 sqlite-handle-load-extension
 sqlite-handle-math
 sqlite-handle-icu
+sqlite-handle-migemo
 
 define ENABLE_LIB_SHARED [opt-bool shared]
 define ENABLE_LIB_STATIC [opt-bool static]

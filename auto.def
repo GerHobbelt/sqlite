@@ -134,6 +134,7 @@ set flags {
   geopoly              => {Enable the GEOPOLY extension}
   rtree                => {Enable the RTREE extension}
   session              => {Enable the SESSION extension}
+  migemo               => {Enable the MIGEMO extension}
   all                  => {Enable FTS4, FTS5, Geopoly, RTree, Sessions}
   # </lib-feature>
   # <tcl>

@@ -12,7 +12,6 @@
 #      This is important, as the script executes "rm -rf ./mkpkg_tmp_dir".
 #
 
-
 # Bail out of the script if any command returns a non-zero exit
 # status. Or if the script tries to use an unset variable. These
 # may fail for old /bin/sh interpreters.
@@ -21,52 +20,53 @@ set -e
 set -u
 
 TMPSPACE=./mkpkg_tmp_dir
-VERSION=`cat $TOP/VERSION`
-HASH=`cut -c1-10 $TOP/manifest.uuid`
-DATETIME=`grep '^D' $TOP/manifest | tr -c -d '[0-9]' | cut -c1-12`
+VERSION=$(cat $TOP/VERSION)
+HASH=$(cut -c1-10 $TOP/manifest.uuid)
+DATETIME=$(grep '^D' $TOP/manifest | tr -c -d '[0-9]' | cut -c1-12)
 
 # Verify that the version number in the TEA autoconf file is correct.
 # Fail with an error if not.
 #
-if grep $VERSION $TOP/autoconf/tea/configure.ac
-then echo "TEA version number ok"
-else echo "TEA version number mismatch.  Should be $VERSION"; exit 1
+if grep $VERSION $TOP/autoconf/tea/configure.ac; then
+  echo "TEA version number ok"
+else
+  echo "TEA version number mismatch.  Should be $VERSION"
+  exit 1
 fi
 
 # If this script is given an argument of --snapshot, then generate a
 # snapshot tarball named for the current checkout SHA hash, rather than
 # the version number.
 #
-if test "$#" -ge 1 -a x$1 != x--snapshot
-then
+if test "$#" -ge 1 -a x$1 != x--snapshot; then
   # Set global variable $ARTIFACT to the "3xxyyzz" string incorporated
   # into artifact filenames. And $VERSION2 to the "3.x.y[.z]" form.
-  xx=`echo $VERSION|sed 's/3\.\([0-9]*\)\..*/\1/'`
-  yy=`echo $VERSION|sed 's/3\.[^.]*\.\([0-9]*\).*/\1/'`
+  xx=$(echo $VERSION | sed 's/3\.\([0-9]*\)\..*/\1/')
+  yy=$(echo $VERSION | sed 's/3\.[^.]*\.\([0-9]*\).*/\1/')
   zz=0
   set +e
-    zz=`echo $VERSION|sed 's/3\.[^.]*\.[^.]*\.\([0-9]*\).*/\1/'|grep -v '\.'`
+  zz=$(echo $VERSION | sed 's/3\.[^.]*\.[^.]*\.\([0-9]*\).*/\1/' | grep -v '\.')
   set -e
-  TARBALLNAME=`printf "sqlite-autoconf-3%.2d%.2d%.2d" $xx $yy $zz`
+  TARBALLNAME=$(printf "sqlite-autoconf-3%.2d%.2d%.2d" $xx $yy $zz)
 else
   TARBALLNAME=sqlite-snapshot-$DATETIME
 fi
 
 rm -rf $TMPSPACE
-cp -R $TOP/autoconf       $TMPSPACE
-cp -R $TOP/autosetup      $TMPSPACE
-cp -p $TOP/configure      $TMPSPACE
-cp sqlite3.c              $TMPSPACE
-cp sqlite3.h              $TMPSPACE
-cp sqlite3ext.h           $TMPSPACE
-cp sqlite3rc.h            $TMPSPACE
-cp $TOP/sqlite3.1         $TMPSPACE
-cp $TOP/sqlite3.pc.in     $TMPSPACE
-cp shell.c                $TMPSPACE
-cp $TOP/src/sqlite3.rc    $TMPSPACE
-cp $TOP/tool/Replace.cs   $TMPSPACE
-cp $TOP/VERSION           $TMPSPACE
-cp $TOP/main.mk           $TMPSPACE
+cp -R $TOP/autoconf $TMPSPACE
+cp -R $TOP/autosetup $TMPSPACE
+cp -p $TOP/configure $TMPSPACE
+cp sqlite3.c $TMPSPACE
+cp sqlite3.h $TMPSPACE
+cp sqlite3ext.h $TMPSPACE
+cp sqlite3rc.h $TMPSPACE
+cp $TOP/sqlite3.1 $TMPSPACE
+cp $TOP/sqlite3.pc.in $TMPSPACE
+cp shell.c $TMPSPACE
+cp $TOP/src/sqlite3.rc $TMPSPACE
+cp $TOP/tool/Replace.cs $TMPSPACE
+cp $TOP/VERSION $TMPSPACE
+cp $TOP/main.mk $TMPSPACE
 
 cd $TMPSPACE
 
@@ -75,23 +75,23 @@ rm -f ./autosetup/*~
 rm -f ./*~
 
 #if true; then
-  # Clean up *~ files (emacs-generated backups).
-  # This bit is only for use during development of
-  # the autoconf bundle.
+# Clean up *~ files (emacs-generated backups).
+# This bit is only for use during development of
+# the autoconf bundle.
 #  find . -name '*~' -exec rm \{} \;
 #fi
 
 mkdir -p tea/generic
-cat <<EOF > tea/generic/tclsqlite3.c
+cat <<EOF >tea/generic/tclsqlite3.c
 #ifdef USE_SYSTEM_SQLITE
 # include <sqlite3.h>
 #else
 # include "sqlite3.c"
 #endif
 EOF
-cat  $TOP/src/tclsqlite.c           >> tea/generic/tclsqlite3.c
+cat $TOP/src/tclsqlite.c >>tea/generic/tclsqlite3.c
 
-sed "s/AC_INIT(\[sqlite\], .*)/AC_INIT([sqlite], [$VERSION])/" tea/configure.ac > tmp
+sed "s/AC_INIT(\[sqlite\], .*)/AC_INIT([sqlite], [$VERSION])/" tea/configure.ac >tmp
 mv tmp tea/configure.ac
 
 cd tea
@@ -100,9 +100,9 @@ rm -rf autom4te.cache
 
 cd ../
 ./configure && make dist
-tar xzf sqlite-$VERSION.tar.gz
+tar xzf sqlite-$VERSION.tar.xz
 mv sqlite-$VERSION $TARBALLNAME
-tar czf $TARBALLNAME.tar.gz $TARBALLNAME
-mv $TARBALLNAME.tar.gz ..
+tar czf $TARBALLNAME.tar.xz $TARBALLNAME
+mv $TARBALLNAME.tar.xz ..
 cd ..
-ls -l $TARBALLNAME.tar.gz
+ls -l $TARBALLNAME.tar.xz
