@@ -1173,17 +1173,6 @@ void sqlite3StartTable(
   assert( pParse->pNewTable==0 );
   pParse->pNewTable = pTable;
 
-  /* If this is the magic sqlite_sequence table used by autoincrement,
-  ** then record a pointer to this table in the main database structure
-  ** so that INSERT can find the table easily.
-  */
-#ifndef SQLITE_OMIT_AUTOINCREMENT
-  if( !pParse->nested && strcmp(zName, "sqlite_sequence")==0 ){
-    assert( sqlite3SchemaMutexHeld(db, iDb, 0) );
-    pTable->pSchema->pSeqTab = pTable;
-  }
-#endif
-
   /* Begin generating the code that will insert the table record into
   ** the schema table.  Note in particular that we must go ahead
   ** and allocate the record number for the table entry now.  Before any
@@ -2403,7 +2392,6 @@ void sqlite3EndTable(
   if( pEnd==0 && pSelect==0 ){
     return;
   }
-  assert( !db->mallocFailed );
   p = pParse->pNewTable;
   if( p==0 ) return;
 
@@ -2628,7 +2616,7 @@ void sqlite3EndTable(
     /* Check to see if we need to create an sqlite_sequence table for
     ** keeping track of autoincrement keys.
     */
-    if( (p->tabFlags & TF_Autoincrement)!=0 ){
+    if( (p->tabFlags & TF_Autoincrement)!=0 && !IN_SPECIAL_PARSE ){
       Db *pDb = &db->aDb[iDb];
       assert( sqlite3SchemaMutexHeld(db, iDb, 0) );
       if( pDb->pSchema->pSeqTab==0 ){
@@ -2659,6 +2647,17 @@ void sqlite3EndTable(
     }
     pParse->pNewTable = 0;
     db->mDbFlags |= DBFLAG_SchemaChange;
+
+    /* If this is the magic sqlite_sequence table used by autoincrement,
+    ** then record a pointer to this table in the main database structure
+    ** so that INSERT can find the table easily.  */
+    assert( !pParse->nested );
+#ifndef SQLITE_OMIT_AUTOINCREMENT
+    if( strcmp(p->zName, "sqlite_sequence")==0 ){
+      assert( sqlite3SchemaMutexHeld(db, iDb, 0) );
+      p->pSchema->pSeqTab = p;
+    }
+#endif
   }
 
 #ifndef SQLITE_OMIT_ALTERTABLE
@@ -2702,6 +2701,16 @@ void sqlite3CreateView(
   sqlite3StartTable(pParse, pName1, pName2, isTemp, 1, 0, noErr);
   p = pParse->pNewTable;
   if( p==0 || pParse->nErr ) goto create_view_fail;
+
+  /* Legacy versions of SQLite allowed the use of the magic "rowid" column
+  ** on a view, even though views do not have rowids.  The following flag
+  ** setting fixes this problem.  But the fix can be disabled by compiling
+  ** with -DSQLITE_ALLOW_ROWID_IN_VIEW in case there are legacy apps that
+  ** depend upon the old buggy behavior. */
+#ifndef SQLITE_ALLOW_ROWID_IN_VIEW
+  p->tabFlags |= TF_NoVisibleRowid;
+#endif
+
   sqlite3TwoPartName(pParse, pName1, pName2, &pName);
   iDb = sqlite3SchemaToIndex(db, p->pSchema);
   sqlite3FixInit(&sFix, pParse, iDb, "view", pName);
