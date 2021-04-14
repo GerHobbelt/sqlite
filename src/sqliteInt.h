@@ -3065,7 +3065,7 @@ struct NameContext {
   } uNC;
   NameContext *pNext;  /* Next outer name context.  NULL for outermost */
   int nRef;            /* Number of names resolved by this context */
-  int nErr;            /* Number of errors encountered while resolving names */
+  int nNcErr;          /* Number of errors encountered while resolving names */
   int ncFlags;         /* Zero or more NC_* flags defined below */
   Select *pWinSelect;  /* SELECT statement for any window functions */
 };
@@ -3098,6 +3098,7 @@ struct NameContext {
 #define NC_IsDDL     0x10000  /* Resolving names in a CREATE statement */
 #define NC_InAggFunc 0x20000  /* True if analyzing arguments to an agg func */
 #define NC_FromDDL   0x40000  /* SQL text comes from sqlite_schema */
+#define NC_NoSelect  0x80000  /* Do not descend into sub-selects */
 
 /*
 ** An instance of the following object describes a single ON CONFLICT
