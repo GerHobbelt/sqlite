@@ -700,6 +700,7 @@ static int codeAllEqualityTerms(
 
   if( nSkip ){
     int iIdxCur = pLevel->iIdxCur;
+    sqlite3VdbeAddOp3(v, OP_Null, 0, regBase, regBase+nSkip-1);
     sqlite3VdbeAddOp1(v, (bRev?OP_Last:OP_Rewind), iIdxCur);
     VdbeCoverageIf(v, bRev==0);
     VdbeCoverageIf(v, bRev!=0);
@@ -751,7 +752,7 @@ static int codeAllEqualityTerms(
         sqlite3VdbeAddOp2(v, OP_IsNull, regBase+j, pLevel->addrBrk);
         VdbeCoverage(v);
       }
-      if( zAff ){
+      if( pParse->db->mallocFailed==0 ){
         if( sqlite3CompareAffinity(pRight, zAff[j])==SQLITE_AFF_BLOB ){
           zAff[j] = SQLITE_AFF_BLOB;
         }

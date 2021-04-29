@@ -4541,14 +4541,14 @@ static void fts5FlushOneHash(Fts5Index *p){
         fts5BufferSafeAppendBlob(pBuf, pDoclist, nDoclist);
       }else{
         i64 iRowid = 0;
-        i64 iDelta = 0;
+        u64 iDelta = 0;
         int iOff = 0;
 
         /* The entire doclist will not fit on this leaf. The following 
         ** loop iterates through the poslists that make up the current 
         ** doclist.  */
         while( p->rc==SQLITE_OK && iOff<nDoclist ){
-          iOff += fts5GetVarint(&pDoclist[iOff], (u64*)&iDelta);
+          iOff += fts5GetVarint(&pDoclist[iOff], &iDelta);
           iRowid += iDelta;
           
           if( writer.bFirstRowidInPage ){
@@ -5079,7 +5079,8 @@ static void fts5MergePrefixLists(
       nTail = pHead->iter.nPoslist - pHead->iOff;
 
       /* WRITEPOSLISTSIZE */
-      assert( tmp.n+nTail<=nTmp );
+      assert_nc( tmp.n+nTail<=nTmp );
+      assert( tmp.n+nTail<=nTmp+nMerge*10 );
       if( tmp.n+nTail>nTmp-FTS5_DATA_ZERO_PADDING ){
         if( p->rc==SQLITE_OK ) p->rc = FTS5_CORRUPT;
         break;
@@ -6720,6 +6721,7 @@ int sqlite3Fts5IndexInit(sqlite3 *db){
   return rc;
 #else
   return SQLITE_OK;
+  UNUSED_PARAM(db);
 #endif
 }
 

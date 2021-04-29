@@ -3627,10 +3627,14 @@ static Expr *substExpr(
         }
         testcase( ExprHasProperty(pCopy, EP_Subquery) );
         pNew = sqlite3ExprDup(db, pCopy, 0);
-        if( pNew && pSubst->isLeftJoin ){
+        if( db->mallocFailed ){
+          sqlite3ExprDelete(db, pNew);
+          return pExpr;
+        }
+        if( pSubst->isLeftJoin ){
           ExprSetProperty(pNew, EP_CanBeNull);
         }
-        if( pNew && ExprHasProperty(pExpr,EP_FromJoin) ){
+        if( ExprHasProperty(pExpr,EP_FromJoin) ){
           sqlite3SetJoinExpr(pNew, pExpr->iRightJoinTable);
         }
         sqlite3ExprDelete(db, pExpr);
@@ -3638,15 +3642,13 @@ static Expr *substExpr(
 
         /* Ensure that the expression now has an implicit collation sequence,
         ** just as it did when it was a column of a view or sub-query. */
-        if( pExpr ){
-          if( pExpr->op!=TK_COLUMN && pExpr->op!=TK_COLLATE ){
-            CollSeq *pColl = sqlite3ExprCollSeq(pSubst->pParse, pExpr);
-            pExpr = sqlite3ExprAddCollateString(pSubst->pParse, pExpr, 
-                (pColl ? pColl->zName : "BINARY")
-            );
-          }
-          ExprClearProperty(pExpr, EP_Collate);
+        if( pExpr->op!=TK_COLUMN && pExpr->op!=TK_COLLATE ){
+          CollSeq *pColl = sqlite3ExprCollSeq(pSubst->pParse, pExpr);
+          pExpr = sqlite3ExprAddCollateString(pSubst->pParse, pExpr, 
+              (pColl ? pColl->zName : "BINARY")
+          );
         }
+        ExprClearProperty(pExpr, EP_Collate);
       }
     }
   }else{
@@ -3765,7 +3767,10 @@ static void srclistRenumberCursors(
   for(i=0, pItem=pSrc->a; i<pSrc->nSrc; i++, pItem++){
     if( i!=iExcept ){
       Select *p;
-      pItem->iCursor = aCsrMap[pItem->iCursor] = pParse->nTab++;
+      if( !pItem->fg.isRecursive || aCsrMap[pItem->iCursor]==0 ){
+        aCsrMap[pItem->iCursor] = pParse->nTab++;
+      }
+      pItem->iCursor = aCsrMap[pItem->iCursor];
       for(p=pItem->pSelect; p; p=p->pPrior){
         srclistRenumberCursors(pParse, aCsrMap, p->pSrc, -1);
       }
@@ -4205,7 +4210,7 @@ static int flattenSubquery(
       p->pPrior = pPrior;
     }else{
       pNew->selId = ++pParse->nSelect;
-      if( aCsrMap && db->mallocFailed==0 ){
+      if( aCsrMap && ALWAYS(db->mallocFailed==0) ){
         renumberCursors(pParse, pNew, iFrom, aCsrMap);
       }
       pNew->pPrior = pPrior;
@@ -6197,8 +6202,7 @@ int sqlite3Select(
   }
 
 #ifndef SQLITE_OMIT_WINDOWFUNC
-  rc = sqlite3WindowRewrite(pParse, p);
-  if( rc ){
+  if( sqlite3WindowRewrite(pParse, p) ){
     assert( db->mallocFailed || pParse->nErr>0 );
     goto select_end;
   }
@@ -7266,6 +7270,8 @@ int sqlite3Select(
   ** successful coding of the SELECT.
   */
 select_end:
+  assert( db->mallocFailed==0 || db->mallocFailed==1 );
+  pParse->nErr += db->mallocFailed;
   sqlite3ExprListDelete(db, pMinMaxOrderBy);
 #ifdef SQLITE_DEBUG
   if( pAggInfo && !db->mallocFailed ){

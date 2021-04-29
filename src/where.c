@@ -261,7 +261,9 @@ static void createMask(WhereMaskSet *pMaskSet, int iCursor){
 */
 static Expr *whereRightSubexprIsColumn(Expr *p){
   p = sqlite3ExprSkipCollateAndLikely(p->pRight);
-  if( ALWAYS(p!=0) && p->op==TK_COLUMN ) return p;
+  if( ALWAYS(p!=0) && p->op==TK_COLUMN && !ExprHasProperty(p, EP_FixedCol) ){
+    return p;
+  }
   return 0;
 }
 
@@ -1940,7 +1942,7 @@ static int whereLoopResize(sqlite3 *db, WhereLoop *p, int n){
 static int whereLoopXfer(sqlite3 *db, WhereLoop *pTo, WhereLoop *pFrom){
   whereLoopClearUnion(db, pTo);
   if( whereLoopResize(db, pTo, pFrom->nLTerm) ){
-    memset(&pTo->u, 0, sizeof(pTo->u));
+    memset(pTo, 0, WHERE_LOOP_XFER_SZ);
     return SQLITE_NOMEM_BKPT;
   }
   memcpy(pTo, pFrom, WHERE_LOOP_XFER_SZ);
@@ -1981,6 +1983,17 @@ static void whereInfoFree(sqlite3 *db, WhereInfo *pWInfo){
   }
   assert( pWInfo->pExprMods==0 );
   sqlite3DbFreeNN(db, pWInfo);
+}
+
+/* Undo all Expr node modifications
+*/
+static void whereUndoExprMods(WhereInfo *pWInfo){
+  while( pWInfo->pExprMods ){
+    WhereExprMod *p = pWInfo->pExprMods;
+    pWInfo->pExprMods = p->pNext;
+    memcpy(p->pExpr, &p->orig, sizeof(p->orig));
+    sqlite3DbFree(pWInfo->pParse->db, p);
+  }
 }
 
 /*
@@ -3595,7 +3608,9 @@ static int whereLoopAddOr(
         if( rc==SQLITE_OK ){
           rc = whereLoopAddOr(&sSubBuild, mPrereq, mUnusable);
         }
-        assert( rc==SQLITE_OK || rc==SQLITE_DONE || sCur.n==0 );
+        assert( rc==SQLITE_OK || rc==SQLITE_DONE || sCur.n==0
+                || rc==SQLITE_NOMEM );
+        testcase( rc==SQLITE_NOMEM && sCur.n>0 );
         testcase( rc==SQLITE_DONE );
         if( sCur.n==0 ){
           sSum.n = 0;
@@ -3864,6 +3879,10 @@ static i8 wherePathSatisfiesOrderBy(
         assert( nColumn==nKeyCol+1 || !HasRowid(pIndex->pTable) );
         assert( pIndex->aiColumn[nColumn-1]==XN_ROWID
                           || !HasRowid(pIndex->pTable));
+        /* All relevant terms of the index must also be non-NULL in order
+        ** for isOrderDistinct to be true.  So the isOrderDistint value
+        ** computed here might be a false positive.  Corrections will be
+        ** made at tag-20210426-1 below */
         isOrderDistinct = IsUniqueIndex(pIndex)
                           && (pLoop->wsFlags & WHERE_SKIPSCAN)==0;
       }
@@ -3931,15 +3950,19 @@ static i8 wherePathSatisfiesOrderBy(
         }
 
         /* An unconstrained column that might be NULL means that this
-        ** WhereLoop is not well-ordered
+        ** WhereLoop is not well-ordered.  tag-20210426-1
         */
-        if( isOrderDistinct
-         && iColumn>=0
-         && j>=pLoop->u.btree.nEq
-         && pIndex->pTable->aCol[iColumn].notNull==0
-        ){
-          isOrderDistinct = 0;
-        }
+        if( isOrderDistinct ){
+          if( iColumn>=0
+           && j>=pLoop->u.btree.nEq
+           && pIndex->pTable->aCol[iColumn].notNull==0
+          ){
+            isOrderDistinct = 0;
+          }
+          if( iColumn==XN_EXPR ){
+            isOrderDistinct = 0;
+          }
+        } 
 
         /* Find the ORDER BY term that corresponds to the j-th column
         ** of the index and mark that ORDER BY term off 
@@ -5314,6 +5337,8 @@ WhereInfo *sqlite3WhereBegin(
   /* Jump here if malloc fails */
 whereBeginError:
   if( pWInfo ){
+    testcase( pWInfo->pExprMods!=0 );
+    whereUndoExprMods(pWInfo);
     pParse->nQueryLoop = pWInfo->savedNQueryLoop;
     whereInfoFree(db, pWInfo);
   }
@@ -5613,16 +5638,9 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
     }
   }
 
-  /* Undo all Expr node modifications */
-  while( pWInfo->pExprMods ){
-    WhereExprMod *p = pWInfo->pExprMods;
-    pWInfo->pExprMods = p->pNext;
-    memcpy(p->pExpr, &p->orig, sizeof(p->orig));
-    sqlite3DbFree(db, p);
-  }
-
   /* Final cleanup
   */
+  if( pWInfo->pExprMods ) whereUndoExprMods(pWInfo);
   pParse->nQueryLoop = pWInfo->savedNQueryLoop;
   whereInfoFree(db, pWInfo);
   return;
