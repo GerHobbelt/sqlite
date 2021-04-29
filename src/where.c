@@ -4145,7 +4145,7 @@ static LogEst whereSortingCost(
   }else if( (pWInfo->wctrlFlags & WHERE_WANT_DISTINCT) ){
     /* TUNING: In the sort for a DISTINCT operator, assume that the DISTINCT
     ** reduces the number of output rows by a factor of 2 */
-    if( nRow>10 ) nRow -= 10;  assert( 10==sqlite3LogEst(2) );
+    if( nRow>10 ){ nRow -= 10;  assert( 10==sqlite3LogEst(2) ); }
   }
   rSortCost += estLog(nRow);
   return rSortCost;
@@ -5435,6 +5435,8 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
       int j;
       sqlite3VdbeResolveLabel(v, pLevel->addrNxt);
       for(j=pLevel->u.in.nIn, pIn=&pLevel->u.in.aInLoop[j-1]; j>0; j--, pIn--){
+        assert( sqlite3VdbeGetOp(v, pIn->addrInTop+1)->opcode==OP_IsNull
+                 || pParse->db->mallocFailed );
         sqlite3VdbeJumpHere(v, pIn->addrInTop+1);
         if( pIn->eEndLoopOp!=OP_Noop ){
           if( pIn->nPrefix ){
@@ -5459,6 +5461,11 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
                   sqlite3VdbeCurrentAddr(v)+2,
                   pIn->iBase, pIn->nPrefix);
               VdbeCoverage(v);
+              /* Retarget the OP_IsNull against the left operand of IN so 
+              ** it jumps past the OP_IfNoHope.  This is because the
+              ** OP_IsNull also bypasses the OP_Affinity opcode that is
+              ** required by OP_IfNoHope. */
+              sqlite3VdbeJumpHere(v, pIn->addrInTop+1);
             }
           }
           sqlite3VdbeAddOp2(v, pIn->eEndLoopOp, pIn->iCur, pIn->addrInTop);
