@@ -338,6 +338,18 @@ static WhereTerm *whereScanNext(WhereScan *pScan){
             }
             pScan->pWC = pWC;
             pScan->k = k+1;
+#ifdef WHERETRACE_ENABLED
+            if( sqlite3WhereTrace & 0x20000 ){
+              int ii;
+              sqlite3DebugPrintf("SCAN-TERM %p: nEquiv=%d",
+                 pTerm, pScan->nEquiv);
+              for(ii=0; ii<pScan->nEquiv; ii++){
+                sqlite3DebugPrintf(" {%d:%d}",
+                   pScan->aiCur[ii], pScan->aiColumn[ii]);
+              }
+              sqlite3DebugPrintf("\n");
+            }
+#endif
             return pTerm;
           }
         }
@@ -2634,6 +2646,7 @@ static int whereLoopAddBtreeIndex(
           pNew->wsFlags |= WHERE_UNQ_WANTED;
         }
       }
+      if( scan.iEquiv>1 ) pNew->wsFlags |= WHERE_TRANSCONS;
     }else if( eOp & WO_ISNULL ){
       pNew->wsFlags |= WHERE_COLUMN_NULL;
     }else if( eOp & (WO_GT|WO_GE) ){
