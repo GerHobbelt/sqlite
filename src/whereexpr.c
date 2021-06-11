@@ -872,7 +872,7 @@ static void exprAnalyzeOrTerm(
         idxNew = whereClauseInsert(pWC, pNew, TERM_VIRTUAL|TERM_DYNAMIC);
         testcase( idxNew==0 );
         exprAnalyze(pSrc, pWC, idxNew);
-        /* pTerm = &pWC->a[idxTerm]; // would be needed if pTerm where used again */
+        /* pTerm = &pWC->a[idxTerm]; // would be needed if pTerm where reused */
         markTermAsChild(pWC, idxNew, idxTerm);
       }else{
         sqlite3ExprListDelete(db, pList);
@@ -996,6 +996,7 @@ static int exprMightBeIndexed(
   assert( op<=TK_GE );
   if( pExpr->op==TK_VECTOR && (op>=TK_GT && ALWAYS(op<=TK_GE)) ){
     pExpr = pExpr->x.pList->a[0].pExpr;
+
   }
 
   if( pExpr->op==TK_COLUMN ){
@@ -1107,6 +1108,7 @@ static void exprAnalyze(
     if( op==TK_IS ) pTerm->wtFlags |= TERM_IS;
     if( pRight 
      && exprMightBeIndexed(pSrc, pTerm->prereqRight, aiCurCol, pRight, op)
+     && !ExprHasProperty(pRight, EP_FixedCol)
     ){
       WhereTerm *pNew;
       Expr *pDup;
