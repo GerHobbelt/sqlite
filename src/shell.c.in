@@ -4909,7 +4909,7 @@ static FILE *output_file_open(const char *zFile, int bTextMode){
 /*
 ** A routine for handling output from sqlite3_trace().
 */
-static int sql_trace_callback(
+static void sql_trace_callback(
   unsigned mType,         /* The trace type */
   void *pArg,             /* The ShellState pointer */
   void *pP,               /* Usually a pointer to sqlite_stmt */
@@ -4919,10 +4919,10 @@ static int sql_trace_callback(
   sqlite3_stmt *pStmt;
   const char *zSql;
   int nSql;
-  if( p->traceOut==0 ) return 0;
+  if( p->traceOut==0 ) return;
   if( mType==SQLITE_TRACE_CLOSE ){
     utf8_printf(p->traceOut, "-- closing database connection\n");
-    return 0;
+    return;
   }
   if( mType!=SQLITE_TRACE_ROW && ((const char*)pX)[0]=='-' ){
     zSql = (const char*)pX;
@@ -4945,7 +4945,7 @@ static int sql_trace_callback(
       }
     }
   }
-  if( zSql==0 ) return 0;
+  if( zSql==0 ) return;
   nSql = strlen30(zSql);
   while( nSql>0 && zSql[nSql-1]==';' ){ nSql--; }
   switch( mType ){
@@ -4960,7 +4960,6 @@ static int sql_trace_callback(
       break;
     }
   }
-  return 0;
 }
 #endif
 
