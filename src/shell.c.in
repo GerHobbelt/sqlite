@@ -6061,7 +6061,7 @@ struct ArCommand {
   char *zSrcTable;                /* "sqlar", "zipfile($file)" or "zip" */
   const char *zFile;              /* --file argument, or NULL */
   const char *zDir;               /* --directory argument, or NULL */
-  char **azArg;                   /* Array of command arguments */
+  const char **azArg;             /* Array of command arguments */
   ShellState *p;                  /* Shell state */
   sqlite3 *db;                    /* Database containing the archive */
 };
@@ -6154,7 +6154,7 @@ static int arProcessSwitch(ArCommand *pAr, int eSwitch, const char *zArg){
 ** SQLITE_ERROR returned.
 */
 static int arParseCommand(
-  char **azArg,                   /* Array of arguments passed to dot command */
+  const char **azArg,             /* Array of arguments passed to dot command */
   int nArg,                       /* Number of entries in azArg[] */
   ArCommand *pAr                  /* Populate this object */
 ){
@@ -6183,7 +6183,7 @@ static int arParseCommand(
     utf8_printf(stderr, "Wrong number of arguments.  Usage:\n");
     return arUsage(stderr);
   }else{
-    char *z = azArg[1];
+    const char *z = azArg[1];
     if( z[0]!='-' ){
       /* Traditional style [tar] invocation */
       int i;
@@ -6313,7 +6313,7 @@ static int arCheckEntries(ArCommand *pAr){
     );
     j = sqlite3_bind_parameter_index(pTest, "$name");
     for(i=0; i<pAr->nArg && rc==SQLITE_OK; i++){
-      char *z = pAr->azArg[i];
+      char *z = strdup(pAr->azArg[i]);
       int n = strlen30(z);
       int bOk = 0;
       while( n>0 && z[n-1]=='/' ) n--;
@@ -6327,6 +6327,7 @@ static int arCheckEntries(ArCommand *pAr){
         utf8_printf(stderr, "not found in archive: %s\n", z);
         rc = SQLITE_ERROR;
       }
+      free(z);
     }
     shellFinalize(&rc, pTest);
   }
@@ -6632,7 +6633,7 @@ end_ar_transaction:
 static int arDotCommand(
   ShellState *pState,          /* Current shell tool state */
   int fromCmdLine,             /* True if -A command-line option, not .ar cmd */
-  char **azArg,                /* Array of arguments passed to dot command */
+  const char **azArg,          /* Array of arguments passed to dot command */
   int nArg                     /* Number of entries in azArg[] */
 ){
   ArCommand cmd;
@@ -9533,7 +9534,7 @@ static int do_meta_command(char *zLine, ShellState *p){
     ** DB is normally "main".
     */
     if( strcmp(azCmd[0],"open")==0 ){
-      char *zName;
+      const char *zName;
       if( nCmd!=3 ) goto session_syntax_error;
       zName = azCmd[2];
       if( zName[0]==0 ) goto session_syntax_error;
@@ -10404,8 +10405,8 @@ static int do_meta_command(char *zLine, ShellState *p){
   if( c=='v' && strncmp(azArg[0], "version", n)==0 ){
     utf8_printf(p->out, "SQLite %s %s\n" /*extra-version-info*/,
         sqlite3_libversion(), sqlite3_sourceid());
-#if SQLITE_HAVE_ZLIB
-    utf8_printf(p->out, "zlib version %s\n", zlibVersion());
+#ifdef SQLITE_HAVE_ZLIB
+    utf8_printf(p->out, "zlib-ng version %s\n", zlibng_version());
 #endif
 #define CTIMEOPT_VAL_(opt) #opt
 #define CTIMEOPT_VAL(opt) CTIMEOPT_VAL_(opt)
