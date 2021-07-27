@@ -630,6 +630,8 @@ int main(int argc, const char **argv){
     }
     sqlite3_close(db);
     return 0;
-
   }
+  printf("ERROR: unsupported COMMAND specified: %s\n", zCmd);
+  usage(argv[0]);
+  return 1;
 }
