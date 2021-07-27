@@ -61,6 +61,8 @@
 #if defined(BUILD_MONOLITHIC)
 #define SQLITE_SHELL_IS_UTF8 1
 #include "mupdf/mutool.h"
+
+#include "monolithic_examples.h"
 #endif
 
 /*
@@ -9364,7 +9366,7 @@ static int do_meta_command(char *zLine, ShellState *p){
   if( c=='s' && strncmp(azArg[0],"session",n)==0 && n>=3 ){
     struct AuxDb *pAuxDb = p->pAuxDb;
     OpenSession *pSession = &pAuxDb->aSession[0];
-    char **azCmd = &azArg[1];
+    const char **azCmd = &azArg[1];
     int iSes = 0;
     int nCmd = nArg - 1;
     int i;
@@ -10641,7 +10643,9 @@ static int process_input(ShellState *p){
     if( zLine && (zLine[0]=='.' || zLine[0]=='#') && nSql==0 ){
       if( ShellHasFlag(p, SHFLG_Echo) ) printf("%s\n", zLine);
       if( zLine[0]=='.' ){
-        rc = do_meta_command(zLine, p);
+        char* line = strdup(zLine);
+        rc = do_meta_command(line, p);
+        free(line);
         if( rc==2 ){ /* exit requested */
           break;
         }else if( rc ){
@@ -10940,7 +10944,7 @@ static void printBold(const char *zText){
 ** Get the argument to an --option.  Throw an error and die if no argument
 ** is available.
 */
-static char *cmdline_option_value(int argc, char **argv, int i){
+static const char *cmdline_option_value(int argc, const char **argv, int i){
   if( i==argc ){
     utf8_printf(stderr, "%s: Error: missing argument to %s\n",
             argv[0], argv[argc-1]);
@@ -10981,7 +10985,7 @@ int SQLITE_CDECL wmain(int argc, const wchar_t **wargv){
   int warnInmemoryDb = 0;
   int readStdin = 1;
   int nCmd = 0;
-  char **azCmd = 0;
+  const char **azCmd = 0;
   const char *zVfs = 0;           /* Value of -vfs command-line option */
 #if !SQLITE_SHELL_IS_UTF8
   char **argvToFree = 0;
@@ -11084,8 +11088,7 @@ int SQLITE_CDECL wmain(int argc, const wchar_t **wargv){
   */
   verify_uninitialized();
   for(i=1; i<argc; i++){
-    char *z;
-    z = argv[i];
+    const char *z = argv[i];
     if( z[0]!='-' ){
       if( data.aAuxDb->zDbFilename==0 ){
         data.aAuxDb->zDbFilename = z;
@@ -11094,7 +11097,7 @@ int SQLITE_CDECL wmain(int argc, const wchar_t **wargv){
         ** mean that nothing is read from stdin */
         readStdin = 0;
         nCmd++;
-        azCmd = realloc(azCmd, sizeof(azCmd[0])*nCmd);
+        azCmd = realloc((void *)azCmd, sizeof(azCmd[0])*nCmd);
         if( azCmd==0 ) shell_out_of_memory();
         azCmd[nCmd-1] = z;
       }
@@ -11386,7 +11389,9 @@ int SQLITE_CDECL wmain(int argc, const wchar_t **wargv){
       if( i==argc-1 ) break;
       z = cmdline_option_value(argc,argv,++i);
       if( z[0]=='.' ){
-        rc = do_meta_command(z, &data);
+        char* line = strdup(z);
+        rc = do_meta_command(line, &data);
+        free(line);
         if( rc && bail_on_error ) return rc==2 ? 0 : rc;
       }else{
         open_db(&data, 0);
@@ -11431,9 +11436,11 @@ int SQLITE_CDECL wmain(int argc, const wchar_t **wargv){
     */
     for(i=0; i<nCmd; i++){
       if( azCmd[i][0]=='.' ){
-        rc = do_meta_command(azCmd[i], &data);
+        char* line = strdup(azCmd[i]);
+        rc = do_meta_command(line, &data);
+        free(line);
         if( rc ){
-          free(azCmd);
+          free((void *)azCmd);
           return rc==2 ? 0 : rc;
         }
       }else{
@@ -11446,7 +11453,7 @@ int SQLITE_CDECL wmain(int argc, const wchar_t **wargv){
             utf8_printf(stderr,"Error: unable to process SQL: %s\n", azCmd[i]);
           }
           sqlite3_free(zErrMsg);
-          free(azCmd);
+          free((void *)azCmd);
           return rc!=0 ? rc : 1;
         }
       }
@@ -11496,7 +11503,7 @@ int SQLITE_CDECL wmain(int argc, const wchar_t **wargv){
       rc = process_input(&data);
     }
   }
-  free(azCmd);
+  free((void *)azCmd);
   set_table_name(&data, 0);
   if( data.db ){
     session_close_all(&data, -1);
