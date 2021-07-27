@@ -1435,6 +1435,21 @@ threadtest5: sqlite3.c $(TOP)/test/threadtest5.c
 releasetest:
 	$(TCLSH_CMD) $(TOP)/test/releasetest.tcl
 
+AMALGAMATIONS_SRC = sqlite3-all.c          \
+                    sqlite3ext.h           \
+					sqlite3.c              \
+					sqlite3.h              \
+					shell.c                \
+					sqlite3rc.h            \
+					keywordhash.h          \
+					fts5parse.h            \
+					fts5.c                 \
+					sqlite3_analyzer.c     \
+					sqltclsh.c             \
+					sqlite3_checker.c
+
+amalgamation:	$(AMALGAMATIONS_SRC)
+
 # Standard install and cleanup targets
 #
 lib_install:	libsqlite3.la
