@@ -85,7 +85,7 @@ static FILE *memtraceOut;
 /* Methods that trace memory allocations */
 static void *memtraceMalloc(int n){
   if( memtraceOut ){
-    fprintf(memtraceOut, "MEMTRACE: allocate %d bytes\n", 
+    fprintf(memtraceOut, "MEMTRACE: allocate %d bytes\n",
             memtraceBase.xRoundup(n));
   }
   return memtraceBase.xMalloc(n);
@@ -257,12 +257,12 @@ static int numberOfVChar(const char *z){
 /* libFuzzer invokes this routine once when the executable starts, to
 ** process the command-line arguments.
 */
-int LLVMFuzzerInitialize(int *pArgc, char ***pArgv){
+int LLVMFuzzerInitialize(int *pArgc, const char ***pArgv){
   int i, j, n;
   int argc = *pArgc;
   char **argv = *pArgv;
   for(i=j=1; i<argc; i++){
-    char *z = argv[i];
+    const char *z = argv[i];
     if( z[0]=='-' ){
       z++;
       if( z[0]=='-' ) z++;
@@ -297,7 +297,7 @@ int LLVMFuzzerInitialize(int *pArgc, char ***pArgv){
       if( strcmp(z, "lookaside")==0 ){
         int sz, nSlot;
         if( i+2>=argc ){
-          fprintf(stderr, 
+          fprintf(stderr,
              "--lookaside requires two arguments: slot-size num-slots\n");
           exit(1);
         }
@@ -333,7 +333,7 @@ int LLVMFuzzerInitialize(int *pArgc, char ***pArgv){
         setrlimit(resource, &y);
         memset(&y,0,sizeof(y));
         getrlimit(resource, &y);
-        printf("%s changed from %d to %d\n", 
+        printf("%s changed from %d to %d\n",
                zType, (int)x.rlim_cur, (int)y.rlim_cur);
         continue;
       }
@@ -375,7 +375,7 @@ static unsigned char *readFile(const char *zName, int *pnByte){
 #endif /* STANDALONE */
 
 #ifdef STANDALONE
-int main(int argc, char **argv){
+int main(int argc, const char **argv){
   int i;
   LLVMFuzzerInitialize(&argc, &argv);
   for(i=1; i<argc; i++){
