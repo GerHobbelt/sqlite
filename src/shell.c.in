@@ -58,7 +58,7 @@
 #pragma warning(disable : 4706)
 #endif /* defined(_MSC_VER) */
 
-#if defined(MONOLITHIC_TOOLSET)
+#if defined(BUILD_MONOLITHIC)
 #define SQLITE_SHELL_IS_UTF8 1
 #include "mupdf/mutool.h"
 #endif
@@ -10950,11 +10950,6 @@ static char *cmdline_option_value(int argc, char **argv, int i){
 }
 
 
-#if defined(MONOLITHIC_TOOLSET)
-#define main(c, a)    sqlite_main(c, a)
-#define wmain(c, a)   sqlite_wmain(c, a)
-#endif
-
 #ifndef SQLITE_SHELL_IS_UTF8
 #  if (defined(_WIN32) || defined(WIN32)) \
    && (defined(_MSC_VER) || (defined(UNICODE) && defined(__GNUC__)))
@@ -10962,6 +10957,14 @@ static char *cmdline_option_value(int argc, char **argv, int i){
 #  else
 #    define SQLITE_SHELL_IS_UTF8          (1)
 #  endif
+#endif
+
+#if defined(BUILD_MONOLITHIC)
+#if SQLITE_SHELL_IS_UTF8
+#define main(c, a)    sqlite_main(c, a)
+#else
+#define wmain(c, a)   sqlite_wmain(c, a)
+#endif
 #endif
 
 #if SQLITE_SHELL_IS_UTF8
