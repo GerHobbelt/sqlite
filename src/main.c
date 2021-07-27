@@ -2152,10 +2152,10 @@ void *sqlite3_trace(sqlite3 *db, void(*xTrace)(void*,const char*), void *pArg){
 /* Register a trace callback using the version-2 interface.
 */
 int sqlite3_trace_v2(
-  sqlite3 *db,                               /* Trace this connection */
-  unsigned mTrace,                           /* Mask of events to be traced */
-  int(*xTrace)(unsigned,void*,void*,void*),  /* Callback to invoke */
-  void *pArg                                 /* Context */
+  sqlite3 *db,                                    /* Trace this connection */
+  unsigned mTrace,                                /* Mask of events to be traced */
+  void(*xTrace)(unsigned int,void*,void*,void*),  /* Callback to invoke */
+  void *pArg                                      /* Context */
 ){
 #ifdef SQLITE_ENABLE_API_ARMOR
   if( !sqlite3SafetyCheckOk(db) ){
