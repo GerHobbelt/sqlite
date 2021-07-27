@@ -58,6 +58,11 @@
 #pragma warning(disable : 4706)
 #endif /* defined(_MSC_VER) */
 
+#if defined(MONOLITHIC_TOOLSET)
+#define SQLITE_SHELL_IS_UTF8 1
+#include "mupdf/mutool.h"
+#endif
+
 /*
 ** No support for loadable extensions in VxWorks.
 */
@@ -440,7 +445,7 @@ static void*(*defaultMalloc)(int) = 0; /* The low-level malloc routine */
 ** This is the name of our program. It is set in main(), used
 ** in a number of other places, mostly for error messages.
 */
-static char *Argv0;
+static const char *Argv0;
 
 /*
 ** Prompt strings. Initialized in main. Settable with
@@ -10944,6 +10949,12 @@ static char *cmdline_option_value(int argc, char **argv, int i){
   return argv[i];
 }
 
+
+#if defined(MONOLITHIC_TOOLSET)
+#define main(c, a)    sqlite_main(c, a)
+#define wmain(c, a)   sqlite_wmain(c, a)
+#endif
+
 #ifndef SQLITE_SHELL_IS_UTF8
 #  if (defined(_WIN32) || defined(WIN32)) \
    && (defined(_MSC_VER) || (defined(UNICODE) && defined(__GNUC__)))
@@ -10954,9 +10965,9 @@ static char *cmdline_option_value(int argc, char **argv, int i){
 #endif
 
 #if SQLITE_SHELL_IS_UTF8
-int SQLITE_CDECL main(int argc, char **argv){
+int SQLITE_CDECL main(int argc, const char **argv){
 #else
-int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
+int SQLITE_CDECL wmain(int argc, const wchar_t **wargv){
   char **argv;
 #endif
   char *zErrMsg = 0;
@@ -11247,7 +11258,7 @@ int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
   ** settings in the initialization file.
   */
   for(i=1; i<argc; i++){
-    char *z = argv[i];
+    const char *z = argv[i];
     if( z[0]!='-' ) continue;
     if( z[1]=='-' ){ z++; }
     if( strcmp(z,"-init")==0 ){
