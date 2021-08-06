@@ -861,6 +861,7 @@ typedef INT16_TYPE LogEst;
 #   define SQLITE_PTRSIZE __SIZEOF_POINTER__
 # elif defined(i386)     || defined(__i386__)   || defined(_M_IX86) ||    \
        defined(_M_ARM)   || defined(__arm__)    || defined(__x86)   ||    \
+      (defined(__APPLE__) && defined(__POWERPC__)) ||                     \
       (defined(__TOS_AIX__) && !defined(__64BIT__))
 #   define SQLITE_PTRSIZE 4
 # else
@@ -2036,8 +2037,24 @@ struct Column {
   char affinity;   /* One of the SQLITE_AFF_... values */
   u8 szEst;        /* Estimated size of value in this column. sizeof(INT)==1 */
   u8 hName;        /* Column name hash for faster lookup */
+  u8 eType;        /* One of the standard types */
   u16 colFlags;    /* Boolean properties.  See COLFLAG_ defines below */
 };
+
+/* Allowed values for Column.eType.
+**
+** Values must match entries in the global constant arrays
+** sqlite3StdTypeLen[] and sqlite3StdType[].  Each value is one more
+** than the offset into these arrays for the corresponding name.
+** Adjust the SQLITE_N_STDTYPE value if adding or removing entries.
+*/
+#define COLTYPE_CUSTOM      0   /* Type appended to zName */
+#define COLTYPE_BLOB        1
+#define COLTYPE_INT         2
+#define COLTYPE_INTEGER     3
+#define COLTYPE_REAL        4
+#define COLTYPE_TEXT        5
+#define SQLITE_N_STDTYPE    5  /* Number of standard types */
 
 /* Allowed values for Column.colFlags.
 **
@@ -4316,6 +4333,7 @@ void sqlite3ErrorMsg(Parse*, const char*, ...);
 int sqlite3ErrorToParser(sqlite3*,int);
 void sqlite3Dequote(char*);
 void sqlite3DequoteExpr(Expr*);
+void sqlite3DequoteToken(Token*);
 void sqlite3TokenInit(Token*,char*);
 int sqlite3KeywordCode(const unsigned char*, int);
 int sqlite3RunParser(Parse*, const char*, char **);
@@ -4382,7 +4400,7 @@ void sqlite3StartTable(Parse*,Token*,Token*,int,int,int,int);
 #else
 # define sqlite3ColumnPropertiesFromName(T,C) /* no-op */
 #endif
-void sqlite3AddColumn(Parse*,Token*,Token*);
+void sqlite3AddColumn(Parse*,Token,Token);
 void sqlite3AddNotNull(Parse*, int);
 void sqlite3AddPrimaryKey(Parse*, ExprList*, int, int, int);
 void sqlite3AddCheckConstraint(Parse*, Expr*, const char*, const char*);
@@ -4792,6 +4810,9 @@ void sqlite3ValueApplyAffinity(sqlite3_value *, u8, u8);
 #ifndef SQLITE_AMALGAMATION
 extern const unsigned char sqlite3OpcodeProperty[];
 extern const char sqlite3StrBINARY[];
+extern const unsigned char sqlite3StdTypeLen[];
+extern const char sqlite3StdTypeAffinity[];
+extern const char *sqlite3StdType[];
 extern const unsigned char sqlite3UpperToLower[];
 extern const unsigned char *sqlite3aLTb;
 extern const unsigned char *sqlite3aEQb;
