@@ -25,9 +25,13 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#if !defined(_WIN32) && !defined(_WIN64)
 #include <unistd.h>
+#endif
 #include <stdarg.h>
 #include "sqlite3.h"
+
+#include "hwtime.h"
 
 #define ISSPACE(X)  isspace((unsigned char)(X))
 
@@ -120,9 +124,15 @@ error_out:
   return 0;
 }
 
-int main(int argc, char **argv){
 
-  const char zUsageMsg[] = 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_speedtest8inst1_main(cnt, arr)
+#endif
+
+int main(int argc, const char **argv){
+
+  const char zUsageMsg[] =
     "Usage: %s options...\n"
     "  where available options are:\n"
     "\n"
@@ -208,10 +218,10 @@ int main(int argc, char **argv){
       }
     }
   }
-  
+
   sqlite3_instvfs_destroy(pInstVfs);
   return 0;
-  
+
 usage:
   fprintf(stderr, zUsageMsg, argv[0]);
   return -3;

@@ -58,6 +58,19 @@
 #pragma warning(disable : 4706)
 #endif /* defined(_MSC_VER) */
 
+#if defined(BUILD_MONOLITHIC)
+#define SQLITE_SHELL_IS_UTF8 1
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
+#include "mupdf/mutool.h"
+
+#include "monolithic_examples.h"
+#endif   // BUILD_MONOLITHIC
+
 /*
 ** No support for loadable extensions in VxWorks.
 */
@@ -442,7 +455,7 @@ static void*(*defaultMalloc)(int) = 0; /* The low-level malloc routine */
 ** This is the name of our program. It is set in main(), used
 ** in a number of other places, mostly for error messages.
 */
-static char *Argv0;
+static const char *Argv0;
 
 /*
 ** Prompt strings. Initialized in main. Settable with
@@ -4654,7 +4667,7 @@ static FILE *output_file_open(const char *zFile, int bTextMode){
 /*
 ** A routine for handling output from sqlite3_trace().
 */
-static int sql_trace_callback(
+static void sql_trace_callback(
   unsigned mType,         /* The trace type */
   void *pArg,             /* The ShellState pointer */
   void *pP,               /* Usually a pointer to sqlite_stmt */
@@ -4664,10 +4677,10 @@ static int sql_trace_callback(
   sqlite3_stmt *pStmt;
   const char *zSql;
   int nSql;
-  if( p->traceOut==0 ) return 0;
+  if( p->traceOut==0 ) return;
   if( mType==SQLITE_TRACE_CLOSE ){
     utf8_printf(p->traceOut, "-- closing database connection\n");
-    return 0;
+    return;
   }
   if( mType!=SQLITE_TRACE_ROW && ((const char*)pX)[0]=='-' ){
     zSql = (const char*)pX;
@@ -4690,7 +4703,7 @@ static int sql_trace_callback(
       }
     }
   }
-  if( zSql==0 ) return 0;
+  if( zSql==0 ) return;
   nSql = strlen30(zSql);
   while( nSql>0 && zSql[nSql-1]==';' ){ nSql--; }
   switch( mType ){
@@ -4705,7 +4718,6 @@ static int sql_trace_callback(
       break;
     }
   }
-  return 0;
 }
 #endif
 
@@ -5782,7 +5794,7 @@ struct ArCommand {
   char *zSrcTable;                /* "sqlar", "zipfile($file)" or "zip" */
   const char *zFile;              /* --file argument, or NULL */
   const char *zDir;               /* --directory argument, or NULL */
-  char **azArg;                   /* Array of command arguments */
+  const char **azArg;             /* Array of command arguments */
   ShellState *p;                  /* Shell state */
   sqlite3 *db;                    /* Database containing the archive */
 };
@@ -5875,7 +5887,7 @@ static int arProcessSwitch(ArCommand *pAr, int eSwitch, const char *zArg){
 ** SQLITE_ERROR returned.
 */
 static int arParseCommand(
-  char **azArg,                   /* Array of arguments passed to dot command */
+  const char **azArg,             /* Array of arguments passed to dot command */
   int nArg,                       /* Number of entries in azArg[] */
   ArCommand *pAr                  /* Populate this object */
 ){
@@ -5904,7 +5916,7 @@ static int arParseCommand(
     utf8_printf(stderr, "Wrong number of arguments.  Usage:\n");
     return arUsage(stderr);
   }else{
-    char *z = azArg[1];
+    const char *z = azArg[1];
     if( z[0]!='-' ){
       /* Traditional style [tar] invocation */
       int i;
@@ -6034,7 +6046,7 @@ static int arCheckEntries(ArCommand *pAr){
     );
     j = sqlite3_bind_parameter_index(pTest, "$name");
     for(i=0; i<pAr->nArg && rc==SQLITE_OK; i++){
-      char *z = pAr->azArg[i];
+      char *z = strdup(pAr->azArg[i]);
       int n = strlen30(z);
       int bOk = 0;
       while( n>0 && z[n-1]=='/' ) n--;
@@ -6048,6 +6060,7 @@ static int arCheckEntries(ArCommand *pAr){
         utf8_printf(stderr, "not found in archive: %s\n", z);
         rc = SQLITE_ERROR;
       }
+      free(z);
     }
     shellFinalize(&rc, pTest);
   }
@@ -6353,7 +6366,7 @@ end_ar_transaction:
 static int arDotCommand(
   ShellState *pState,          /* Current shell tool state */
   int fromCmdLine,             /* True if -A command-line option, not .ar cmd */
-  char **azArg,                /* Array of arguments passed to dot command */
+  const char **azArg,          /* Array of arguments passed to dot command */
   int nArg                     /* Number of entries in azArg[] */
 ){
   ArCommand cmd;
@@ -9323,7 +9336,7 @@ DISPATCHABLE_COMMAND( session 3 2 0 ){
   int rc = 0;
   struct AuxDb *pAuxDb = p->pAuxDb;
   OpenSession *pSession = &pAuxDb->aSession[0];
-  char **azCmd = &azArg[1];
+  const char **azCmd = &azArg[1];
   int iSes = 0;
   int nCmd = nArg - 1;
   int i;
@@ -9484,7 +9497,7 @@ DISPATCHABLE_COMMAND( session 3 2 0 ){
                   ** DB is normally "main".
                   */
                   if( strcmp(azCmd[0],"open")==0 ){
-                    char *zName;
+                    const char *zName;
                     if( nCmd!=3 ) goto session_syntax_error;
                     zName = azCmd[2];
                     if( zName[0]==0 ) goto session_syntax_error;
@@ -10421,8 +10434,8 @@ COLLECT_HELP_TEXT[
 DISPATCHABLE_COMMAND( version ? 1 1 ){
   utf8_printf(p->out, "SQLite %s %s\n" /*extra-version-info*/,
               sqlite3_libversion(), sqlite3_sourceid());
-#if SQLITE_HAVE_ZLIB
-  utf8_printf(p->out, "zlib version %s\n", zlibVersion());
+#ifdef SQLITE_HAVE_ZLIB
+    utf8_printf(p->out, "zlib-ng version %s\n", zlibng_version());
 #endif
 #define CTIMEOPT_VAL_(opt) #opt
 #define CTIMEOPT_VAL(opt) CTIMEOPT_VAL_(opt)
@@ -10855,7 +10868,9 @@ static int process_input(ShellState *p){
     if( zLine && (zLine[0]=='.' || zLine[0]=='#') && nSql==0 ){
       if( ShellHasFlag(p, SHFLG_Echo) ) printf("%s\n", zLine);
       if( zLine[0]=='.' ){
-        rc = do_meta_command(zLine, p);
+        char* line = strdup(zLine);
+        rc = do_meta_command(line, p);
+        free(line);
         if( rc==2 ){ /* exit requested */
           break;
         }else if( rc ){
@@ -11154,7 +11169,7 @@ static void printBold(const char *zText){
 ** Get the argument to an --option.  Throw an error and die if no argument
 ** is available.
 */
-static char *cmdline_option_value(int argc, char **argv, int i){
+static const char *cmdline_option_value(int argc, const char **argv, int i){
   if( i==argc ){
     utf8_printf(stderr, "%s: Error: missing argument to %s\n",
             argv[0], argv[argc-1]);
@@ -11162,6 +11177,7 @@ static char *cmdline_option_value(int argc, char **argv, int i){
   }
   return argv[i];
 }
+
 
 #ifndef SQLITE_SHELL_IS_UTF8
 #  if (defined(_WIN32) || defined(WIN32)) \
@@ -11172,10 +11188,18 @@ static char *cmdline_option_value(int argc, char **argv, int i){
 #  endif
 #endif
 
+#if defined(BUILD_MONOLITHIC)
 #if SQLITE_SHELL_IS_UTF8
-int SQLITE_CDECL main(int argc, char **argv){
+#define main(c, a)    sqlite_main(c, a)
 #else
-int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
+#define wmain(c, a)   sqlite_wmain(c, a)
+#endif
+#endif
+
+#if SQLITE_SHELL_IS_UTF8
+int SQLITE_CDECL main(int argc, const char **argv){
+#else
+int SQLITE_CDECL wmain(int argc, const wchar_t **wargv){
   char **argv;
 #endif
   char *zErrMsg = 0;
@@ -11186,7 +11210,7 @@ int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
   int warnInmemoryDb = 0;
   int readStdin = 1;
   int nCmd = 0;
-  char **azCmd = 0;
+  const char **azCmd = 0;
   const char *zVfs = 0;           /* Value of -vfs command-line option */
 #if !SQLITE_SHELL_IS_UTF8
   char **argvToFree = 0;
@@ -11289,8 +11313,7 @@ int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
   */
   verify_uninitialized();
   for(i=1; i<argc; i++){
-    char *z;
-    z = argv[i];
+    const char *z = argv[i];
     if( z[0]!='-' ){
       if( data.aAuxDb->zDbFilename==0 ){
         data.aAuxDb->zDbFilename = z;
@@ -11299,7 +11322,7 @@ int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
         ** mean that nothing is read from stdin */
         readStdin = 0;
         nCmd++;
-        azCmd = realloc(azCmd, sizeof(azCmd[0])*nCmd);
+        azCmd = realloc((void *)azCmd, sizeof(azCmd[0])*nCmd);
         if( azCmd==0 ) shell_out_of_memory();
         azCmd[nCmd-1] = z;
       }
@@ -11474,7 +11497,7 @@ int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
   ** settings in the initialization file.
   */
   for(i=1; i<argc; i++){
-    char *z = argv[i];
+    const char *z = argv[i];
     if( z[0]!='-' ) continue;
     if( z[1]=='-' ){ z++; }
     if( strcmp(z,"-init")==0 ){
@@ -11601,7 +11624,9 @@ int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
       if( i==argc-1 ) break;
       z = cmdline_option_value(argc,argv,++i);
       if( z[0]=='.' ){
-        rc = do_meta_command(z, &data);
+        char* line = strdup(z);
+        rc = do_meta_command(line, &data);
+        free(line);
         if( rc && bail_on_error ) return rc==2 ? 0 : rc;
       }else{
         open_db(&data, 0);
@@ -11646,9 +11671,11 @@ int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
     */
     for(i=0; i<nCmd; i++){
       if( azCmd[i][0]=='.' ){
-        rc = do_meta_command(azCmd[i], &data);
+        char* line = strdup(azCmd[i]);
+        rc = do_meta_command(line, &data);
+        free(line);
         if( rc ){
-          free(azCmd);
+          free((void *)azCmd);
           return rc==2 ? 0 : rc;
         }
       }else{
@@ -11661,7 +11688,7 @@ int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
             utf8_printf(stderr,"Error: unable to process SQL: %s\n", azCmd[i]);
           }
           sqlite3_free(zErrMsg);
-          free(azCmd);
+          free((void *)azCmd);
           return rc!=0 ? rc : 1;
         }
       }
@@ -11711,7 +11738,7 @@ int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
       rc = process_input(&data);
     }
   }
-  free(azCmd);
+  free((void *)azCmd);
   set_table_name(&data, 0);
   if( data.db ){
     session_close_all(&data, -1);
