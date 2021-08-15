@@ -3907,7 +3907,7 @@ int sqlite3WalFindFrame(
     return SQLITE_OK;
   }
 
-  /* Search the wal file that the client holds a partial lock on first */
+  /* Search the wal file that the client holds a partial lock on first. */
   rc = walSearchWal(pWal, iApp, pgno, &iRead);
 
   /* If the requested page was not found, no error has occured, and 
