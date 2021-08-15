@@ -101,7 +101,7 @@
 **
 ** To read a page from the database (call it page number P), a reader
 ** first checks the WAL to see if it contains page P.  If so, then the
-** last valid instance of page P that is a followed by a commit frame
+** last valid instance of page P that is followed by a commit frame
 ** or is a commit frame itself becomes the value read.  If the WAL
 ** contains no copies of page P that are valid and which are a commit
 ** frame or are followed by a commit frame, then page P is read from
@@ -236,7 +236,7 @@
 ** and to the wal-index) might be using a different value K1, where K1>K0.
 ** Both readers can use the same hash table and mapping section to get
 ** the correct result.  There may be entries in the hash table with
-** K>K0 but to the first reader, those entries will appear to be unused
+** K>K0, but to the first reader those entries will appear to be unused
 ** slots in the hash table and so the first reader will get an answer as
 ** if no values greater than K0 had ever been inserted into the hash table
 ** in the first place - which is what reader one wants.  Meanwhile, the
@@ -871,7 +871,7 @@ static int walDecodeFrame(
   }
 
   /* A frame is only valid if a checksum of the WAL header,
-  ** all prior frams, the first 16 bytes of this frame-header, 
+  ** all prior frames, the first 16 bytes of this frame-header, 
   ** and the frame-data matches the checksum in the last 8 
   ** bytes of this frame-header.
   */
@@ -1116,7 +1116,6 @@ static void walCleanupHash(Wal *pWal){
   }
 #endif /* SQLITE_ENABLE_EXPENSIVE_ASSERT */
 }
-
 
 /*
 ** Set an entry in the wal-index that will map database page number
@@ -1762,9 +1761,9 @@ static void walIteratorFree(WalIterator *p){
 ** nBackfill or earlier may be included - excluding them is an optimization
 ** only. The caller must hold the checkpoint lock.
 **
-** On success, make *pp point to the newly allocated WalInterator object
-** return SQLITE_OK. Otherwise, return an error code. If this routine
-** returns an error, the value of *pp is undefined.
+** On success, make *pp point to the newly allocated WalIterator object
+** and return SQLITE_OK. Otherwise, return an error code. If this routine
+** returns an error, the final value of *pp is undefined.
 **
 ** The calling routine should invoke walIteratorFree() to destroy the
 ** WalIterator object when it has finished with it.
@@ -2114,7 +2113,6 @@ static int walCheckpoint(
             sqlite3OsFileControlHint(pWal->pDbFd, SQLITE_FCNTL_SIZE_HINT,&nReq);
           }
         }
-
       }
 
       /* Iterate through the contents of the WAL, copying data to the db file */
@@ -2549,7 +2547,7 @@ static int walBeginShmUnreliable(Wal *pWal, int *pChanged){
   ** even if some external agent does a "chmod" to make the shared-memory
   ** writable by us, until sqlite3OsShmUnmap() has been called.
   ** This is a requirement on the VFS implementation.
-   */
+  */
   rc = sqlite3OsShmMap(pWal->pDbFd, 0, WALINDEX_PGSZ, 0, &pDummy);
   assert( rc!=SQLITE_OK ); /* SQLITE_OK not possible for read-only connection */
   if( rc!=SQLITE_READONLY_CANTINIT ){
@@ -3234,6 +3232,8 @@ int sqlite3WalReadFrame(
 ){
   int sz;
   i64 iOffset;
+
+  /* Figure out the page size */
   sz = pWal->hdr.szPage;
   sz = (sz&0xfe00) + ((sz&0x0001)<<16);
   testcase( sz<=32768 );
@@ -3467,6 +3467,7 @@ static int walRestartLog(Wal *pWal){
     testcase( rc==SQLITE_PROTOCOL );
     testcase( rc==SQLITE_OK );
   }
+
   return rc;
 }
 
@@ -3654,7 +3655,7 @@ int sqlite3WalFrames(
     walChecksumBytes(1, aWalHdr, WAL_HDRSIZE-2*4, 0, aCksum);
     sqlite3Put4byte(&aWalHdr[24], aCksum[0]);
     sqlite3Put4byte(&aWalHdr[28], aCksum[1]);
-    
+
     pWal->szPage = szPage;
     pWal->hdr.bigEndCksum = SQLITE_BIGENDIAN;
     pWal->hdr.aFrameCksum[0] = aCksum[0];
@@ -3989,6 +3990,7 @@ int sqlite3WalCallback(Wal *pWal){
 */
 int sqlite3WalExclusiveMode(Wal *pWal, int op){
   int rc;
+
   assert( pWal->writeLock==0 );
   assert( pWal->exclusiveMode!=WAL_HEAPMEMORY_MODE || op==-1 );
 
