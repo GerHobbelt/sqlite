@@ -3167,7 +3167,7 @@ static int walBeginShmUnreliable(Wal *pWal, int *pChanged){
   ** even if some external agent does a "chmod" to make the shared-memory
   ** writable by us, until sqlite3OsShmUnmap() has been called.
   ** This is a requirement on the VFS implementation.
-   */
+  */
   rc = sqlite3OsShmMap(pWal->pDbFd, 0, WALINDEX_PGSZ, 0, &pDummy);
   assert( rc!=SQLITE_OK ); /* SQLITE_OK not possible for read-only connection */
   if( rc!=SQLITE_READONLY_CANTINIT ){
@@ -3892,7 +3892,7 @@ int sqlite3WalFindFrame(
     return SQLITE_OK;
   }
 
-  /* Search the wal file that the client holds a partial lock on first */
+  /* Search the wal file that the client holds a partial lock on first. */
   rc = walSearchWal(pWal, iApp, pgno, &iRead);
 
   /* If the requested page was not found, no error has occured, and 
