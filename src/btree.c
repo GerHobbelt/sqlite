@@ -90,6 +90,11 @@ int sqlite3_enable_shared_cache(int enable){
   sqlite3GlobalConfig.sharedCacheEnabled = enable;
   return SQLITE_OK;
 }
+#else
+// No effect.
+SQLITE_API int sqlite3_enable_shared_cache(int enable) {
+  return SQLITE_OK;
+}
 #endif
 
 

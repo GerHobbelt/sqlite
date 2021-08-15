@@ -1,9 +1,9 @@
 /*
 ** Run this program with a single argument which is the name of the
 ** Fossil "manifest" file for a project, and this program will emit on
-** standard output the "source id" for for the program.
+** standard output the "source id" for the program.
 **
-** (1)  The "source id" is the date of check-in together with the 
+** (1)  The "source id" is the date of check-in together with the
 **      SHA3 hash of the manifest file.
 **
 ** (2)  All individual file hashes in the manifest are verified.  If any
@@ -732,7 +732,7 @@ static int sha1sum_file(const char *zFilename, char *pCksum){
 ** Print a usage comment and quit.
 */
 static void usage(const char *argv0){
-  fprintf(stderr, 
+  fprintf(stderr,
      "Usage: %s manifest\n"
      "Options:\n"
      "   -v  Diagnostic output\n"
@@ -750,9 +750,9 @@ static char *nextToken(char *z){
   *z = 0;
   return &z[1];
 }
-  
 
-int main(int argc, char **argv){
+
+int main(int argc, const char **argv){
   const char *zManifest = 0;
   int i;
   int bVerbose = 0;
