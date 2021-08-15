@@ -20,6 +20,9 @@
 #include <assert.h>
 #include "sqlite3.h"
 
+#include "monolithic_examples.h"
+
+
 typedef unsigned char u8;         /* unsigned 8-bit */
 typedef unsigned int u32;         /* unsigned 32-bit */
 typedef sqlite3_int64 i64;        /* signed 64-bit */
@@ -105,7 +108,7 @@ static void fileOpen(const char *zPrg, const char *zName){
     g.pDb = openDatabase(zPrg, zName);
     rc = sqlite3_file_control(g.pDb, "main", SQLITE_FCNTL_FILE_POINTER, pArg);
     if( rc!=SQLITE_OK ){
-      fprintf(stderr, 
+      fprintf(stderr,
           "%s: failed to obtain fd for %s (SQLite too old?)\n", zPrg, zName
       );
       exit(1);
@@ -136,7 +139,7 @@ static void fileClose(){
 /*
 ** Read content from the file.
 **
-** Space to hold the content is obtained from sqlite3_malloc() and needs 
+** Space to hold the content is obtained from sqlite3_malloc() and needs
 ** to be freed by the caller.
 */
 static unsigned char *fileRead(sqlite3_int64 ofst, int nByte){
@@ -400,7 +403,7 @@ static i64 localPayload(i64 nPayload, char cType){
   }
   return nLocal;
 }
-  
+
 
 /*
 ** Create a description for a single cell.
@@ -753,7 +756,7 @@ static void decode_trunk_page(
       n = decodeInt32(&a[4]);
       for(i=0; i<n && i<g.pagesize/4; i++){
         u32 x = decodeInt32(&a[8+4*i]);
-        char zIdx[10];
+        char zIdx[13];
         sprintf(zIdx, "[%d]", i);
         printf("  %5s %7u", zIdx, x);
         if( i%5==4 ) printf("\n");
@@ -1041,6 +1044,8 @@ static void page_usage_report(const char *zPrg, const char *zDbName){
   for(i=1; i<=g.mxPage; i++){
     if( zPageUse[i]==0 ) page_usage_btree(i, -1, 0, 0);
     printf("%5u: %s\n", i, zPageUse[i] ? zPageUse[i] : "???");
+  }
+  for(i=1; i<=g.mxPage; i++){
     sqlite3_free(zPageUse[i]);
   }
   sqlite3_free(zPageUse);
@@ -1118,16 +1123,22 @@ static void usage(const char *argv0){
   );
 }
 
-int main(int argc, char **argv){
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_showdb_main(cnt, arr)
+#endif
+
+int main(int argc, const char **argv){
   sqlite3_int64 szFile;
   unsigned char *zPgSz;
   const char *zPrg = argv[0];     /* Name of this executable */
-  char **azArg = argv;
+  const char **azArg = argv;
   int nArg = argc;
 
   /* Check for the "--uri" or "-uri" switch. */
   if( nArg>1 ){
-    if( sqlite3_stricmp("-raw", azArg[1])==0 
+    if( sqlite3_stricmp("-raw", azArg[1])==0
      || sqlite3_stricmp("--raw", azArg[1])==0
     ){
       g.bRaw = 1;

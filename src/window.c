@@ -908,9 +908,7 @@ static ExprList *exprListAppendList(
       if( bIntToNull ){
         int iDummy;
         Expr *pSub;
-        for(pSub=pDup; ExprHasProperty(pSub, EP_Skip); pSub=pSub->pLeft){
-          assert( pSub );
-        }
+        pSub = sqlite3ExprSkipCollateAndLikely(pDup);
         if( sqlite3ExprIsInteger(pSub, &iDummy) ){
           pSub->op = TK_NULL;
           pSub->flags &= ~(EP_IntValue|EP_IsTrue|EP_IsFalse);
@@ -958,7 +956,7 @@ static int disallowAggregatesInOrderByCb(Walker *pWalker, Expr *pExpr){
 */
 int sqlite3WindowRewrite(Parse *pParse, Select *p){
   int rc = SQLITE_OK;
-  if( p->pWin && p->pPrior==0 && (p->selFlags & SF_WinRewrite)==0 ){
+  if( p->pWin && p->pPrior==0 && ALWAYS((p->selFlags & SF_WinRewrite)==0) ){
     Vdbe *v = sqlite3GetVdbe(pParse);
     sqlite3 *db = pParse->db;
     Select *pSub = 0;             /* The subquery */
@@ -984,6 +982,7 @@ int sqlite3WindowRewrite(Parse *pParse, Select *p){
     sqlite3WalkSelect(&w, p);
     if( (p->selFlags & SF_Aggregate)==0 ){
       w.xExprCallback = disallowAggregatesInOrderByCb;
+      w.xSelectCallback = 0;
       sqlite3WalkExprList(&w, p->pOrderBy);
     }
 
@@ -1071,7 +1070,7 @@ int sqlite3WindowRewrite(Parse *pParse, Select *p){
       Table *pTab2;
       p->pSrc->a[0].pSelect = pSub;
       sqlite3SrcListAssignCursors(pParse, p->pSrc);
-      pSub->selFlags |= SF_Expanded;
+      pSub->selFlags |= SF_Expanded|SF_OrderByReqd;
       pTab2 = sqlite3ResultSetOfSelect(pParse, pSub, SQLITE_AFF_NONE);
       pSub->selFlags |= (selFlags & SF_Aggregate);
       if( pTab2==0 ){

@@ -20,6 +20,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "monolithic_examples.h"
+
 
 static int pagesize = 1024;     /* Size of a database page */
 static int fd = -1;             /* File descriptor for reading the WAL file */
@@ -117,7 +119,7 @@ static void out_of_memory(void){
 ** Space to hold the content is obtained from malloc() and needs to be
 ** freed by the caller.
 */
-static unsigned char *getContent(int ofst, int nByte){
+static unsigned char *getContent(i64 ofst, int nByte){
   unsigned char *aData;
   aData = malloc(nByte);
   if( aData==0 ) out_of_memory();
@@ -204,10 +206,10 @@ static void print_decode_line(
 ** Print an entire page of content as hex
 */
 static void print_frame(int iFrame){
-  int iStart;
+  i64 iStart;
   unsigned char *aData;
-  iStart = 32 + (iFrame-1)*(pagesize+24);
-  fprintf(stdout, "Frame %d:   (offsets 0x%x..0x%x)\n",
+  iStart = 32 + (i64)(iFrame-1)*(pagesize+24);
+  fprintf(stdout, "Frame %d:   (offsets 0x%llx..0x%llx)\n",
           iFrame, iStart, iStart+pagesize+24);
   aData = getContent(iStart, pagesize+24);
   print_decode_line(aData, 0, 4, 0, "Page number");
@@ -224,17 +226,17 @@ static void print_frame(int iFrame){
 ** Summarize a single frame on a single line.
 */
 static void print_oneline_frame(int iFrame, Cksum *pCksum){
-  int iStart;
+  i64 iStart;
   unsigned char *aData;
   unsigned int s0, s1;
-  iStart = 32 + (iFrame-1)*(pagesize+24);
+  iStart = 32 + (i64)(iFrame-1)*(pagesize+24);
   aData = getContent(iStart, 24);
   extendCksum(pCksum, aData, 8, 0);
   extendCksum(pCksum, getContent(iStart+24, pagesize), pagesize, 0);
   s0 = getInt32(aData+16);
   s1 = getInt32(aData+20);
   fprintf(stdout, "Frame %4d: %6d %6d 0x%08x,%08x 0x%08x,%08x %s\n",
-          iFrame, 
+          iFrame,
           getInt32(aData),
           getInt32(aData+4),
           getInt32(aData+8),
@@ -509,10 +511,16 @@ static void decode_btree_page(
       printf(" %03x: %.64s\n", i, &zMap[i]);
     }
     free(zMap);
-  }  
+  }
 }
 
-int main(int argc, char **argv){
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_showwal_main(cnt, arr)
+#endif
+
+int main(int argc, const char **argv){
   struct stat sbuf;
   unsigned char zPgSz[4];
   if( argc<2 ){
@@ -564,7 +572,8 @@ int main(int argc, char **argv){
       }else if( zLeft && zLeft[0]=='.' && zLeft[1]=='.' ){
         iEnd = strtol(&zLeft[2], 0, 0);
       }else if( zLeft && zLeft[0]=='b' ){
-        int ofst, nByte, hdrSize;
+        i64 ofst;
+        int nByte, hdrSize;
         unsigned char *a;
         if( iStart==1 ){
           hdrSize = 100;
@@ -572,10 +581,10 @@ int main(int argc, char **argv){
           nByte = pagesize-100;
         }else{
           hdrSize = 0;
-          ofst = (iStart-1)*pagesize;
+          ofst = (i64)(iStart-1)*pagesize;
           nByte = pagesize;
         }
-        ofst = 32 + hdrSize + (iStart-1)*(pagesize+24) + 24;
+        ofst = 32 + hdrSize + (i64)(iStart-1)*(pagesize+24) + 24;
         a = getContent(ofst, nByte);
         decode_btree_page(a, iStart, hdrSize, zLeft+1);
         free(a);

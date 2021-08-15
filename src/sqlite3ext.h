@@ -280,7 +280,7 @@ struct sqlite3_api_routines {
   /* Version 3.12.0 and later */
   int (*system_errno)(sqlite3*);
   /* Version 3.14.0 and later */
-  int (*trace_v2)(sqlite3*,unsigned,int(*)(unsigned,void*,void*,void*),void*);
+  int (*trace_v2)(sqlite3*,unsigned,void(*)(unsigned int,void*,void*,void*),void*);
   char *(*expanded_sql)(sqlite3_stmt*);
   /* Version 3.18.0 and later */
   void (*set_last_insert_rowid)(sqlite3*,sqlite3_int64);
@@ -337,6 +337,9 @@ struct sqlite3_api_routines {
   sqlite3_file *(*database_file_object)(const char*);
   /* Version 3.34.0 and later */
   int (*txn_state)(sqlite3*,const char*);
+  /* Version 3.36.1 and later */
+  sqlite3_int64 (*changes64)(sqlite3*);
+  sqlite3_int64 (*total_changes64)(sqlite3*);
 };
 
 /*

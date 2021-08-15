@@ -15,7 +15,7 @@
 #include <string.h>
 #include "sqlite3.h"
 
-static void usage(char *argv0){
+static void usage(const char *argv0){
   fprintf(stderr,
     "Usage: %s new [-utf8] [-utf16le] [-utf16be] [-pagesize=N] DATABASE\n"
     "       %s check DATABASE\n"
@@ -72,7 +72,7 @@ static void runSql(sqlite3 *db, const char *zSql){
   }
 }
 
-int main(int argc, char **argv){
+int main(int argc, const char **argv){
   sqlite3 *db;
   int i;
 
@@ -96,7 +96,7 @@ int main(int argc, char **argv){
         usage(argv[0]);
       }
     }
-    runSql(db, 
+    runSql(db,
        "BEGIN;"
        "CREATE TABLE t1(x INTEGER PRIMARY KEY, y);"
        "INSERT INTO t1(y) VALUES('abcdefghijklmnopqrstuvwxyz');"
@@ -122,7 +122,7 @@ int main(int argc, char **argv){
       fprintf(stderr, "Integrity check: %s\n", zReply);
       exit(1);
     }
-    runSql(db, 
+    runSql(db,
       "SELECT count(*) FROM t1 WHERE y<>('abcdefghijklmnopqrstuvwxyz' || x)"
     );
     if( strcmp(zReply, "0")!=0 ){

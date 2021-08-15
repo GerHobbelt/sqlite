@@ -872,7 +872,7 @@ static void exprAnalyzeOrTerm(
         idxNew = whereClauseInsert(pWC, pNew, TERM_VIRTUAL|TERM_DYNAMIC);
         testcase( idxNew==0 );
         exprAnalyze(pSrc, pWC, idxNew);
-        /* pTerm = &pWC->a[idxTerm]; // would be needed if pTerm where used again */
+        /* pTerm = &pWC->a[idxTerm]; // would be needed if pTerm where reused */
         markTermAsChild(pWC, idxNew, idxTerm);
       }else{
         sqlite3ExprListDelete(db, pList);
@@ -996,6 +996,7 @@ static int exprMightBeIndexed(
   assert( op<=TK_GE );
   if( pExpr->op==TK_VECTOR && (op>=TK_GT && ALWAYS(op<=TK_GE)) ){
     pExpr = pExpr->x.pList->a[0].pExpr;
+
   }
 
   if( pExpr->op==TK_COLUMN ){
@@ -1107,6 +1108,7 @@ static void exprAnalyze(
     if( op==TK_IS ) pTerm->wtFlags |= TERM_IS;
     if( pRight 
      && exprMightBeIndexed(pSrc, pTerm->prereqRight, aiCurCol, pRight, op)
+     && !ExprHasProperty(pRight, EP_FixedCol)
     ){
       WhereTerm *pNew;
       Expr *pDup;
@@ -1142,7 +1144,11 @@ static void exprAnalyze(
       pNew->prereqRight = prereqLeft | extraRight;
       pNew->prereqAll = prereqAll;
       pNew->eOperator = (operatorMask(pDup->op) + eExtraOp) & opMask;
-    }else if( op==TK_ISNULL && 0==sqlite3ExprCanBeNull(pLeft) ){
+    }else 
+    if( op==TK_ISNULL
+     && !ExprHasProperty(pExpr,EP_FromJoin)
+     && 0==sqlite3ExprCanBeNull(pLeft)
+    ){
       pExpr->op = TK_TRUEFALSE;
       pExpr->u.zToken = "false";
       ExprSetProperty(pExpr, EP_IsFalse);
@@ -1339,8 +1345,8 @@ static void exprAnalyze(
     for(i=0; i<nLeft; i++){
       int idxNew;
       Expr *pNew;
-      Expr *pLeft = sqlite3ExprForVectorField(pParse, pExpr->pLeft, i);
-      Expr *pRight = sqlite3ExprForVectorField(pParse, pExpr->pRight, i);
+      Expr *pLeft = sqlite3ExprForVectorField(pParse, pExpr->pLeft, i, nLeft);
+      Expr *pRight = sqlite3ExprForVectorField(pParse, pExpr->pRight, i, nLeft);
 
       pNew = sqlite3PExpr(pParse, pExpr->op, pLeft, pRight);
       transferJoinMarkings(pNew, pExpr);

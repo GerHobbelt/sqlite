@@ -84,7 +84,7 @@ int sqlite3IsReadOnly(Parse *pParse, Table *pTab, int viewOk){
     return 1;
   }
 #ifndef SQLITE_OMIT_VIEW
-  if( !viewOk && pTab->pSelect ){
+  if( !viewOk && IsView(pTab) ){
     sqlite3ErrorMsg(pParse,"cannot modify %s because it is a view",pTab->zName);
     return 1;
   }
@@ -188,13 +188,13 @@ Expr *sqlite3LimitWhere(
   }else{
     Index *pPk = sqlite3PrimaryKeyIndex(pTab);
     if( pPk->nKeyCol==1 ){
-      const char *zName = pTab->aCol[pPk->aiColumn[0]].zName;
+      const char *zName = pTab->aCol[pPk->aiColumn[0]].zCnName;
       pLhs = sqlite3Expr(db, TK_ID, zName);
       pEList = sqlite3ExprListAppend(pParse, 0, sqlite3Expr(db, TK_ID, zName));
     }else{
       int i;
       for(i=0; i<pPk->nKeyCol; i++){
-        Expr *p = sqlite3Expr(db, TK_ID, pTab->aCol[pPk->aiColumn[i]].zName);
+        Expr *p = sqlite3Expr(db, TK_ID, pTab->aCol[pPk->aiColumn[i]].zCnName);
         pEList = sqlite3ExprListAppend(pParse, pEList, p);
       }
       pLhs = sqlite3PExpr(pParse, TK_VECTOR, 0, 0);
@@ -301,7 +301,7 @@ void sqlite3DeleteFrom(
   */
 #ifndef SQLITE_OMIT_TRIGGER
   pTrigger = sqlite3TriggersExist(pParse, pTab, TK_DELETE, 0, 0);
-  isView = pTab->pSelect!=0;
+  isView = IsView(pTab);
 #else
 # define pTrigger 0
 # define isView 0
@@ -428,6 +428,9 @@ void sqlite3DeleteFrom(
     for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
       assert( pIdx->pSchema==pTab->pSchema );
       sqlite3VdbeAddOp2(v, OP_Clear, pIdx->tnum, iDb);
+      if( IsPrimaryKeyIndex(pIdx) && !HasRowid(pTab) ){
+        sqlite3VdbeChangeP3(v, -1, memCnt ? memCnt : -1);
+      }
     }
   }else
 #endif /* SQLITE_OMIT_TRUNCATE_OPTIMIZATION */
@@ -548,7 +551,7 @@ void sqlite3DeleteFrom(
     if( eOnePass!=ONEPASS_OFF ){
       assert( nKey==nPk );  /* OP_Found will use an unpacked key */
       if( !IsVirtual(pTab) && aToOpen[iDataCur-iTabCur] ){
-        assert( pPk!=0 || pTab->pSelect!=0 );
+        assert( pPk!=0 || IsView(pTab) );
         sqlite3VdbeAddOp4Int(v, OP_NotFound, iDataCur, addrBypass, iKey, nKey);
         VdbeCoverage(v);
       }
@@ -782,7 +785,7 @@ void sqlite3GenerateRowDelete(
   ** the update-hook is not invoked for rows removed by REPLACE, but the 
   ** pre-update-hook is.
   */ 
-  if( pTab->pSelect==0 ){
+  if( !IsView(pTab) ){
     u8 p5 = 0;
     sqlite3GenerateRowIndexDelete(pParse, pTab, iDataCur, iIdxCur,0,iIdxNoSeek);
     sqlite3VdbeAddOp2(v, OP_Delete, iDataCur, (count?OPFLAG_NCHANGE:0));
@@ -939,13 +942,15 @@ int sqlite3GenerateIndexKey(
       continue;
     }
     sqlite3ExprCodeLoadIndexColumn(pParse, pIdx, iDataCur, j, regBase+j);
-    /* If the column affinity is REAL but the number is an integer, then it
-    ** might be stored in the table as an integer (using a compact
-    ** representation) then converted to REAL by an OP_RealAffinity opcode.
-    ** But we are getting ready to store this value back into an index, where
-    ** it should be converted by to INTEGER again.  So omit the OP_RealAffinity
-    ** opcode if it is present */
-    sqlite3VdbeDeletePriorOpcode(v, OP_RealAffinity);
+    if( pIdx->aiColumn[j]>=0 ){
+      /* If the column affinity is REAL but the number is an integer, then it
+      ** might be stored in the table as an integer (using a compact
+      ** representation) then converted to REAL by an OP_RealAffinity opcode.
+      ** But we are getting ready to store this value back into an index, where
+      ** it should be converted by to INTEGER again.  So omit the
+      ** OP_RealAffinity opcode if it is present */
+      sqlite3VdbeDeletePriorOpcode(v, OP_RealAffinity);
+    }
   }
   if( regOut ){
     sqlite3VdbeAddOp3(v, OP_MakeRecord, regBase, nCol, regOut);

@@ -805,7 +805,7 @@ static void constructAutomaticIndex(
       if( !sentWarning ){
         sqlite3_log(SQLITE_WARNING_AUTOINDEX,
             "automatic index on %s(%s)", pTable->zName,
-            pTable->aCol[iCol].zName);
+            pTable->aCol[iCol].zCnName);
         sentWarning = 1;
       }
       if( (idxCols & cMask)==0 ){
@@ -2513,6 +2513,8 @@ static int whereLoopAddBtreeIndex(
   if( pProbe->bUnordered ) opMask &= ~(WO_GT|WO_GE|WO_LT|WO_LE);
 
   assert( pNew->u.btree.nEq<pProbe->nColumn );
+  assert( pNew->u.btree.nEq<pProbe->nKeyCol
+       || pProbe->idxType!=SQLITE_IDXTYPE_PRIMARYKEY );
 
   saved_nEq = pNew->u.btree.nEq;
   saved_nBtm = pNew->u.btree.nBtm;
@@ -2595,7 +2597,7 @@ static int whereLoopAddBtreeIndex(
         nIn = sqlite3LogEst(pExpr->x.pList->nExpr);
       }
       if( pProbe->hasStat1 && rLogSize>=10 ){
-        LogEst M, logK, safetyMargin;
+        LogEst M, logK, x;
         /* Let:
         **   N = the total number of rows in the table
         **   K = the number of entries on the RHS of the IN operator
@@ -2618,16 +2620,25 @@ static int whereLoopAddBtreeIndex(
         */
         M = pProbe->aiRowLogEst[saved_nEq];
         logK = estLog(nIn);
-        safetyMargin = 10;  /* TUNING: extra weight for indexed IN */
-        if( M + logK + safetyMargin < nIn + rLogSize ){
+        /* TUNING      v-----  10 to bias toward indexed IN */
+        x = M + logK + 10 - (nIn + rLogSize);
+        if( x>=0 ){
           WHERETRACE(0x40,
-            ("Scan preferred over IN operator on column %d of \"%s\" (%d<%d)\n",
-             saved_nEq, pProbe->zName, M+logK+10, nIn+rLogSize));
+            ("IN operator (N=%d M=%d logK=%d nIn=%d rLogSize=%d x=%d) "
+             "prefers indexed lookup\n",
+             saved_nEq, M, logK, nIn, rLogSize, x));
+        }else if( nInMul<2 && OptimizationEnabled(db, SQLITE_SeekScan) ){
+          WHERETRACE(0x40,
+            ("IN operator (N=%d M=%d logK=%d nIn=%d rLogSize=%d x=%d"
+             " nInMul=%d) prefers skip-scan\n",
+             saved_nEq, M, logK, nIn, rLogSize, x, nInMul));
           pNew->wsFlags |= WHERE_IN_SEEKSCAN;
         }else{
           WHERETRACE(0x40,
-            ("IN operator preferred on column %d of \"%s\" (%d>=%d)\n",
-             saved_nEq, pProbe->zName, M+logK+10, nIn+rLogSize));
+            ("IN operator (N=%d M=%d logK=%d nIn=%d rLogSize=%d x=%d"
+             " nInMul=%d) prefers normal scan\n",
+             saved_nEq, M, logK, nIn, rLogSize, x, nInMul));
+          continue;
         }
       }
       pNew->wsFlags |= WHERE_COLUMN_IN;
@@ -2708,7 +2719,7 @@ static int whereLoopAddBtreeIndex(
         tRowcnt nOut = 0;
         if( nInMul==0 
          && pProbe->nSample 
-         && pNew->u.btree.nEq<=pProbe->nSampleCol
+         && ALWAYS(pNew->u.btree.nEq<=pProbe->nSampleCol)
          && ((eOp & WO_IN)==0 || !ExprHasProperty(pTerm->pExpr, EP_xIsSelect))
          && OptimizationEnabled(db, SQLITE_Stat4)
         ){
@@ -2790,6 +2801,8 @@ static int whereLoopAddBtreeIndex(
 
     if( (pNew->wsFlags & WHERE_TOP_LIMIT)==0
      && pNew->u.btree.nEq<pProbe->nColumn
+     && (pNew->u.btree.nEq<pProbe->nKeyCol ||
+           pProbe->idxType!=SQLITE_IDXTYPE_PRIMARYKEY)
     ){
       whereLoopAddBtreeIndex(pBuilder, pSrc, pProbe, nInMul+nIn);
     }
@@ -2910,7 +2923,8 @@ static int whereUsablePartialIndex(
     pExpr = pTerm->pExpr;
     if( (!ExprHasProperty(pExpr, EP_FromJoin) || pExpr->iRightJoinTable==iTab)
      && (isLeft==0 || ExprHasProperty(pExpr, EP_FromJoin))
-     && sqlite3ExprImpliesExpr(pParse, pExpr, pWhere, iTab) 
+     && sqlite3ExprImpliesExpr(pParse, pExpr, pWhere, iTab)
+     && (pTerm->wtFlags & TERM_VNULL)==0
     ){
       return 1;
     }
@@ -2970,7 +2984,6 @@ static int whereLoopAddBtree(
   int iSortIdx = 1;           /* Index number */
   int b;                      /* A boolean value */
   LogEst rSize;               /* number of rows in the table */
-  LogEst rLogSize;            /* Logarithm of the number of rows in the table */
   WhereClause *pWC;           /* The parsed WHERE clause */
   Table *pTab;                /* Table being queried */
   
@@ -3013,7 +3026,6 @@ static int whereLoopAddBtree(
     pProbe = &sPk;
   }
   rSize = pTab->nRowLogEst;
-  rLogSize = estLog(rSize);
 
 #ifndef SQLITE_OMIT_AUTOMATIC_INDEX
   /* Automatic indexes */
@@ -3027,8 +3039,10 @@ static int whereLoopAddBtree(
    && !pSrc->fg.isRecursive  /* Not a recursive common table expression. */
   ){
     /* Generate auto-index WhereLoops */
+    LogEst rLogSize;         /* Logarithm of the number of rows in the table */
     WhereTerm *pTerm;
     WhereTerm *pWCEnd = pWC->a + pWC->nTerm;
+    rLogSize = estLog(rSize);
     for(pTerm=pWC->a; rc==SQLITE_OK && pTerm<pWCEnd; pTerm++){
       if( pTerm->prereqRight & pNew->maskSelf ) continue;
       if( termCanDriveIndex(pTerm, pSrc, 0) ){
@@ -3046,7 +3060,7 @@ static int whereLoopAddBtree(
         ** those objects, since there is no opportunity to add schema
         ** indexes on subqueries and views. */
         pNew->rSetup = rLogSize + rSize;
-        if( pTab->pSelect==0 && (pTab->tabFlags & TF_Ephemeral)==0 ){
+        if( !IsView(pTab) && (pTab->tabFlags & TF_Ephemeral)==0 ){
           pNew->rSetup += 28;
         }else{
           pNew->rSetup -= 10;
@@ -5197,7 +5211,7 @@ WhereInfo *sqlite3WhereBegin(
     pTab = pTabItem->pTab;
     iDb = sqlite3SchemaToIndex(db, pTab->pSchema);
     pLoop = pLevel->pWLoop;
-    if( (pTab->tabFlags & TF_Ephemeral)!=0 || pTab->pSelect ){
+    if( (pTab->tabFlags & TF_Ephemeral)!=0 || IsView(pTab) ){
       /* Do nothing */
     }else
 #ifndef SQLITE_OMIT_VIRTUALTABLE
@@ -5514,6 +5528,12 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
       if( (ws & WHERE_INDEXED) 
        || ((ws & WHERE_MULTI_OR) && pLevel->u.pCovidx) 
       ){
+        if( ws & WHERE_MULTI_OR ){
+          Index *pIx = pLevel->u.pCovidx;
+          int iDb = sqlite3SchemaToIndex(db, pIx->pSchema);
+          sqlite3VdbeAddOp3(v, OP_ReopenIdx, pLevel->iIdxCur, pIx->tnum, iDb);
+          sqlite3VdbeSetP4KeyInfo(pParse, pIx);
+        }
         sqlite3VdbeAddOp1(v, OP_NullRow, pLevel->iIdxCur);
       }
       if( pLevel->op==OP_Return ){
@@ -5560,7 +5580,7 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
     ** created for the ONEPASS optimization.
     */
     if( (pTab->tabFlags & TF_Ephemeral)==0
-     && pTab->pSelect==0
+     && !IsView(pTab)
      && (pWInfo->wctrlFlags & WHERE_OR_SUBCLAUSE)==0
     ){
       int ws = pLoop->wsFlags;

@@ -29,7 +29,7 @@ static const char *explainIndexColumnName(Index *pIdx, int i){
   i = pIdx->aiColumn[i];
   if( i==XN_EXPR ) return "<expr>";
   if( i==XN_ROWID ) return "rowid";
-  return pIdx->pTable->aCol[i].zName;
+  return pIdx->pTable->aCol[i].zCnName;
 }
 
 /*
@@ -756,7 +756,7 @@ static int codeAllEqualityTerms(
         sqlite3ReleaseTempReg(pParse, regBase);
         regBase = r1;
       }else{
-        sqlite3VdbeAddOp2(v, OP_SCopy, r1, regBase+j);
+        sqlite3VdbeAddOp2(v, OP_Copy, r1, regBase+j);
       }
     }
     if( pTerm->eOperator & WO_IN ){
@@ -773,7 +773,7 @@ static int codeAllEqualityTerms(
         sqlite3VdbeAddOp2(v, OP_IsNull, regBase+j, pLevel->addrBrk);
         VdbeCoverage(v);
       }
-      if( pParse->db->mallocFailed==0 ){
+      if( pParse->db->mallocFailed==0 && pParse->nErr==0 ){
         if( sqlite3CompareAffinity(pRight, zAff[j])==SQLITE_AFF_BLOB ){
           zAff[j] = SQLITE_AFF_BLOB;
         }
@@ -1122,7 +1122,7 @@ static void codeExprOrVector(Parse *pParse, Expr *p, int iReg, int nReg){
       }
     }
   }else{
-    assert( nReg==1 );
+    assert( nReg==1 || pParse->nErr );
     sqlite3ExprCode(pParse, p, iReg);
   }
 }
@@ -1241,8 +1241,9 @@ static void whereIndexExprTrans(
 #ifndef SQLITE_OMIT_GENERATED_COLUMNS
     }else if( iRef>=0
        && (pTab->aCol[iRef].colFlags & COLFLAG_VIRTUAL)!=0
-       && (pTab->aCol[iRef].zColl==0
-           || sqlite3StrICmp(pTab->aCol[iRef].zColl, sqlite3StrBINARY)==0)
+       && ((pTab->aCol[iRef].colFlags & COLFLAG_HASCOLL)==0
+           || sqlite3StrICmp(sqlite3ColumnColl(&pTab->aCol[iRef]),
+                                               sqlite3StrBINARY)==0)
     ){
       /* Check to see if there are direct references to generated columns
       ** that are contained in the index.  Pulling the generated column
@@ -1749,9 +1750,7 @@ Bitmask sqlite3WhereCodeOneLoopStart(
     ** a forward order scan on a descending index, interchange the 
     ** start and end terms (pRangeStart and pRangeEnd).
     */
-    if( (nEq<pIdx->nKeyCol && bRev==(pIdx->aSortOrder[nEq]==SQLITE_SO_ASC))
-     || (bRev && pIdx->nKeyCol==nEq)
-    ){
+    if( (nEq<pIdx->nColumn && bRev==(pIdx->aSortOrder[nEq]==SQLITE_SO_ASC)) ){
       SWAP(WhereTerm *, pRangeEnd, pRangeStart);
       SWAP(u8, bSeekPastNull, bStopAtNull);
       SWAP(u8, nBtm, nTop);
@@ -2172,7 +2171,7 @@ Bitmask sqlite3WhereCodeOneLoopStart(
         /* The extra 0x10000 bit on the opcode is masked off and does not
         ** become part of the new Expr.op.  However, it does make the
         ** op==TK_AND comparison inside of sqlite3PExpr() false, and this
-        ** prevents sqlite3PExpr() from implementing AND short-circuit 
+        ** prevents sqlite3PExpr() from applying the AND short-circuit 
         ** optimization, which we do not want here. */
         pAndExpr = sqlite3PExpr(pParse, TK_AND|0x10000, 0, pAndExpr);
       }
@@ -2188,10 +2187,16 @@ Bitmask sqlite3WhereCodeOneLoopStart(
       if( pOrTerm->leftCursor==iCur || (pOrTerm->eOperator & WO_AND)!=0 ){
         WhereInfo *pSubWInfo;           /* Info for single OR-term scan */
         Expr *pOrExpr = pOrTerm->pExpr; /* Current OR clause term */
+        Expr *pDelete;                  /* Local copy of OR clause term */
         int jmp1 = 0;                   /* Address of jump operation */
         testcase( (pTabItem[0].fg.jointype & JT_LEFT)!=0
                && !ExprHasProperty(pOrExpr, EP_FromJoin)
         ); /* See TH3 vtab25.400 and ticket 614b25314c766238 */
+        pDelete = pOrExpr = sqlite3ExprDup(db, pOrExpr, 0);
+        if( db->mallocFailed ){
+          sqlite3ExprDelete(db, pDelete);
+          continue;
+        }
         if( pAndExpr ){
           pAndExpr->pLeft = pOrExpr;
           pOrExpr = pAndExpr;
@@ -2306,6 +2311,7 @@ Bitmask sqlite3WhereCodeOneLoopStart(
           sqlite3WhereEnd(pSubWInfo);
           ExplainQueryPlanPop(pParse);
         }
+        sqlite3ExprDelete(db, pDelete);
       }
     }
     ExplainQueryPlanPop(pParse);

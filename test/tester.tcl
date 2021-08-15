@@ -609,6 +609,7 @@ proc reset_db {} {
   forcedelete test.db
   forcedelete test.db-journal
   forcedelete test.db-wal
+  forcedelete test.db-wal2
   sqlite3 db ./test.db
   set ::DB [sqlite3_connection_pointer db]
   if {[info exists ::SETUP_SQL]} {
@@ -1904,21 +1905,23 @@ proc do_ioerr_test {testname args} {
       set ::sqlite_io_error_hardhit 0
       set r [catch $::ioerrorbody msg]
       set ::errseen $r
-      set rc [sqlite3_errcode $::DB]
-      if {$::ioerropts(-erc)} {
-        # If we are in extended result code mode, make sure all of the
-        # IOERRs we get back really do have their extended code values.
-        # If an extended result code is returned, the sqlite3_errcode
-        # TCLcommand will return a string of the form:  SQLITE_IOERR+nnnn
-        # where nnnn is a number
-        if {[regexp {^SQLITE_IOERR} $rc] && ![regexp {IOERR\+\d} $rc]} {
-          return $rc
-        }
-      } else {
-        # If we are not in extended result code mode, make sure no
-        # extended error codes are returned.
-        if {[regexp {\+\d} $rc]} {
-          return $rc
+      if {[info commands db]!=""} {
+        set rc [sqlite3_errcode db]
+        if {$::ioerropts(-erc)} {
+          # If we are in extended result code mode, make sure all of the
+          # IOERRs we get back really do have their extended code values.
+          # If an extended result code is returned, the sqlite3_errcode
+          # TCLcommand will return a string of the form:  SQLITE_IOERR+nnnn
+          # where nnnn is a number
+          if {[regexp {^SQLITE_IOERR} $rc] && ![regexp {IOERR\+\d} $rc]} {
+            return $rc
+          }
+        } else {
+          # If we are not in extended result code mode, make sure no
+          # extended error codes are returned.
+          if {[regexp {\+\d} $rc]} {
+            return $rc
+          }
         }
       }
       # The test repeats as long as $::go is non-zero.  $::go starts out
@@ -2213,17 +2216,32 @@ proc drop_all_indexes {{db db}} {
 #     Returns true if this test should be run in WAL mode. False otherwise.
 #
 proc wal_is_wal_mode {} {
-  expr {[permutation] eq "wal"}
+  if {[permutation] eq "wal"} { return 1 }
+  if {[permutation] eq "wal2"} { return 2 }
+  return 0
 }
 proc wal_set_journal_mode {{db db}} {
-  if { [wal_is_wal_mode] } {
-    $db eval "PRAGMA journal_mode = WAL"
+  switch -- [wal_is_wal_mode] {
+    0 {
+    }
+
+    1 {
+      $db eval "PRAGMA journal_mode = WAL"
+    }
+
+    2 {
+      $db eval "PRAGMA journal_mode = WAL2"
+    }
   }
 }
 proc wal_check_journal_mode {testname {db db}} {
   if { [wal_is_wal_mode] } {
     $db eval { SELECT * FROM sqlite_master }
-    do_test $testname [list $db eval "PRAGMA main.journal_mode"] {wal}
+    set expected "wal"
+    if {[wal_is_wal_mode]==2} {
+      set expected "wal2"
+    }
+    do_test $testname [list $db eval "PRAGMA main.journal_mode"] $expected
   }
 }
 

@@ -165,6 +165,7 @@ LTINSTALL = $(LIBTOOL) --mode=install $(INSTALL)
 ###############################################################################
 
 USE_AMALGAMATION = @USE_AMALGAMATION@
+AMALGAMATION_LINE_MACROS = @AMALGAMATION_LINE_MACROS@
 
 # Object files for the SQLite library (non-amalgamation).
 #
@@ -440,6 +441,7 @@ TESTSRC += \
   $(TOP)/ext/expert/sqlite3expert.c \
   $(TOP)/ext/expert/test_expert.c \
   $(TOP)/ext/misc/amatch.c \
+  $(TOP)/ext/misc/bgckpt.c \
   $(TOP)/ext/misc/appendvfs.c \
   $(TOP)/ext/misc/carray.c \
   $(TOP)/ext/misc/cksumvfs.c \
@@ -756,7 +758,7 @@ mptest:	mptester$(TEXE)
 	touch .target_source
 
 sqlite3.c:	.target_source $(TOP)/tool/mksqlite3c.tcl
-	$(TCLSH_CMD) $(TOP)/tool/mksqlite3c.tcl
+	$(TCLSH_CMD) $(TOP)/tool/mksqlite3c.tcl $(AMALGAMATION_LINE_MACROS)
 	cp tsrc/sqlite3ext.h .
 	cp $(TOP)/ext/session/sqlite3session.h .
 
@@ -1086,6 +1088,7 @@ SHELL_SRC = \
         $(TOP)/ext/misc/decimal.c \
 	$(TOP)/ext/misc/fileio.c \
         $(TOP)/ext/misc/ieee754.c \
+        $(TOP)/ext/misc/regexp.c \
         $(TOP)/ext/misc/series.c \
 	$(TOP)/ext/misc/shathree.c \
 	$(TOP)/ext/misc/sqlar.c \
@@ -1427,8 +1430,27 @@ threadtest3$(TEXE): sqlite3.lo $(THREADTEST3_SRC)
 threadtest: threadtest3$(TEXE)
 	./threadtest3$(TEXE)
 
+threadtest5: sqlite3.c $(TOP)/test/threadtest5.c
+	$(LTLINK) $(TOP)/test/threadtest5.c sqlite3.c -o $@ $(TLIBS)
+
 releasetest:
 	$(TCLSH_CMD) $(TOP)/test/releasetest.tcl
+
+AMALGAMATIONS_SRC = \
+			sqlite3ext.h           \
+			sqlite3.c              \
+			sqlite3.h              \
+			shell.c                \
+			sqlite3rc.h            \
+			keywordhash.h          \
+			fts5parse.h            \
+			fts5.c                 \
+			sqlite3_analyzer.c     \
+			sqltclsh.c             \
+			sqlite3_checker.c      \
+			sqlite3-all.c
+
+amalgamation:	$(AMALGAMATIONS_SRC)
 
 # Standard install and cleanup targets
 #
@@ -1466,9 +1488,13 @@ clean:
 	rm -f LogEst$(TEXE) fts3view$(TEXE) rollback-test$(TEXE) showdb$(TEXE)
 	rm -f showjournal$(TEXE) showstat4$(TEXE) showwal$(TEXE) speedtest1$(TEXE)
 	rm -f wordcount$(TEXE) changeset$(TEXE)
+	rm -f mksourceid$(BEXE)
 	rm -f sqlite3.dll sqlite3.lib sqlite3.exp sqlite3.def
 	rm -f sqlite3.c
+	rm -f sqlite3-*.c
+	rm -f sqlite3_checker.c sqltclsh.c
 	rm -f sqlite3rc.h
+	rm -f sqlite3session.h
 	rm -f shell.c sqlite3ext.h
 	rm -f sqlite3_analyzer$(TEXE) sqlite3_analyzer.c
 	rm -f sqlite-*-output.vsix
@@ -1480,6 +1506,7 @@ clean:
 	rm -f sqldiff sqldiff.exe
 	rm -f dbhash dbhash.exe
 	rm -f fts5.* fts5parse.*
+	rm -f threadtest5
 
 distclean:	clean
 	rm -f config.h config.log config.status libtool Makefile sqlite3.pc

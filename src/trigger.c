@@ -219,12 +219,12 @@ void sqlite3BeginTrigger(
   /* INSTEAD of triggers are only for views and views only support INSTEAD
   ** of triggers.
   */
-  if( pTab->pSelect && tr_tm!=TK_INSTEAD ){
+  if( IsView(pTab) && tr_tm!=TK_INSTEAD ){
     sqlite3ErrorMsg(pParse, "cannot create %s trigger on view: %S", 
         (tr_tm == TK_BEFORE)?"BEFORE":"AFTER", pTableName->a);
     goto trigger_orphan_error;
   }
-  if( !pTab->pSelect && tr_tm==TK_INSTEAD ){
+  if( !IsView(pTab) && tr_tm==TK_INSTEAD ){
     sqlite3ErrorMsg(pParse, "cannot create INSTEAD OF"
         " trigger on table: %S", pTableName->a);
     goto trigger_orphan_error;
@@ -877,11 +877,11 @@ static ExprList *sqlite3ExpandReturning(
       for(jj=0; jj<pTab->nCol; jj++){
         Expr *pNewExpr;
         if( IsHiddenColumn(pTab->aCol+jj) ) continue;
-        pNewExpr = sqlite3Expr(db, TK_ID, pTab->aCol[jj].zName);
+        pNewExpr = sqlite3Expr(db, TK_ID, pTab->aCol[jj].zCnName);
         pNew = sqlite3ExprListAppend(pParse, pNew, pNewExpr);
         if( !db->mallocFailed ){
           struct ExprList_item *pItem = &pNew->a[pNew->nExpr-1];
-          pItem->zEName = sqlite3DbStrDup(db, pTab->aCol[jj].zName);
+          pItem->zEName = sqlite3DbStrDup(db, pTab->aCol[jj].zCnName);
           pItem->eEName = ENAME_NAME;
         }
       }
@@ -893,15 +893,6 @@ static ExprList *sqlite3ExpandReturning(
         pItem->zEName = sqlite3DbStrDup(db, pList->a[i].zEName);
         pItem->eEName = pList->a[i].eEName;
       }
-    }
-  }
-  if( !db->mallocFailed ){
-    Vdbe *v = pParse->pVdbe;
-    assert( v!=0 );
-    sqlite3VdbeSetNumCols(v, pNew->nExpr);
-    for(i=0; i<pNew->nExpr; i++){
-      sqlite3VdbeSetColName(v, i, COLNAME_NAME, pNew->a[i].zEName,
-                            SQLITE_TRANSIENT);
     }
   }
   return pNew;
@@ -919,13 +910,28 @@ static void codeReturningTrigger(
   int regIn            /* The first in an array of registers */
 ){
   Vdbe *v = pParse->pVdbe;
+  sqlite3 *db = pParse->db;
   ExprList *pNew;
   Returning *pReturning;
+  Select sSelect;
+  SrcList sFrom;
 
   assert( v!=0 );
   assert( pParse->bReturning );
   pReturning = pParse->u1.pReturning;
   assert( pTrigger == &(pReturning->retTrig) );
+  memset(&sSelect, 0, sizeof(sSelect));
+  memset(&sFrom, 0, sizeof(sFrom));
+  sSelect.pEList = sqlite3ExprListDup(db, pReturning->pReturnEL, 0);
+  sSelect.pSrc = &sFrom;
+  sFrom.nSrc = 1;
+  sFrom.a[0].pTab = pTab;
+  sFrom.a[0].iCursor = -1;
+  sqlite3SelectPrep(pParse, &sSelect, 0);
+  if( db->mallocFailed==0 && pParse->nErr==0 ){
+    sqlite3GenerateColumnNames(pParse, &sSelect);
+  }
+  sqlite3ExprListDelete(db, sSelect.pEList);
   pNew = sqlite3ExpandReturning(pParse, pReturning->pReturnEL, pTab);
   if( pNew ){
     NameContext sNC;
@@ -946,13 +952,14 @@ static void codeReturningTrigger(
       pParse->nMem += nCol+2;
       pReturning->iRetReg = reg;
       for(i=0; i<nCol; i++){
-        sqlite3ExprCodeFactorable(pParse, pNew->a[i].pExpr, reg+i);
+        Expr *pCol = pNew->a[i].pExpr;
+        sqlite3ExprCodeFactorable(pParse, pCol, reg+i);
       }
       sqlite3VdbeAddOp3(v, OP_MakeRecord, reg, i, reg+i);
       sqlite3VdbeAddOp2(v, OP_NewRowid, pReturning->iRetCur, reg+i+1);
       sqlite3VdbeAddOp3(v, OP_Insert, pReturning->iRetCur, reg+i, reg+i+1);
     }
-    sqlite3ExprListDelete(pParse->db, pNew);
+    sqlite3ExprListDelete(db, pNew);
     pParse->eTriggerOp = 0;
     pParse->pTriggerTab = 0;
   }

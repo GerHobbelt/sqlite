@@ -142,6 +142,8 @@ void sqlite3TreeViewSrcList(TreeView *pView, const SrcList *pSrc){
     }
     if( pItem->fg.jointype & JT_LEFT ){
       sqlite3_str_appendf(&x, " LEFT-JOIN");
+    }else if( pItem->fg.jointype & JT_CROSS ){
+      sqlite3_str_appendf(&x, " CROSS-JOIN");
     }
     if( pItem->fg.fromDDL ){
       sqlite3_str_appendf(&x, " DDL");
@@ -472,8 +474,8 @@ void sqlite3TreeViewExpr(TreeView *pView, const Expr *pExpr, u8 moreToFollow){
       break;
     }
     case TK_TRUEFALSE: {
-      sqlite3TreeViewLine(pView,
-         sqlite3ExprTruthValue(pExpr) ? "TRUE" : "FALSE");
+      sqlite3TreeViewLine(pView,"%s%s",
+         sqlite3ExprTruthValue(pExpr) ? "TRUE" : "FALSE", zFlgs);
       break;
     }
 #ifndef SQLITE_OMIT_BLOB_LITERAL
@@ -697,13 +699,32 @@ void sqlite3TreeViewExpr(TreeView *pView, const Expr *pExpr, u8 moreToFollow){
       break;
     }
     case TK_SELECT_COLUMN: {
-      sqlite3TreeViewLine(pView, "SELECT-COLUMN %d", pExpr->iColumn);
+      sqlite3TreeViewLine(pView, "SELECT-COLUMN %d of [0..%d]%s",
+              pExpr->iColumn, pExpr->iTable-1,
+              pExpr->pRight==pExpr->pLeft ? " (SELECT-owner)" : "");
       sqlite3TreeViewSelect(pView, pExpr->pLeft->x.pSelect, 0);
       break;
     }
     case TK_IF_NULL_ROW: {
       sqlite3TreeViewLine(pView, "IF-NULL-ROW %d", pExpr->iTable);
       sqlite3TreeViewExpr(pView, pExpr->pLeft, 0);
+      break;
+    }
+    case TK_ERROR: {
+      Expr tmp;
+      sqlite3TreeViewLine(pView, "ERROR");
+      tmp = *pExpr;
+      tmp.op = pExpr->op2;
+      sqlite3TreeViewExpr(pView, &tmp, 0);
+      break;
+    }
+    case TK_ROW: {
+      if( pExpr->iColumn<=0 ){
+        sqlite3TreeViewLine(pView, "First FROM table rowid");
+      }else{
+        sqlite3TreeViewLine(pView, "First FROM table column %d",
+            pExpr->iColumn-1);
+      }
       break;
     }
     default: {
