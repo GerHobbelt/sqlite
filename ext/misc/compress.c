@@ -15,7 +15,7 @@
 */
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1
-#include <zlib.h>
+#include <zlib-ng.h>
 
 /*
 ** Implementation of the "compress(X)" SQL function.  The input X is
@@ -66,7 +66,7 @@ static void compressFunc(
   for(i=0; i<4 && x[i]==0; i++){}
   for(j=0; i<=4; i++, j++) pOut[j] = x[i];
   pOut[j-1] |= 0x80;
-  rc = compress(&pOut[j], &nOut, pIn, nIn);
+  rc = zng_compress(&pOut[j], &nOut, pIn, nIn);
   if( rc==Z_OK ){
     sqlite3_result_blob(context, pOut, nOut+j, sqlite3_free);
   }else{
@@ -99,7 +99,7 @@ static void uncompressFunc(
     if( (pIn[i]&0x80)!=0 ){ i++; break; }
   }
   pOut = sqlite3_malloc( nOut+1 );
-  rc = uncompress(pOut, &nOut, &pIn[i], nIn-i);
+  rc = zng_uncompress(pOut, &nOut, &pIn[i], nIn-i);
   if( rc==Z_OK ){
     sqlite3_result_blob(context, pOut, nOut, sqlite3_free);
   }else{

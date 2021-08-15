@@ -1127,7 +1127,7 @@ static struct win_syscall {
   { "InterlockedCompareExchange", (SYSCALL)InterlockedCompareExchange, 0 },
 
 #define osInterlockedCompareExchange ((LONG(WINAPI*)(LONG \
-        SQLITE_WIN32_VOLATILE*,LONG,LONG))aSyscall[76].pCurrent)
+        SQLITE_WIN32_VOLATILE*, LONG,LONG))aSyscall[76].pCurrent)
 #endif /* defined(InterlockedCompareExchange) */
 
 #if !SQLITE_OS_WINCE && !SQLITE_OS_WINRT && SQLITE_WIN32_USE_UUID

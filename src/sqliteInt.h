@@ -1556,8 +1556,8 @@ struct sqlite3 {
   int nExtension;               /* Number of loaded extensions */
   void **aExtension;            /* Array of shared library handles */
   union {
-    void (*xLegacy)(void*,const char*);     /* Legacy trace function */
-    int (*xV2)(u32,void*,void*,void*);      /* V2 Trace function */
+    void (*xLegacy)(void* pArg,const char* info);                              /* Legacy trace function */
+    void (*xV2)(unsigned int mask,void* pArg,void* vdbe_or_db,void* info);     /* V2 Trace function */
   } trace;
   void *pTraceArg;                          /* Argument to the trace function */
 #ifndef SQLITE_OMIT_DEPRECATED
