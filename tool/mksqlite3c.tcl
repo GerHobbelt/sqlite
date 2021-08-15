@@ -110,6 +110,17 @@ if {$addstatic} {
 # define SQLITE_PRIVATE static
 #endif}
 }
+puts $out \
+{
+/*
+** Include the configuration header output by 'configure' if we're using the
+** autoconf-based build
+*/
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H) && defined(BUILD_MONOLITHIC)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+}
 
 # Examine the parse.c file.  If it contains lines of the form:
 #
@@ -166,6 +177,7 @@ foreach hdr {
   set available_hdr($hdr) 1
 }
 set available_hdr(sqliteInt.h) 0
+set available_hdr(os_common.h) 0
 set available_hdr(sqlite3session.h) 0
 
 # These headers should be copied into the amalgamation without modifying any
@@ -223,9 +235,7 @@ proc copy_file {filename} {
     if {[regexp {^\s*#\s*include\s+["<]([^">]+)[">]} $line all hdr]} {
       if {[info exists available_hdr($hdr)]} {
         if {$available_hdr($hdr)} {
-          if {$hdr!="os_common.h" && $hdr!="hwtime.h"} {
-            set available_hdr($hdr) 0
-          }
+          set available_hdr($hdr) 0
           section_comment "Include $hdr in the middle of $tail"
           copy_file $srcdir/$hdr
           section_comment "Continuing where we left off in $tail"
@@ -327,6 +337,7 @@ proc copy_file {filename} {
 #
 foreach file {
    sqliteInt.h
+   os_common.h
    ctime.c
 
    global.c

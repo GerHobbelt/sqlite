@@ -146,7 +146,7 @@ static VFile *findVFile(const char *zName){
   int i;
   if( zName==0 ) return 0;
   for(i=0; i<MX_FILE; i++){
-    if( g.aFile[i].zFilename==0 ) continue;   
+    if( g.aFile[i].zFilename==0 ) continue;
     if( strcmp(g.aFile[i].zFilename, zName)==0 ) return &g.aFile[i];
   }
   return 0;
@@ -575,7 +575,7 @@ static int progressHandler(void *pVdbeLimitFlag){
 ** Run multiple commands of SQL.  Similar to sqlite3_exec(), but does not
 ** stop if an error is encountered.
 */
-static void runSql(sqlite3 *db, const char *zSql, unsigned  runFlags){
+static void runSql(sqlite3 *db, const char *zSql, unsigned runFlags){
   const char *zMore;
   const char *zEnd = &zSql[strlen(zSql)];
   sqlite3_stmt *pStmt;
@@ -638,16 +638,16 @@ static void runSql(sqlite3 *db, const char *zSql, unsigned  runFlags){
             }
           }
         }
-      }         
+      }
       sqlite3_finalize(pStmt);
     }
   }
 }
 
-int main(int argc, char **argv){
+int main(int argc, const char **argv){
   int i;                 /* Loop counter */
   int nDb = 0;           /* Number of databases to fuzz */
-  char **azDb = 0;       /* Names of the databases (limit: 20) */
+  const char **azDb = 0; /* Names of the databases (limit: 20) */
   int verboseFlag = 0;   /* True for extra output */
   int noLookaside = 0;   /* Disable lookaside if true */
   int vdbeLimitFlag = 0; /* Stop after 100,000 VDBE ops */
@@ -660,9 +660,9 @@ int main(int argc, char **argv){
   unsigned runFlags = 0; /* Flags passed to runSql */
 
   for(i=1; i<argc; i++){
-    char *z = argv[i];
+    const char *z = argv[i];
     if( z[0]!='-' ){
-      azDb = realloc(azDb, sizeof(azDb[0])*(nDb+1));
+      azDb = realloc((void *)azDb, sizeof(azDb[0])*(nDb+1));
       if( azDb==0 ) fatalError("out of memory");
       azDb[nDb++] = z;
       continue;
@@ -743,7 +743,7 @@ int main(int argc, char **argv){
     reformatVfs();
     StrFree(&sql);
     if( sqlite3_memory_used()>0 ){
-      free(azDb);
+      free((void *)azDb);
       reformatVfs();
       fatalError("memory leak of %lld bytes", sqlite3_memory_used());
     }

@@ -333,7 +333,9 @@ static int lookupName(
         }
         hCol = sqlite3StrIHash(zCol);
         for(j=0, pCol=pTab->aCol; j<pTab->nCol; j++, pCol++){
-          if( pCol->hName==hCol && sqlite3StrICmp(pCol->zName, zCol)==0 ){
+          if( pCol->hName==hCol
+           && sqlite3StrICmp(pCol->zCnName, zCol)==0
+          ){
             /* If there has been exactly one prior match and this match
             ** is for the right-hand table of a NATURAL JOIN or is in a 
             ** USING clause, then skip this match.
@@ -410,7 +412,9 @@ static int lookupName(
         pSchema = pTab->pSchema;
         cntTab++;
         for(iCol=0, pCol=pTab->aCol; iCol<pTab->nCol; iCol++, pCol++){
-          if( pCol->hName==hCol && sqlite3StrICmp(pCol->zName, zCol)==0 ){
+          if( pCol->hName==hCol
+           && sqlite3StrICmp(pCol->zCnName, zCol)==0
+          ){
             if( iCol==pTab->iPKey ){
               iCol = -1;
             }
@@ -818,6 +822,7 @@ static int resolveExprStep(Walker *pWalker, Expr *pExpr){
       }
       sqlite3WalkExpr(pWalker, pExpr->pLeft);
       if( 0==sqlite3ExprCanBeNull(pExpr->pLeft) && !IN_RENAME_OBJECT ){
+        testcase( ExprHasProperty(pExpr, EP_FromJoin) );
         if( pExpr->op==TK_NOTNULL ){
           pExpr->u.zToken = "true";
           ExprSetProperty(pExpr, EP_IsTrue);

@@ -149,7 +149,7 @@ static int optfuzz_exec(
       "INSERT INTO \"%w\"(x) VALUES('### %q ###')",
       zOutTab, sqlite3_sql(pStmt)
     );
-    run_sql(dbOut, 
+    run_sql(dbOut,
       "INSERT INTO \"%w\"(x) SELECT group_concat(x,char(10))"
       "  FROM (SELECT x FROM staging ORDER BY x)",
       zOutTab
@@ -200,9 +200,9 @@ static char *readFile(const char *zName, int *pnByte){
   return pBuf;
 }
 
-int main(int argc, char **argv){
+int main(int argc, const char **argv){
   int nIn = 0;               /* Number of input files */
-  char **azIn = 0;           /* Names of input files */
+  const char **azIn = 0;     /* Names of input files */
   sqlite3 *dbOut = 0;        /* Database to hold results */
   sqlite3 *dbRun = 0;        /* Database used for tests */
   int bTrace = 0;            /* Show query results */
@@ -233,7 +233,7 @@ int main(int argc, char **argv){
     }
     else {
       nIn++;
-      azIn = realloc(azIn, sizeof(azIn[0])*nIn);
+      azIn = realloc((void *)azIn, sizeof(azIn[0])*nIn);
       if( azIn==0 ){
         printf("out of memory\n");
         exit(1);
@@ -298,8 +298,8 @@ int main(int argc, char **argv){
     sqlite3_free(zSql);
   }
   sqlite3_close(dbRun);
-  sqlite3_close(dbOut);    
-  free(azIn);
+  sqlite3_close(dbOut);
+  free((void *)azIn);
   if( sqlite3_memory_used() ){
     printf("Memory leak of %lld bytes\n", sqlite3_memory_used());
     exit(1);
