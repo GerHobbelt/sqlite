@@ -2607,11 +2607,18 @@ void sqlite3EndTable(
     for(ii=0; ii<p->nCol; ii++){
       Column *pCol = &p->aCol[ii];
       if( pCol->eCType==COLTYPE_CUSTOM ){
-        sqlite3ErrorMsg(pParse,
-          "unknown datatype for %s.%s: \"%s\"",
-          p->zName, pCol->zCnName, sqlite3ColumnType(pCol, "")
-        );
+        if( pCol->colFlags & COLFLAG_HASTYPE ){
+          sqlite3ErrorMsg(pParse,
+            "unknown datatype for %s.%s: \"%s\"",
+            p->zName, pCol->zCnName, sqlite3ColumnType(pCol, "")
+          );
+        }else{
+          sqlite3ErrorMsg(pParse, "missing datatype for %s.%s",
+                          p->zName, pCol->zCnName);
+        }
         return;
+      }else if( pCol->eCType==COLTYPE_ANY ){
+        pCol->affinity = SQLITE_AFF_BLOB;
       }
       if( (pCol->colFlags & COLFLAG_PRIMKEY)!=0
        && p->iPKey!=ii
