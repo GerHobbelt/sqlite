@@ -41,7 +41,7 @@ volatile int all_stop = 0;
 ** global variable to stop all other activity.  Print the error message
 ** or print OK if the string "ok" is seen.
 */
-int check_callback(void *pid, int argc, char **argv, char **notUsed2){
+int check_callback(void *pid, int argc, const char** argv, char **notUsed2){
   int id = (int)pid;
   if( strcmp(argv[0],"ok") ){
     all_stop = 1;
@@ -102,7 +102,7 @@ void *worker(void *workerArg){
 /*
 ** Initialize the database and start the threads
 */
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   sqlite3 *db;
   int i, rc;
   pthread_t aThread[5];

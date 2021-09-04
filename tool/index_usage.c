@@ -58,7 +58,7 @@ static void usage(const char *argv0){
 #define main(cnt, arr)      sqlite_index_usage_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   sqlite3 *db = 0;          /* The main database */
   sqlite3_stmt *pStmt = 0;  /* a query */
   char *zSql;

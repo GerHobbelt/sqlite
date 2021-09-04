@@ -482,7 +482,7 @@ static int integerValue(const char *zArg){
 #define main(cnt, arr)      sqlite_test_startup_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   const char *zCmd = 0;
   int i;
   int bAutovac = 0;

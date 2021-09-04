@@ -520,7 +520,7 @@ static void decode_btree_page(
 #define main(cnt, arr)      sqlite_showwal_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   struct stat sbuf;
   unsigned char zPgSz[4];
   if( argc<2 ){

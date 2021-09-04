@@ -1129,7 +1129,7 @@ static void usage(const char *argv0){
 #define main(cnt, arr)      sqlite_showdb_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   sqlite3_int64 szFile;
   unsigned char *zPgSz;
   const char *zPrg = argv[0];     /* Name of this executable */

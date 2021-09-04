@@ -1902,7 +1902,7 @@ static void showHelp(void){
 #define main(cnt, arr)      sqlite_diff_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   const char *zDb1 = 0;
   const char *zDb2 = 0;
   int i;

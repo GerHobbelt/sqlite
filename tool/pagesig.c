@@ -94,7 +94,7 @@ endComputeSigs:
 /*
 ** Find page signatures for all named files.
 */
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   int i;
   for(i=1; i<argc; i++) computeSigs(argv[i]);
   return 0;

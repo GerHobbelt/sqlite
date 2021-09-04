@@ -2150,7 +2150,7 @@ static int xCompileOptions(void *pCtx, int nVal, char **azVal, char **azCol){
 #define main(cnt, arr)      sqlite_speedtest1_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   int doAutovac = 0;            /* True for --autovacuum */
   int cacheSize = 0;            /* Desired cache size.  0 means default */
   int doExclusive = 0;          /* True for --exclusive */

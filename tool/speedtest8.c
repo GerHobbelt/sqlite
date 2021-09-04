@@ -98,7 +98,7 @@ static void prepareAndRun(sqlite3 *db, const char *zSql, int bQuiet){
 #define main(cnt, arr)      sqlite_speedtest8_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   sqlite3 *db;
   int rc;
   int nSql;

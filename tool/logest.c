@@ -128,7 +128,7 @@ static void showHelp(const char *zArgv0){
 #define main(cnt, arr)      sqlite_logest_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   int i;
   int n = 0;
   LogEst a[100];

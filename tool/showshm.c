@@ -145,7 +145,7 @@ static void print_ckpt_info(unsigned char *aData){
 #define main(cnt, arr)      sqlite_showshm_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   unsigned char *aData;
   if( argc<2 ){
     fprintf(stderr,"Usage: %s FILENAME\n", argv[0]);

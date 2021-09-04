@@ -1499,7 +1499,7 @@ static void dynamic_triggers(int nMs){
 #define main(cnt, arr)      sqlite_threadtest3_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   struct ThreadTest {
     void (*xTest)(int);   /* Routine for running this test */
     const char *zTest;    /* Name of this test */
