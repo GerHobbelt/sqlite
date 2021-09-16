@@ -64,7 +64,11 @@
 #endif
 int sqlite3GetToken(const unsigned char*,int*); /* In the SQLite core */
 
-#ifndef SQLITE_AMALGAMATION
+/*
+** If building separately, we will need some setup that is normally
+** found in sqliteInt.h
+*/
+#if !defined(SQLITE_AMALGAMATION)
 #include "sqlite3rtree.h"
 typedef sqlite3_int64 i64;
 typedef sqlite3_uint64 u64;
@@ -77,7 +81,17 @@ typedef unsigned int u32;
 #if defined(NDEBUG) && defined(SQLITE_DEBUG)
 # undef NDEBUG
 #endif
+#if defined(SQLITE_COVERAGE_TEST) || defined(SQLITE_MUTATION_TEST)
+# define ALWAYS(X)      (1)
+# define NEVER(X)       (0)
+#elif !defined(NDEBUG)
+# define ALWAYS(X)      ((X)?1:(assert(0),0))
+# define NEVER(X)       ((X)?(assert(0),1):0)
+#else
+# define ALWAYS(X)      (X)
+# define NEVER(X)       (X)
 #endif
+#endif /* !defined(SQLITE_AMALGAMATION) */
 
 #include <string.h>
 #include <stdio.h>
@@ -667,18 +681,6 @@ static void nodeBlobReset(Rtree *pRtree){
 }
 
 /*
-** Check to see if pNode is the same as pParent or any of the parents
-** of pParent.
-*/
-static int nodeInParentChain(const RtreeNode *pNode, const RtreeNode *pParent){
-  do{
-    if( pNode==pParent ) return 1;
-    pParent = pParent->pParent;
-  }while( pParent );
-  return 0;
-}
-
-/*
 ** Obtain a reference to an r-tree node.
 */
 static int nodeAcquire(
@@ -694,14 +696,7 @@ static int nodeAcquire(
   ** increase its reference count and return it.
   */
   if( (pNode = nodeHashLookup(pRtree, iNode))!=0 ){
-    if( pParent && !pNode->pParent ){
-      if( nodeInParentChain(pNode, pParent) ){
-        RTREE_IS_CORRUPT(pRtree);
-        return SQLITE_CORRUPT_VTAB;
-      }
-      pParent->nRef++;
-      pNode->pParent = pParent;
-    }else if( pParent && pNode->pParent && pParent!=pNode->pParent ){
+    if( pParent && pParent!=pNode->pParent ){
       RTREE_IS_CORRUPT(pRtree);
       return SQLITE_CORRUPT_VTAB;
     }
@@ -1365,11 +1360,12 @@ static int nodeRowidIndex(
 */
 static int nodeParentIndex(Rtree *pRtree, RtreeNode *pNode, int *piIndex){
   RtreeNode *pParent = pNode->pParent;
-  if( pParent ){
+  if( ALWAYS(pParent) ){
     return nodeRowidIndex(pRtree, pParent, pNode->iNode, piIndex);
+  }else{
+    *piIndex = -1;
+    return SQLITE_OK;
   }
-  *piIndex = -1;
-  return SQLITE_OK;
 }
 
 /*
@@ -1492,7 +1488,8 @@ static RtreeSearchPoint *rtreeSearchPointNew(
       pNew = rtreeEnqueue(pCur, rScore, iLevel);
       if( pNew==0 ) return 0;
       ii = (int)(pNew - pCur->aPoint) + 1;
-      if( ii<RTREE_CACHE_SZ ){
+      assert( ii==1 );
+      if( ALWAYS(ii<RTREE_CACHE_SZ) ){
         assert( pCur->aNode[ii]==0 );
         pCur->aNode[ii] = pCur->aNode[0];
       }else{
@@ -1553,7 +1550,7 @@ static void rtreeSearchPointPop(RtreeCursor *p){
   if( p->bPoint ){
     p->anQueue[p->sPoint.iLevel]--;
     p->bPoint = 0;
-  }else if( p->nPoint ){
+  }else if( ALWAYS(p->nPoint) ){
     p->anQueue[p->aPoint[0].iLevel]--;
     n = --p->nPoint;
     p->aPoint[0] = p->aPoint[n];
@@ -1989,7 +1986,7 @@ static int rtreeBestIndex(sqlite3_vtab *tab, sqlite3_index_info *pIdxInfo){
     struct sqlite3_index_constraint *p = &pIdxInfo->aConstraint[ii];
 
     if( bMatch==0 && p->usable 
-     && p->iColumn==0 && p->op==SQLITE_INDEX_CONSTRAINT_EQ 
+     && p->iColumn<=0 && p->op==SQLITE_INDEX_CONSTRAINT_EQ 
     ){
       /* We have an equality constraint on the rowid. Use strategy 1. */
       int jj;
@@ -2242,12 +2239,19 @@ static int AdjustTree(
 ){
   RtreeNode *p = pNode;
   int cnt = 0;
+  int rc;
   while( p->pParent ){
     RtreeNode *pParent = p->pParent;
     RtreeCell cell;
     int iCell;
 
-    if( (++cnt)>1000 || nodeParentIndex(pRtree, p, &iCell)  ){
+    cnt++;
+    if( NEVER(cnt>100) ){
+      RTREE_IS_CORRUPT(pRtree);
+      return SQLITE_CORRUPT_VTAB;
+    }
+    rc = nodeParentIndex(pRtree, p, &iCell);
+    if( NEVER(rc!=SQLITE_OK) ){
       RTREE_IS_CORRUPT(pRtree);
       return SQLITE_CORRUPT_VTAB;
     }
@@ -2631,11 +2635,12 @@ static int SplitNode(
     RtreeNode *pParent = pLeft->pParent;
     int iCell;
     rc = nodeParentIndex(pRtree, pLeft, &iCell);
-    if( rc==SQLITE_OK ){
+    if( ALWAYS(rc==SQLITE_OK) ){
       nodeOverwriteCell(pRtree, pParent, &leftbbox, iCell);
       rc = AdjustTree(pRtree, pParent, &leftbbox);
+      assert( rc==SQLITE_OK );
     }
-    if( rc!=SQLITE_OK ){
+    if( NEVER(rc!=SQLITE_OK) ){
       goto splitnode_out;
     }
   }
@@ -2710,8 +2715,9 @@ static int fixLeafParent(Rtree *pRtree, RtreeNode *pLeaf){
       */
       iNode = sqlite3_column_int64(pRtree->pReadParent, 0);
       for(pTest=pLeaf; pTest && pTest->iNode!=iNode; pTest=pTest->pParent);
-      if( !pTest ){
+      if( ALWAYS(pTest==0) ){
         rc2 = nodeAcquire(pRtree, iNode, 0, &pChild->pParent);
+        assert( rc2==SQLITE_OK );
       }
     }
     rc = sqlite3_reset(pRtree->pReadParent);
@@ -4265,8 +4271,10 @@ static int rtreeCheckTable(
     if( pStmt ){
       nAux = sqlite3_column_count(pStmt) - 2;
       sqlite3_finalize(pStmt);
+    }else 
+    if( check.rc!=SQLITE_NOMEM ){
+      check.rc = SQLITE_OK;
     }
-    check.rc = SQLITE_OK;
   }
 
   /* Find number of dimensions in the rtree table. */
