@@ -5485,9 +5485,7 @@ int sqlite3BtreeTableMoveto(
           if( pCur->info.nKey==intKey ){
             return SQLITE_OK;
           }
-        }else if( rc==SQLITE_DONE ){
-          rc = SQLITE_OK;
-        }else{
+        }else if( rc!=SQLITE_DONE ){
           return rc;
         }
       }

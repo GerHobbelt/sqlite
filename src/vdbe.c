@@ -7747,7 +7747,6 @@ case OP_VFilter: {   /* jump */
   iQuery = (int)pQuery->u.i;
 
   /* Invoke the xFilter method */
-  res = 0;
   apArg = p->apArg;
   for(i = 0; i<nArg; i++){
     apArg[i] = &pArgc[i+1];
@@ -7837,7 +7836,6 @@ case OP_VNext: {   /* jump */
   int res;
   VdbeCursor *pCur;
 
-  res = 0;
   pCur = p->apCsr[pOp->p1];
   assert( pCur->eCurType==CURTYPE_VTAB );
   if( pCur->nullRow ){

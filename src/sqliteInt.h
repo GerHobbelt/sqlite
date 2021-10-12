@@ -579,6 +579,13 @@
 #endif
 
 /*
+** SQLITE_OMIT_VIRTUALTABLE implies SQLITE_OMIT_ALTERTABLE
+*/
+#if defined(SQLITE_OMIT_VIRTUALTABLE) && !defined(SQLITE_OMIT_ALTERTABLE)
+# define SQLITE_OMIT_ALTERTABLE
+#endif
+
+/*
 ** Return true (non-zero) if the input is an integer that is too large
 ** to fit in 32-bits.  This macro is used inside of various testcase()
 ** macros to verify that we have tested SQLite for large-file support.
@@ -4933,6 +4940,7 @@ int sqlite3OpenTempDatabase(Parse *);
 
 void sqlite3StrAccumInit(StrAccum*, sqlite3*, char*, int, int);
 char *sqlite3StrAccumFinish(StrAccum*);
+void sqlite3StrAccumSetError(StrAccum*, u8);
 void sqlite3SelectDestInit(SelectDest*,int,int);
 Expr *sqlite3CreateColumnExpr(sqlite3 *, SrcList *, int, int);
 
