@@ -149,7 +149,9 @@ struct Rtree {
   u8 nBytesPerCell;           /* Bytes consumed per cell */
   u8 inWrTrans;               /* True if inside write transaction */
   u8 nAux;                    /* # of auxiliary columns in %_rowid */
+#ifdef SQLITE_ENABLE_GEOPOLY
   u8 nAuxNotNull;             /* Number of initial not-null aux columns */
+#endif
 #ifdef SQLITE_DEBUG
   u8 bCorrupt;                /* Shadow table corruption detected */
 #endif
@@ -754,7 +756,7 @@ static int nodeAcquire(
   ** are the leaves, and so on. If the depth as specified on the root node
   ** is greater than RTREE_MAX_DEPTH, the r-tree structure must be corrupt.
   */
-  if( pNode && rc==SQLITE_OK && iNode==1 ){
+  if( rc==SQLITE_OK && pNode && iNode==1 ){
     pRtree->iDepth = readInt16(pNode->zData);
     if( pRtree->iDepth>RTREE_MAX_DEPTH ){
       rc = SQLITE_CORRUPT_VTAB;
@@ -1908,8 +1910,11 @@ static int rtreeFilter(
     }
     if( rc==SQLITE_OK ){
       RtreeSearchPoint *pNew;
+      assert( pCsr->bPoint==0 );  /* Due to the resetCursor() call above */
       pNew = rtreeSearchPointNew(pCsr, RTREE_ZERO, (u8)(pRtree->iDepth+1));
-      if( pNew==0 ) return SQLITE_NOMEM;
+      if( NEVER(pNew==0) ){       /* Because pCsr->bPoint was FALSE */
+        return SQLITE_NOMEM;
+      }
       pNew->id = 1;
       pNew->iCell = 0;
       pNew->eWithin = PARTLY_WITHIN;
@@ -2746,6 +2751,7 @@ static int removeNode(Rtree *pRtree, RtreeNode *pNode, int iHeight){
     pParent = pNode->pParent;
     pNode->pParent = 0;
     rc = deleteCell(pRtree, pParent, iCell, iHeight+1);
+    assert( rc==SQLITE_OK );
   }
   rc2 = nodeRelease(pRtree, pParent);
   if( rc==SQLITE_OK ){
@@ -2968,7 +2974,7 @@ static int rtreeInsertCell(
     }
   }else{
     rc = AdjustTree(pRtree, pNode, pCell);
-    if( rc==SQLITE_OK ){
+    if( ALWAYS(rc==SQLITE_OK) ){
       if( iHeight==0 ){
         rc = rowidWrite(pRtree, pCell->iRowid, pNode->iNode);
       }else{
@@ -3074,7 +3080,7 @@ static int rtreeDeleteRowid(Rtree *pRtree, sqlite3_int64 iDelete){
     int rc2;
     RtreeNode *pChild = 0;
     i64 iChild = nodeGetRowid(pRtree, pRoot, 0);
-    rc = nodeAcquire(pRtree, iChild, pRoot, &pChild);
+    rc = nodeAcquire(pRtree, iChild, pRoot, &pChild);  /* tag-20210916a */
     if( rc==SQLITE_OK ){
       rc = removeNode(pRtree, pChild, pRtree->iDepth-1);
     }
@@ -3409,7 +3415,7 @@ static int rtreeQueryStat1(sqlite3 *db, Rtree *pRtree){
   char *zSql;
   sqlite3_stmt *p;
   int rc;
-  i64 nRow = 0;
+  i64 nRow = RTREE_MIN_ROWEST;
 
   rc = sqlite3_table_column_metadata(
       db, pRtree->zDb, "sqlite_stat1",0,0,0,0,0,0
@@ -3426,20 +3432,10 @@ static int rtreeQueryStat1(sqlite3 *db, Rtree *pRtree){
     if( rc==SQLITE_OK ){
       if( sqlite3_step(p)==SQLITE_ROW ) nRow = sqlite3_column_int64(p, 0);
       rc = sqlite3_finalize(p);
-    }else if( rc!=SQLITE_NOMEM ){
-      rc = SQLITE_OK;
-    }
-
-    if( rc==SQLITE_OK ){
-      if( nRow==0 ){
-        pRtree->nRowEst = RTREE_DEFAULT_ROWEST;
-      }else{
-        pRtree->nRowEst = MAX(nRow, RTREE_MIN_ROWEST);
-      }
     }
     sqlite3_free(zSql);
   }
-
+  pRtree->nRowEst = MAX(nRow, RTREE_MIN_ROWEST);
   return rc;
 }
 
@@ -3589,9 +3585,12 @@ static int rtreeSqlInit(
       sqlite3_str_appendf(p, "UPDATE \"%w\".\"%w_rowid\"SET ", zDb, zPrefix);
       for(ii=0; ii<pRtree->nAux; ii++){
         if( ii ) sqlite3_str_append(p, ",", 1);
+#ifdef SQLITE_ENABLE_GEOPOLY
         if( ii<pRtree->nAuxNotNull ){
           sqlite3_str_appendf(p,"a%d=coalesce(?%d,a%d)",ii,ii+2,ii);
-        }else{
+        }else
+#endif
+        {
           sqlite3_str_appendf(p,"a%d=?%d",ii,ii+2);
         }
       }
@@ -4530,7 +4529,10 @@ int sqlite3_rtree_query_callback(
 
   /* Allocate and populate the context object. */
   pGeomCtx = (RtreeGeomCallback *)sqlite3_malloc(sizeof(RtreeGeomCallback));
-  if( !pGeomCtx ) return SQLITE_NOMEM;
+  if( !pGeomCtx ){
+    if( xDestructor ) xDestructor(pContext);
+    return SQLITE_NOMEM;
+  }
   pGeomCtx->xGeom = 0;
   pGeomCtx->xQueryFunc = xQueryFunc;
   pGeomCtx->xDestructor = xDestructor;
