@@ -10632,6 +10632,9 @@ meta_command_exit:
 
 /* Line scan result and intermediate states (supporting scan resumption)
 */
+#ifndef CHAR_BIT
+# define CHAR_BIT 8
+#endif
 typedef enum {
   QSS_HasDark = 1<<CHAR_BIT, QSS_EndingSemi = 2<<CHAR_BIT,
   QSS_CharMask = (1<<CHAR_BIT)-1, QSS_ScanMask = 3<<CHAR_BIT,
@@ -10653,7 +10656,7 @@ static QuickScanState quickscan(char *zLine, QuickScanState qss){
   char cWait = (char)qss; /* intentional narrowing loss */
   if( cWait==0 ){
   PlainScan:
-    while (cin = *zLine++){
+    while( (cin = *zLine++)!=0 ){
       if( IsSpace(cin) )
         continue;
       switch (cin){
@@ -10689,7 +10692,7 @@ static QuickScanState quickscan(char *zLine, QuickScanState qss){
     }
   }else{
   TermScan:
-    while (cin = *zLine++){
+    while( (cin = *zLine++)!=0 ){
       if( cin==cWait ){
         switch( cWait ){
         case '*':
@@ -10787,8 +10790,11 @@ static int runOneSqlLine(ShellState *p, char *zSql, FILE *in, int startline){
     }
     return 1;
   }else if( ShellHasFlag(p, SHFLG_CountChanges) ){
-    raw_printf(p->out, "changes: %3lld   total_changes: %lld\n",
+    char zLineBuf[2000];
+    sqlite3_snprintf(sizeof(zLineBuf), zLineBuf,
+            "changes: %lld   total_changes: %lld",
             sqlite3_changes64(p->db), sqlite3_total_changes64(p->db));
+    raw_printf(p->out, "%s\n", zLineBuf);
   }
   return 0;
 }
@@ -10809,7 +10815,6 @@ static int process_input(ShellState *p){
   int nLine;                /* Length of current line */
   int nSql = 0;             /* Bytes of zSql[] used */
   int nAlloc = 0;           /* Allocated zSql[] space */
-  int nSqlPrior = 0;        /* Bytes of zSql[] used by prior line */
   int rc;                   /* Error code */
   int errCnt = 0;           /* Number of errors seen */
   int startline = 0;        /* Line number for start of current input */
@@ -10862,7 +10867,6 @@ static int process_input(ShellState *p){
       zSql = realloc(zSql, nAlloc);
       if( zSql==0 ) shell_out_of_memory();
     }
-    nSqlPrior = nSql;
     if( nSql==0 ){
       int i;
       for(i=0; zLine[i] && IsSpace(zLine[i]); i++){}

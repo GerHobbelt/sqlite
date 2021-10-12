@@ -2545,6 +2545,10 @@ static int updateMapping(
   xSetMapping = ((iHeight==0)?rowidWrite:parentWrite);
   if( iHeight>0 ){
     RtreeNode *pChild = nodeHashLookup(pRtree, iRowid);
+    RtreeNode *p;
+    for(p=pNode; p; p=p->pParent){
+      if( p==pChild ) return SQLITE_CORRUPT_VTAB;
+    }
     if( pChild ){
       nodeRelease(pRtree, pChild->pParent);
       nodeReference(pNode);
@@ -2751,7 +2755,7 @@ static int removeNode(Rtree *pRtree, RtreeNode *pNode, int iHeight){
     pParent = pNode->pParent;
     pNode->pParent = 0;
     rc = deleteCell(pRtree, pParent, iCell, iHeight+1);
-    assert( rc==SQLITE_OK );
+    testcase( rc!=SQLITE_OK );
   }
   rc2 = nodeRelease(pRtree, pParent);
   if( rc==SQLITE_OK ){
