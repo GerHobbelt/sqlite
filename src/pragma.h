@@ -572,7 +572,7 @@ static const PragmaName aPragmaName[] = {
   /* iArg:      */ 0 },
  {/* zName:     */ "table_list",
   /* ePragTyp:  */ PragTyp_TABLE_LIST,
-  /* ePragFlg:  */ PragFlg_NeedSchema|PragFlg_Result1|PragFlg_SchemaOpt,
+  /* ePragFlg:  */ PragFlg_NeedSchema|PragFlg_Result1,
   /* ColNames:  */ 22, 6,
   /* iArg:      */ 0 },
  {/* zName:     */ "table_xinfo",
