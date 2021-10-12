@@ -1438,6 +1438,7 @@ releasetest:
 	$(TCLSH_CMD) $(TOP)/test/releasetest.tcl
 
 AMALGAMATIONS_SRC = \
+			$(TOP)/src/pragma.h    \
 			sqlite3ext.h           \
 			sqlite3.c              \
 			sqlite3.h              \
@@ -1450,6 +1451,9 @@ AMALGAMATIONS_SRC = \
 			sqltclsh.c             \
 			sqlite3_checker.c      \
 			sqlite3-all.c
+
+$(TOP)/src/pragma.h: $(TOP)/tool/mkpragmatab.tcl
+	$(TCLSH_CMD) $(TOP)/tool/mkpragmatab.tcl
 
 amalgamation:	$(AMALGAMATIONS_SRC)
 
