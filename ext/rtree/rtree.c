@@ -436,7 +436,12 @@ struct RtreeMatchArg {
 ** it is not, make it a no-op.
 */
 #ifndef SQLITE_AMALGAMATION
-# define testcase(X)
+# ifdef SQLITE_COVERAGE_TEST
+    unsigned int sqlite3RtreeTestcase = 0;
+#   define testcase(X)  if( X ){ sqlite3RtreeTestcase += __LINE__; }
+# else
+#   define testcase(X)
+# endif
 #endif
 
 /*
@@ -2200,7 +2205,7 @@ static int ChooseLeaf(
 
     int nCell = NCELL(pNode);
     RtreeCell cell;
-    RtreeNode *pChild;
+    RtreeNode *pChild = 0;
 
     RtreeCell *aCell = 0;
 
@@ -2558,6 +2563,7 @@ static int updateMapping(
       pChild->pParent = pNode;
     }
   }
+  if( NEVER(pNode==0) ) return SQLITE_ERROR;
   return xSetMapping(pRtree, iRowid, pNode->iNode);
 }
 
