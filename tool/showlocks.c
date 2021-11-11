@@ -96,7 +96,7 @@ static int showLocksInRange(int fd, off_t lwr, off_t upr){
 #define main(cnt, arr)      sqlite_showlocks_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   int fd;
   int cnt;
 

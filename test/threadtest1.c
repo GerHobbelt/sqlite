@@ -259,7 +259,7 @@ static void *worker_bee(void *pArg){
 #define main(cnt, arr)      sqlite_threadtest1_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   char *zFile;
   int i, n;
   pthread_t id;

@@ -54,6 +54,7 @@ typedef sqlite3_int64 i64;
 typedef unsigned char u8;
 typedef UINT32_TYPE u32;           /* 4-byte unsigned integer */
 typedef UINT16_TYPE u16;           /* 2-byte unsigned integer */
+#undef MIN     // may have already been defined in <zbuild.h>, which is included when we have ZLIB(NG) support enabled.
 #define MIN(a,b) ((a)<(b) ? (a) : (b))
 
 #if defined(SQLITE_COVERAGE_TEST) || defined(SQLITE_MUTATION_TEST)

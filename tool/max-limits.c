@@ -37,7 +37,7 @@ static int maxLimit(sqlite3 *db, int eCode){
 #define main(cnt, arr)      sqlite_max_limits_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   sqlite3 *db;
   int j, rc;
   rc = sqlite3_open(":memory:", &db);

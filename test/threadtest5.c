@@ -248,7 +248,7 @@ static void usage(const char *argv0){
 /*
 ** Main routine
 */
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   int i;
   int nWorker = 4;
   int rc;

@@ -364,7 +364,7 @@ static void *worker_thread(void *pArg){
 #define main(cnt, arr)      sqlite_threadtest4_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   int nWorker = 0;         /* Number of worker threads */
   int i;                   /* Loop counter */
   WorkerInfo *aInfo;       /* Information for each worker */

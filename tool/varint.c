@@ -58,7 +58,7 @@ static int putVarint(unsigned char *p, u64 v){
 #define main(cnt, arr)      sqlite_varint_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   int i;
   u64 x;
   u64 uX = 0;

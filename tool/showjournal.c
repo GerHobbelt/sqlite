@@ -112,7 +112,7 @@ static void print_page(int iOfst){
 #define main(cnt, arr)      sqlite_showjournal_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   int nPage, cnt;
   int iOfst;
   if( argc!=2 ){

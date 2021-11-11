@@ -82,7 +82,7 @@ static int isLocked(
 #define main(cnt, arr)      sqlite_getlock_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   int hDb;        /* File descriptor for the open database file */
   int hShm;       /* File descriptor for WAL shared-memory file */
   char *zShm;     /* Name of the shared-memory file for WAL mode */

@@ -18,7 +18,7 @@ extern const char *sqlite3_sourceid(void);
 #define main(cnt, arr)      sqlite_libvers_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   printf("SQLite version %s\n", sqlite3_libversion());
   printf("SQLite source  %s\n", sqlite3_sourceid());
   return 0;
