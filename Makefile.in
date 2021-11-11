@@ -469,7 +469,8 @@ TESTSRC += \
   $(TOP)/ext/misc/unionvtab.c \
   $(TOP)/ext/misc/wholenumber.c \
   $(TOP)/ext/misc/zipfile.c \
-  $(TOP)/ext/userauth/userauth.c
+  $(TOP)/ext/userauth/userauth.c \
+  $(TOP)/ext/rtree/test_rtreedoc.c
 
 # Source code to the library files needed by the test fixture
 #
@@ -1251,7 +1252,10 @@ coretestprogs:	$(TESTPROGS)
 testprogs:	coretestprogs srcck1$(BEXE) fuzzcheck$(TEXE) sessionfuzz$(TEXE)
 
 # A very detailed test running most or all test cases
-fulltest:	$(TESTPROGS) fuzztest
+fulltest:	alltest fuzztest
+
+# Run most or all tcl test cases
+alltest:	$(TESTPROGS)
 	./testfixture$(TEXE) $(TOP)/test/all.test $(TESTOPTS)
 
 # Really really long testing
@@ -1437,6 +1441,7 @@ releasetest:
 	$(TCLSH_CMD) $(TOP)/test/releasetest.tcl
 
 AMALGAMATIONS_SRC = \
+			$(TOP)/src/pragma.h    \
 			sqlite3ext.h           \
 			sqlite3.c              \
 			sqlite3.h              \
@@ -1449,6 +1454,9 @@ AMALGAMATIONS_SRC = \
 			sqltclsh.c             \
 			sqlite3_checker.c      \
 			sqlite3-all.c
+
+$(TOP)/src/pragma.h: $(TOP)/tool/mkpragmatab.tcl
+	$(TCLSH_CMD) $(TOP)/tool/mkpragmatab.tcl
 
 amalgamation:	$(AMALGAMATIONS_SRC)
 
