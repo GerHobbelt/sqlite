@@ -9,7 +9,7 @@
 **    May you share freely, never taking more than you give.
 **
 *************************************************************************
-** 
+**
 ** This file implements a program used to measure the start-up performance
 ** of SQLite.
 **
@@ -25,7 +25,9 @@
 ** parse the entire schema.
 */
 #include <stdio.h>
+#if !defined(_WIN32) && !defined(_WIN64)
 #include <unistd.h>
+#endif
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -66,7 +68,7 @@ static void usage(const char *argv0){
 ** The schema covers the repository, the local checkout database, and
 ** the global configuration database.
 */
-static const char zTestSchema[] = 
+static const char zTestSchema[] =
   "CREATE TABLE repo_blob(\n"
   "  rid INTEGER PRIMARY KEY,\n"
   "  rcvid INTEGER,\n"
@@ -410,7 +412,7 @@ static void displayLinuxIoStats(FILE *out){
     }
   }
   fclose(in);
-}   
+}
 #endif
 
 /*
@@ -475,7 +477,12 @@ static int integerValue(const char *zArg){
 }
 
 
-int main(int argc, char **argv){
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_test_startup_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   const char *zCmd = 0;
   int i;
   int bAutovac = 0;
@@ -569,11 +576,11 @@ int main(int argc, char **argv){
       sqlite3_db_status(db, SQLITE_DBSTATUS_CACHE_MISS, &iCur, &iHi, 1);
       printf("-- Page cache misses:           %d\n", iCur);
       sqlite3_db_status(db, SQLITE_DBSTATUS_CACHE_WRITE, &iCur, &iHi, 1);
-      printf("-- Page cache writes:           %d\n", iCur); 
+      printf("-- Page cache writes:           %d\n", iCur);
       sqlite3_db_status(db, SQLITE_DBSTATUS_SCHEMA_USED, &iCur, &iHi, 0);
-      printf("-- Schema Heap Usage:           %d bytes\n", iCur); 
+      printf("-- Schema Heap Usage:           %d bytes\n", iCur);
       sqlite3_db_status(db, SQLITE_DBSTATUS_STMT_USED, &iCur, &iHi, 0);
-      printf("-- Statement Heap Usage:        %d bytes\n", iCur); 
+      printf("-- Statement Heap Usage:        %d bytes\n", iCur);
     }
     sqlite3_close(db);
     free(pHeap);
@@ -623,6 +630,8 @@ int main(int argc, char **argv){
     }
     sqlite3_close(db);
     return 0;
-
   }
+  printf("ERROR: unsupported COMMAND specified: %s\n", zCmd);
+  usage(argv[0]);
+  return 1;
 }

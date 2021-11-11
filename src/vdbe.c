@@ -8191,10 +8191,10 @@ case OP_Init: {          /* jump */
 #endif
     if( db->nVdbeExec>1 ){
       char *z = sqlite3MPrintf(db, "-- %s", zTrace);
-      (void)db->trace.xV2(SQLITE_TRACE_STMT, db->pTraceArg, p, z);
+      db->trace.xV2(SQLITE_TRACE_STMT, db->pTraceArg, p, z);
       sqlite3DbFree(db, z);
     }else{
-      (void)db->trace.xV2(SQLITE_TRACE_STMT, db->pTraceArg, p, zTrace);
+      db->trace.xV2(SQLITE_TRACE_STMT, db->pTraceArg, p, zTrace);
     }
   }
 #ifdef SQLITE_USE_FCNTL_TRACE

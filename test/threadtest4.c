@@ -34,7 +34,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include <stdarg.h>
 
 /*
@@ -249,14 +251,14 @@ static void worker_delete_all_content(WorkerInfo *p, int inTrans){
 ** Create rows mn through mx in table iTab for the given worker
 */
 static void worker_add_content(WorkerInfo *p, int mn, int mx, int iTab){
-  char *zTabDef;
+  char *zTabDef = NULL;
   switch( iTab ){
     case 1:  zTabDef = "t1(tid,sp,a,b,c)";  break;
     case 2:  zTabDef = "t2(tid,sp,d,e,f)";  break;
     case 3:  zTabDef = "t3(tid,sp,x,y,z)";  break;
   }
   pthread_mutex_lock(p->pWrMutex);
-  run_sql(p, 
+  run_sql(p,
      "WITH RECURSIVE\n"
      " c(i) AS (VALUES(%d) UNION ALL SELECT i+1 FROM c WHERE i<%d)\n"
      "INSERT INTO %s SELECT %d, zeroblob(3000), i, printf('%%d',i), i FROM c;",
@@ -357,7 +359,12 @@ static void *worker_thread(void *pArg){
   return 0;
 }
 
-int main(int argc, char **argv){
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_threadtest4_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   int nWorker = 0;         /* Number of worker threads */
   int i;                   /* Loop counter */
   WorkerInfo *aInfo;       /* Information for each worker */
@@ -400,7 +407,7 @@ int main(int argc, char **argv){
       exit(1);
     }
   }
-  if( nWorker==0 ){ 
+  if( nWorker==0 ){
     fprintf(stderr,
        "usage:  %s ?OPTIONS? N\n"
        "N is the number of threads and must be at least 2.\n"

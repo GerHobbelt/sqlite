@@ -11,6 +11,9 @@
 #include <stdarg.h>
 #include <string.h>
 
+#include "monolithic_examples.h"
+
+
 typedef unsigned char u8;
 typedef struct GState GState;
 
@@ -295,7 +298,13 @@ static void ofstWalkPage(GState *p, int pgno){
   ofstPopPage(p);
 }
 
-int main(int argc, char **argv){
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_offsets_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   GState g;
   memset(&g, 0, sizeof(g));
   if( argc>2 && strcmp(argv[1],"--trace")==0 ){
@@ -325,5 +334,5 @@ int main(int argc, char **argv){
     fprintf(stderr, "%s\n", g.zErr);
     exit(1);
   }
-  return 0; 
+  return 0;
 }

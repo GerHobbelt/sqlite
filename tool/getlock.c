@@ -8,16 +8,22 @@
 */
 #include <sys/types.h>
 #include <sys/stat.h>
+#if defined(_WIN32) || defined(_WIN64)
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 #include <fcntl.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
 
+#include "monolithic_examples.h"
+
+
 static void usage(const char *argv0){
   fprintf(stderr, "Usage: %s database\n", argv0);
-  exit(1);
 }
 
 /* Check for a conflicting lock.  If one is found, print an this
@@ -31,6 +37,7 @@ static int isLocked(
   unsigned int iCnt,    /* Number of bytes in the lock range */
   const char *zType     /* Type of lock */
 ){
+#if defined(F_GETLK)
   struct flock lk;
 
   memset(&lk, 0, sizeof(lk));
@@ -45,6 +52,9 @@ static int isLocked(
   if( lk.l_type==F_UNLCK ) return 0;
   printf("%s lock held by %d\n", zType, (int)lk.l_pid);
   return 1;
+#else
+  return 0;
+#endif
 }
 
 /*
@@ -66,18 +76,27 @@ static int isLocked(
 #define SHM_READ_SIZE     5
 
 
-int main(int argc, char **argv){
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_getlock_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   int hDb;        /* File descriptor for the open database file */
   int hShm;       /* File descriptor for WAL shared-memory file */
   char *zShm;     /* Name of the shared-memory file for WAL mode */
-  ssize_t got;    /* Bytes read from header */
+  int got;        /* Bytes read from header */
   int isWal;                 /* True if in WAL mode */
   int nName;                 /* Length of filename */
   unsigned char aHdr[100];   /* Database header */
   int nLock = 0;             /* Number of locks held */
   int i;                     /* Loop counter */
 
-  if( argc!=2 ) usage(argv[0]);
+  if (argc != 2){
+    usage(argv[0]);
+    return 1;
+  }
   hDb = open(argv[1], O_RDONLY, 0);
   if( hDb<0 ){
     fprintf(stderr, "cannot open %s\n", argv[1]);
@@ -88,9 +107,10 @@ int main(int argc, char **argv){
   got = read(hDb, aHdr, 100);
   if( got!=100 || memcmp(aHdr, "SQLite format 3",16)!=0 ){
     fprintf(stderr, "not an SQLite database: %s\n", argv[1]);
-    exit(1);
+    return 1;
   }
 
+#if defined(F_GETLK)
   /* First check for an exclusive lock */
   if( isLocked(hDb, F_RDLCK, SHARED_FIRST, SHARED_SIZE, "EXCLUSIVE") ){
     return 0;
@@ -109,7 +129,7 @@ int main(int argc, char **argv){
     zShm = malloc( nName + 100 );
     if( zShm==0 ){
       fprintf(stderr, "out of memory\n");
-      exit(1);
+      return 1;
     }
     memcpy(zShm, argv[1], nName);
     memcpy(&zShm[nName], "-shm", 5);
@@ -127,8 +147,12 @@ int main(int argc, char **argv){
       nLock += isLocked(hShm, F_WRLCK, SHM_READ_FIRST+i, 1, "WAL-READ");
     }
   }
-  if( nLock==0 ){
-    printf("file is not locked\n");
+  if (nLock == 0) {
+	  printf("file is not locked\n");
   }
   return 0;
+#else
+  fprintf(stderr, "Lock check function is not yet implemented for the Windows platform.\n");
+  return 1;
+#endif
 }

@@ -15,7 +15,14 @@
 #include <string.h>
 #include <stdlib.h>
 
-int main(int argc, char **argv){
+#include "monolithic_examples.h"
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_enlargedb_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   char *zEnd;
   long long int toAppend;
   long long int currentSz;
@@ -56,11 +63,11 @@ int main(int argc, char **argv){
   fseek(f, (long)(newSz*pgsz - 1), SEEK_SET);
   fwrite(&zero,1,1,f);
   fclose(f);
-  return 0;  
+  return 0;
 
 not_valid_db:
   fprintf(stderr,"not a valid database: %s\n", argv[1]);
-  exit(1);  
+  exit(1);
 
 usage_error:
   fprintf(stderr,"Usage: %s DATABASE N\n", argv[0]);

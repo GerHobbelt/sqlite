@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int main(int argc, char **argv){
+int main(int argc, const char **argv){
   FILE *f;
   char *zBuf;
   int ofst;

@@ -280,7 +280,7 @@ struct sqlite3_api_routines {
   /* Version 3.12.0 and later */
   int (*system_errno)(sqlite3*);
   /* Version 3.14.0 and later */
-  int (*trace_v2)(sqlite3*,unsigned,int(*)(unsigned,void*,void*,void*),void*);
+  int (*trace_v2)(sqlite3*,unsigned,void(*)(unsigned int,void*,void*,void*),void*);
   char *(*expanded_sql)(sqlite3_stmt*);
   /* Version 3.18.0 and later */
   void (*set_last_insert_rowid)(sqlite3*,sqlite3_int64);

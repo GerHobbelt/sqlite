@@ -6,6 +6,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include "monolithic_examples.h"
+
 #if defined(_MSC_VER) || defined(__BORLANDC__)
   typedef __int64 i64;
   typedef unsigned __int64 u64;
@@ -36,7 +38,7 @@ static int putVarint(unsigned char *p, u64 v){
       v >>= 7;
     }
     return 9;
-  }    
+  }
   n = 0;
   do{
     buf[n++] = (unsigned char)((v & 0x7f) | 0x80);
@@ -50,7 +52,13 @@ static int putVarint(unsigned char *p, u64 v){
 }
 
 
-int main(int argc, char **argv){
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_varint_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   int i;
   u64 x;
   u64 uX = 0;
@@ -59,7 +67,7 @@ int main(int argc, char **argv){
   unsigned char zHex[20];
 
   if( argc==1 ){
-    fprintf(stderr, 
+    fprintf(stderr,
          "Usage:\n"
          "  %s HH HH HH ...   Convert varint to decimal\n"
          "  %s DDDDD          Convert decimal to varint\n"
@@ -67,7 +75,7 @@ int main(int argc, char **argv){
          argv[0], argv[0]);
     exit(1);
   }
-  if( argc>2 
+  if( argc>2
    || (strlen(argv[1])==2 && hexValue(argv[1][0])>=0 && hexValue(argv[1][1])>=0)
   ){
     /* Hex to decimal */
@@ -94,7 +102,7 @@ int main(int argc, char **argv){
       exit(1);
     }
   }else{
-    char *z = argv[1];
+    const char *z = argv[1];
     int sign = 1;
     if( z[0]=='+' ) z++;
     else if( z[0]=='-' ){ z++; sign = -1; }

@@ -28,7 +28,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
- 
+
+#include "monolithic_examples.h"
+
+
 /* Return true if the line is all zeros */
 static int allZero(unsigned char *aLine){
   int i;
@@ -36,7 +39,13 @@ static int allZero(unsigned char *aLine){
   return i==16;
 }
 
-int main(int argc, char **argv){
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_dbtotxt_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   int pgsz = 0;               /* page size */
   long szFile;                /* Size of the input file in bytes */
   FILE *in;                   /* Input file */

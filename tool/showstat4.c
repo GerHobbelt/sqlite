@@ -9,6 +9,8 @@
 #include <ctype.h>
 #include "sqlite3.h"
 
+#include "monolithic_examples.h"
+
 #define ISPRINT(X)  isprint((unsigned char)(X))
 
 typedef sqlite3_int64 i64;   /* 64-bit signed integer type */
@@ -32,7 +34,13 @@ static int decodeVarint(const unsigned char *z, i64 *pVal){
 
 
 
-int main(int argc, char **argv){
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_showstat4_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   sqlite3 *db;
   sqlite3_stmt *pStmt;
   char *zIdx = 0;

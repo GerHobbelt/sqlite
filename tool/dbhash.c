@@ -27,6 +27,9 @@
 #include <assert.h>
 #include "sqlite3.h"
 
+#include "monolithic_examples.h"
+
+
 /* Context for the SHA1 hash */
 typedef struct SHA1Context SHA1Context;
 struct SHA1Context {
@@ -217,7 +220,7 @@ static void hash_finish(const char *zName){
 }
 /* End of the hashing logic
 *******************************************************************************/
-  
+
 /*
 ** Print an error resulting from faulting command-line arguments and
 ** abort the program.
@@ -376,7 +379,12 @@ static void showHelp(void){
   );
 }
 
-int main(int argc, char **argv){
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_dbhash_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   const char *zDb = 0;         /* Name of the database currently being hashed */
   int i;                       /* Loop counter */
   int rc;                      /* Subroutine return code */
@@ -430,7 +438,7 @@ int main(int argc, char **argv){
   if( zLike==0 ) zLike = "%";
 
   for(i=1; i<=nFile; i++){
-    static const int openFlags = 
+    static const int openFlags =
        SQLITE_OPEN_READWRITE |     /* Read/write so hot journals can recover */
        SQLITE_OPEN_URI
     ;
@@ -450,7 +458,7 @@ int main(int argc, char **argv){
 
     /* Start the hash */
     hash_init();
-  
+
     /* Hash table content */
     if( !omitContent ){
       pStmt = db_prepare(
@@ -472,7 +480,7 @@ int main(int argc, char **argv){
       }
       sqlite3_finalize(pStmt);
     }
-  
+
     /* Hash the database schema */
     if( !omitSchema ){
       hash_one_query(
@@ -482,7 +490,7 @@ int main(int argc, char **argv){
          zLike
       );
     }
-  
+
     /* Finish and output the hash and close the database connection. */
     hash_finish(zDb);
     sqlite3_close(g.db);
