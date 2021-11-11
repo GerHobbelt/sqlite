@@ -4841,7 +4841,9 @@ static int accessPayload(
   assert( pPage );
   assert( eOp==0 || eOp==1 );
   assert( pCur->eState==CURSOR_VALID );
-  assert( pCur->ix<pPage->nCell );
+  if( pCur->ix>=pPage->nCell ){
+    return SQLITE_CORRUPT_PAGE(pPage);
+  }
   assert( cursorHoldsMutex(pCur) );
 
   getCellInfo(pCur);
@@ -5028,7 +5030,6 @@ int sqlite3BtreePayload(BtCursor *pCur, u32 offset, u32 amt, void *pBuf){
   assert( cursorHoldsMutex(pCur) );
   assert( pCur->eState==CURSOR_VALID );
   assert( pCur->iPage>=0 && pCur->pPage );
-  assert( pCur->ix<pCur->pPage->nCell );
   return accessPayload(pCur, offset, amt, (unsigned char*)pBuf, 0);
 }
 
@@ -6363,7 +6364,7 @@ static int freePage2(BtShared *pBt, MemPage *pMemPage, Pgno iPage){
   assert( CORRUPT_DB || iPage>1 );
   assert( !pMemPage || pMemPage->pgno==iPage );
 
-  if( iPage<2 || iPage>pBt->nPage ){
+  if( NEVER(iPage<2) || iPage>pBt->nPage ){
     return SQLITE_CORRUPT_BKPT;
   }
   if( pMemPage ){
@@ -9553,11 +9554,12 @@ static int clearDatabasePage(
   }
   rc = getAndInitPage(pBt, pgno, &pPage, 0, 0);
   if( rc ) return rc;
-  if( pPage->bBusy ){
+  if( (pBt->openFlags & BTREE_SINGLE)==0 
+   && sqlite3PagerPageRefcount(pPage->pDbPage)!=1
+  ){
     rc = SQLITE_CORRUPT_BKPT;
     goto cleardatabasepage_out;
   }
-  pPage->bBusy = 1;
   hdr = pPage->hdrOffset;
   for(i=0; i<pPage->nCell; i++){
     pCell = findCell(pPage, i);
@@ -9584,7 +9586,6 @@ static int clearDatabasePage(
   }
 
 cleardatabasepage_out:
-  pPage->bBusy = 0;
   releasePage(pPage);
   return rc;
 }
@@ -9663,10 +9664,10 @@ static int btreeDropTable(Btree *p, Pgno iTable, int *piMoved){
     return SQLITE_CORRUPT_BKPT;
   }
 
-  rc = btreeGetPage(pBt, (Pgno)iTable, &pPage, 0);
-  if( rc ) return rc;
   rc = sqlite3BtreeClearTable(p, iTable, 0);
-  if( rc ){
+  if( rc ) return rc;
+  rc = btreeGetPage(pBt, (Pgno)iTable, &pPage, 0);
+  if( NEVER(rc) ){
     releasePage(pPage);
     return rc;
   }
