@@ -3824,7 +3824,7 @@ static int walSearchHash(
     u32 iFrame = sLoc.aHash[iKey] + sLoc.iZero;
     if( iFrame<=iLast 
      && iFrame>=pWal->minFrame 
-     && sLoc.aPgno[sLoc.aHash[iKey]]==pgno 
+     && sLoc.aPgno[sLoc.aHash[iKey]-1]==pgno 
     ){
       assert( iFrame>*piRead || CORRUPT_DB );
       *piRead = iFrame;
