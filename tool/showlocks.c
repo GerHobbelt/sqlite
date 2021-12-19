@@ -98,7 +98,9 @@ static int showLocksInRange(int fd, off_t lwr, off_t upr){
 
 int main(int argc, const char** argv){
   int fd;
+#if defined(F_GETLK)
   int cnt;
+#endif
 
   if( argc!=2 ){
     fprintf(stderr, "Usage: %s FILENAME\n", argv[0]);
