@@ -442,6 +442,7 @@ TESTSRC2 = \
   $(TOP)/ext/async/sqlite3async.c \
   $(TOP)/ext/misc/stmt.c \
   $(TOP)/ext/session/sqlite3session.c \
+  $(TOP)/ext/session/sqlite3changebatch.c \
   $(TOP)/ext/session/test_session.c \
   fts5.c
 
@@ -998,6 +999,9 @@ THREADTEST3_SRC = $(TOP)/test/threadtest3.c    \
 
 threadtest3$(EXE): sqlite3.o $(THREADTEST3_SRC) $(TOP)/src/test_multiplex.c
 	$(TCCX) $(TOP)/test/threadtest3.c $(TOP)/src/test_multiplex.c sqlite3.o -o $@ $(THREADLIB)
+
+bc_test1$(EXE): sqlite3.o $(TOP)/test/bc_test1.c $(TOP)/test/tt3_core.c
+	$(TCCX) $(TOP)/test/bc_test1.c sqlite3.o -o $@ $(THREADLIB)
 
 threadtest: threadtest3$(EXE)
 	./threadtest3$(EXE)
