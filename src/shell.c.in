@@ -258,7 +258,7 @@ static void setTextMode(FILE *file, int isOutput){
 # define setTextMode(X,Y)
 #endif
 
-static const char *(azHelp[]);
+static const char **azHelp;
 static unsigned numCommands;
 
 /* True if the timer is enabled */
@@ -524,7 +524,7 @@ static void shell_out_of_memory(void){
 /* Check a pointer to see if it is NULL.  If it is NULL, exit with an
 ** out-of-memory error.
 */
-static void shell_check_oom(void *p){
+static void shell_check_oom(const void *p){
   if( p==0 ) shell_out_of_memory();
 }
 /* This pattern is ubiquitous and subject to change, so encapsulate it. */
@@ -4143,7 +4143,7 @@ static void showPrimaryHelp(FILE *out, const char *zCmd){
 static int showHelp(FILE *out, const char *zPattern){
   int npm = 0;
   char *zPat = sqlite3_mprintf(".%s*", zPattern? zPattern : "");
-  const char **pzHxtra;
+  const char **pzHxtra = NULL;
   const char **pzH;
   int nma = 0;
   shell_check_oom(zPat);
@@ -6791,7 +6791,6 @@ end_ar_command:
 *******************************************************************************/
 #endif /* !defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_HAVE_ZLIB) */
 
-#if !defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_ENABLE_DBPAGE_VTAB)
 /*
 ** If (*pRc) is not SQLITE_OK when this function is called, it is a no-op.
 ** Otherwise, the SQL statement or statements in zSql are executed using
@@ -6873,6 +6872,8 @@ static char *shellMPrintf(int *pRc, const char *zFmt, ...){
   }
   return z;
 }
+
+#if !defined(SQLITE_OMIT_VIRTUALTABLE)
 
 /*
 ** When running the ".recover" command, each output table, and the special
@@ -7739,6 +7740,7 @@ DISPATCHABLE_COMMAND( eqp ? 0 0 ){
     }else{
       p->autoEQP = (u8)booleanValue(azArg[1]);
     }
+	return 0;
   }else{
     return SHELL_INVALID_ARGS;
   }
@@ -10492,12 +10494,14 @@ DISPATCHABLE_COMMAND( testcase ? 0 0 ){
   p->out = output_file_open("testcase-out.txt", 0);
   if( p->out==0 ){
     raw_printf(STD_ERR, "Error: cannot open 'testcase-out.txt'\n");
+	return SHELL_INVALID_ARGS;
   }
   if( nArg>=2 ){
     sqlite3_snprintf(sizeof(p->zTestcase), p->zTestcase, "%s", azArg[1]);
   }else{
     sqlite3_snprintf(sizeof(p->zTestcase), p->zTestcase, "?");
   }
+  return 0;
 }
 DISPATCHABLE_COMMAND( testctrl ? 0 0 ){
   static const struct {
@@ -10992,7 +10996,7 @@ COLLECT_HELP_TEXT[
 ** There must be two or more spaces between the end of the command and the
 ** start of the description of what that command does.
 */
-static const char *(azHelp[]) = {
+static const char *__azHelp[] = {
 /* Template for help text indents and length:
   ".whatever ?arg? ...      Summary of effects (limited to this line's length)",
   "   ^ ^                   ^  ^                                              ",
@@ -11001,6 +11005,8 @@ static const char *(azHelp[]) = {
   EMIT_HELP_TEXT(2);
   0 /* Sentinel */
 };
+// fix for MSVC being incapable of coping with unknown-dimension static forward reference:
+static const char** azHelp = __azHelp;
 
 
 #define NO_SUCH_COMMAND SQLITE_NOTFOUND
@@ -11553,7 +11559,7 @@ static char *find_home_dir(int clearFlag){
 ** This is a convenience function, used in several places, all of
 ** demand a shell exit upon failure, which leads to return 2.
  */
-static int run_single_query(ShellState *p, char *zSql){
+static int run_single_query(ShellState *p, const char *zSql){
   char *zErrMsg = 0;
   int rc;
   open_db(p, 0);
@@ -12356,7 +12362,7 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
   free(data.colWidth);
   free(data.zNonce);
   /* Freed ShellState objects so that valgrind detects real memory leaks. */
-  free(azCmd);
+  free((void *)azCmd);
   /* Process exit codes to yield single shell exit code. 
    * rc == 2 is a quit signal, resulting in no error by itself.
    * data.bAbruptExit conveys either an normal (success or error) exit
