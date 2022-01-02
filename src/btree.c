@@ -1251,7 +1251,7 @@ static void btreeParseCellPtr(
   pInfo->nPayload = nPayload;
   pInfo->pPayload = pIter;
   testcase( nPayload==pPage->maxLocal );
-  testcase( nPayload==pPage->maxLocal+1 );
+  testcase( nPayload==(u32)pPage->maxLocal+1 );
   if( nPayload<=pPage->maxLocal ){
     /* This is the (easy) common case where the entire payload fits
     ** on the local page.  No overflow is required.
@@ -1288,7 +1288,7 @@ static void btreeParseCellPtrIndex(
   pInfo->nPayload = nPayload;
   pInfo->pPayload = pIter;
   testcase( nPayload==pPage->maxLocal );
-  testcase( nPayload==pPage->maxLocal+1 );
+  testcase( nPayload==(u32)pPage->maxLocal+1 );
   if( nPayload<=pPage->maxLocal ){
     /* This is the (easy) common case where the entire payload fits
     ** on the local page.  No overflow is required.
@@ -1351,7 +1351,7 @@ static u16 cellSizePtr(MemPage *pPage, u8 *pCell){
     while( (*pIter++)&0x80 && pIter<pEnd );
   }
   testcase( nSize==pPage->maxLocal );
-  testcase( nSize==pPage->maxLocal+1 );
+  testcase( nSize==(u32)pPage->maxLocal+1 );
   if( nSize<=pPage->maxLocal ){
     nSize += (u32)(pIter - pCell);
     if( nSize<4 ) nSize = 4;
@@ -1359,7 +1359,7 @@ static u16 cellSizePtr(MemPage *pPage, u8 *pCell){
     int minLocal = pPage->minLocal;
     nSize = minLocal + (nSize - minLocal) % (pPage->pBt->usableSize - 4);
     testcase( nSize==pPage->maxLocal );
-    testcase( nSize==pPage->maxLocal+1 );
+    testcase( nSize==(u32)pPage->maxLocal+1 );
     if( nSize>pPage->maxLocal ){
       nSize = minLocal;
     }
@@ -4258,7 +4258,7 @@ static void btreeSetNPage(BtShared *pBt, MemPage *pPage1){
   int nPage = get4byte(&pPage1->aData[28]);
   testcase( nPage==0 );
   if( nPage==0 ) sqlite3PagerPagecount(pBt->pPager, &nPage);
-  testcase( pBt->nPage!=nPage );
+  testcase( pBt->nPage!=(u32)nPage );
   pBt->nPage = nPage;
 }
 
@@ -6833,7 +6833,7 @@ static void dropCell(MemPage *pPage, int idx, int sz, int *pRC){
   ptr = &pPage->aCellIdx[2*idx];
   pc = get2byte(ptr);
   hdr = pPage->hdrOffset;
-  testcase( pc==get2byte(&data[hdr+5]) );
+  testcase( pc==(u32)get2byte(&data[hdr+5]) );
   testcase( pc+sz==pPage->pBt->usableSize );
   if( pc+sz > pPage->pBt->usableSize ){
     *pRC = SQLITE_CORRUPT_BKPT;

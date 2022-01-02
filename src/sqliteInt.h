@@ -1764,6 +1764,7 @@ struct sqlite3 {
    /* TH3 expects this value  ^^^^^^^^^^ to be 0x40000. Coordinate any change */
 #define SQLITE_BloomFilter    0x00080000 /* Use a Bloom filter on searches */
 #define SQLITE_BloomPulldown  0x00100000 /* Run Bloom filters early */
+#define SQLITE_BalancedMerge  0x00200000 /* Balance multi-way merges */
 #define SQLITE_AllOpts        0xffffffff /* All optimizations */
 
 /*
@@ -3558,6 +3559,8 @@ struct Parse {
   AutoincInfo *pAinc;  /* Information about AUTOINCREMENT counters */
   Parse *pToplevel;    /* Parse structure for main program (or NULL) */
   Table *pTriggerTab;  /* Table triggers are being coded for */
+  TriggerPrg *pTriggerPrg;  /* Linked list of coded triggers */
+  ParseCleanup *pCleanup;   /* List of cleanup operations to run after parse */
   union {
     int addrCrTab;         /* Address of OP_CreateBtree on CREATE TABLE */
     Returning *pReturning; /* The RETURNING clause */
@@ -3612,9 +3615,7 @@ struct Parse {
   Token sArg;               /* Complete text of a module argument */
   Table **apVtabLock;       /* Pointer to virtual tables needing locking */
 #endif
-  TriggerPrg *pTriggerPrg;  /* Linked list of coded triggers */
   With *pWith;              /* Current WITH clause, or NULL */
-  ParseCleanup *pCleanup;   /* List of cleanup operations to run after parse */
 #ifndef SQLITE_OMIT_ALTERTABLE
   RenameToken *pRename;     /* Tokens subject to renaming by ALTER TABLE */
 #endif
@@ -4405,7 +4406,7 @@ void sqlite3DequoteExpr(Expr*);
 void sqlite3DequoteToken(Token*);
 void sqlite3TokenInit(Token*,char*);
 int sqlite3KeywordCode(const unsigned char*, int);
-int sqlite3RunParser(Parse*, const char*, char **);
+int sqlite3RunParser(Parse*, const char*);
 void sqlite3FinishCoding(Parse*);
 int sqlite3GetTempReg(Parse*);
 void sqlite3ReleaseTempReg(Parse*,int);
