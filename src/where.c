@@ -985,7 +985,7 @@ end_auto_index_create:
 ** the loop would benefit from a Bloom filter, and the WHERE_BLOOMFILTER bit
 ** is set.
 */
-static SQLITE_NOINLINE void constructBloomFilter(
+static SQLITE_NOINLINE void sqlite3ConstructBloomFilter(
   WhereInfo *pWInfo,    /* The WHERE clause */
   int iLevel,           /* Index in pWInfo->a[] that is pLevel */
   WhereLevel *pLevel,   /* Make a Bloom filter for this FROM term */
@@ -1069,13 +1069,20 @@ static SQLITE_NOINLINE void constructBloomFilter(
     sqlite3VdbeJumpHere(v, addrTop);
     pLoop->wsFlags &= ~WHERE_BLOOMFILTER;
     if( OptimizationDisabled(pParse->db, SQLITE_BloomPulldown) ) break;
-    while( iLevel < pWInfo->nLevel ){
-      iLevel++;
+    while( ++iLevel < pWInfo->nLevel ){
       pLevel = &pWInfo->a[iLevel];
       pLoop = pLevel->pWLoop;
-      if( pLoop==0 ) continue;
+      if( NEVER(pLoop==0) ) continue;
       if( pLoop->prereq & notReady ) continue;
-      if( pLoop->wsFlags & WHERE_BLOOMFILTER ) break;
+      if( (pLoop->wsFlags & (WHERE_BLOOMFILTER|WHERE_COLUMN_IN))
+                 ==WHERE_BLOOMFILTER
+      ){
+        /* This is a candidate for bloom-filter pull-down (early evaluation).
+        ** The test that WHERE_COLUMN_IN is omitted is important, as we are
+        ** not able to do early evaluation of bloom filters that make use of
+        ** the IN operator */
+        break;
+      }
     }
   }while( iLevel < pWInfo->nLevel );
   sqlite3VdbeJumpHere(v, addrOnce);
@@ -1106,10 +1113,19 @@ static sqlite3_index_info *allocateIndexInfo(
   int nOrderBy;
   sqlite3_index_info *pIdxInfo;
   u16 mNoOmit = 0;
+  const Table *pTab;
 
-  /* Count the number of possible WHERE clause constraints referring
-  ** to this virtual table */
+  assert( pSrc!=0 );
+  pTab = pSrc->pTab;
+  assert( pTab!=0 );
+  assert( IsVirtual(pTab) );
+
+  /* Find all WHERE clause constraints referring to this virtual table.
+  ** Mark each term with the TERM_OK flag.  Set nTerm to the number of
+  ** terms found.
+  */
   for(i=nTerm=0, pTerm=pWC->a; i<pWC->nTerm; i++, pTerm++){
+    pTerm->wtFlags &= ~TERM_OK;
     if( pTerm->leftCursor != pSrc->iCursor ) continue;
     if( pTerm->prereqRight & mUnusable ) continue;
     assert( IsPowerOfTwo(pTerm->eOperator & ~WO_EQUIV) );
@@ -1120,8 +1136,19 @@ static sqlite3_index_info *allocateIndexInfo(
     if( (pTerm->eOperator & ~(WO_EQUIV))==0 ) continue;
     if( pTerm->wtFlags & TERM_VNULL ) continue;
     assert( (pTerm->eOperator & (WO_OR|WO_AND))==0 );
-    assert( pTerm->u.x.leftColumn>=(-1) );
+    assert( pTerm->u.x.leftColumn>=XN_ROWID );
+    assert( pTerm->u.x.leftColumn<pTab->nCol );
+
+    /* tag-20191211-002: WHERE-clause constraints are not useful to the
+    ** right-hand table of a LEFT JOIN.  See tag-20191211-001 for the
+    ** equivalent restriction for ordinary tables. */
+    if( (pSrc->fg.jointype & JT_LEFT)!=0
+     && !ExprHasProperty(pTerm->pExpr, EP_FromJoin)
+    ){
+      continue;
+    }
     nTerm++;
+    pTerm->wtFlags |= TERM_OK;
   }
 
   /* If the ORDER BY clause contains only columns in the current 
@@ -1133,8 +1160,36 @@ static sqlite3_index_info *allocateIndexInfo(
     int n = pOrderBy->nExpr;
     for(i=0; i<n; i++){
       Expr *pExpr = pOrderBy->a[i].pExpr;
-      if( pExpr->op!=TK_COLUMN || pExpr->iTable!=pSrc->iCursor ) break;
+      Expr *pE2;
+
+      /* Virtual tables are unable to deal with NULLS FIRST */
       if( pOrderBy->a[i].sortFlags & KEYINFO_ORDER_BIGNULL ) break;
+
+      /* First case - a direct column references without a COLLATE operator */
+      if( pExpr->op==TK_COLUMN && pExpr->iTable==pSrc->iCursor ){
+        assert( pExpr->iColumn>=XN_ROWID && pExpr->iColumn<pTab->nCol );
+        continue;
+      }
+
+      /* 2nd case - a column reference with a COLLATE operator.  Only match
+      ** of the COLLATE operator matches the collation of the column. */
+      if( pExpr->op==TK_COLLATE
+       && (pE2 = pExpr->pLeft)->op==TK_COLUMN
+       && pE2->iTable==pSrc->iCursor
+      ){
+        const char *zColl;  /* The collating sequence name */
+        assert( !ExprHasProperty(pExpr, EP_IntValue) );
+        assert( pExpr->u.zToken!=0 );
+        assert( pE2->iColumn>=XN_ROWID && pE2->iColumn<pTab->nCol );
+        pExpr->iColumn = pE2->iColumn;
+        if( pE2->iColumn<0 ) continue;  /* Collseq does not matter for rowid */
+        zColl = sqlite3ColumnColl(&pTab->aCol[pE2->iColumn]);
+        if( zColl==0 ) zColl = sqlite3StrBINARY;
+        if( sqlite3_stricmp(pExpr->u.zToken, zColl)==0 ) continue;
+      }
+
+      /* No matches cause a break out of the loop */
+      break;
     }
     if( i==n){
       nOrderBy = n;
@@ -1162,26 +1217,7 @@ static sqlite3_index_info *allocateIndexInfo(
   pHidden->pParse = pParse;
   for(i=j=0, pTerm=pWC->a; i<pWC->nTerm; i++, pTerm++){
     u16 op;
-    if( pTerm->leftCursor != pSrc->iCursor ) continue;
-    if( pTerm->prereqRight & mUnusable ) continue;
-    assert( IsPowerOfTwo(pTerm->eOperator & ~WO_EQUIV) );
-    testcase( pTerm->eOperator & WO_IN );
-    testcase( pTerm->eOperator & WO_IS );
-    testcase( pTerm->eOperator & WO_ISNULL );
-    testcase( pTerm->eOperator & WO_ALL );
-    if( (pTerm->eOperator & ~(WO_EQUIV))==0 ) continue;
-    if( pTerm->wtFlags & TERM_VNULL ) continue;
-
-    /* tag-20191211-002: WHERE-clause constraints are not useful to the
-    ** right-hand table of a LEFT JOIN.  See tag-20191211-001 for the
-    ** equivalent restriction for ordinary tables. */
-    if( (pSrc->fg.jointype & JT_LEFT)!=0
-     && !ExprHasProperty(pTerm->pExpr, EP_FromJoin)
-    ){
-      continue;
-    }
-    assert( (pTerm->eOperator & (WO_OR|WO_AND))==0 );
-    assert( pTerm->u.x.leftColumn>=(-1) );
+    if( (pTerm->wtFlags & TERM_OK)==0 ) continue;
     pIdxCons[j].iColumn = pTerm->u.x.leftColumn;
     pIdxCons[j].iTermOffset = i;
     op = pTerm->eOperator & WO_ALL;
@@ -1218,9 +1254,13 @@ static sqlite3_index_info *allocateIndexInfo(
 
     j++;
   }
+  assert( j==nTerm );
   pIdxInfo->nConstraint = j;
   for(i=0; i<nOrderBy; i++){
     Expr *pExpr = pOrderBy->a[i].pExpr;
+    assert( pExpr->op==TK_COLUMN
+         || (pExpr->op==TK_COLLATE && pExpr->pLeft->op==TK_COLUMN
+              && pExpr->iColumn==pExpr->pLeft->iColumn) );
     pIdxOrderBy[i].iColumn = pExpr->iColumn;
     pIdxOrderBy[i].desc = pOrderBy->a[i].sortFlags & KEYINFO_ORDER_DESC;
   }
@@ -5615,7 +5655,7 @@ WhereInfo *sqlite3WhereBegin(
                   &pTabList->a[pLevel->iFrom], notReady, pLevel);
 #endif
       }else{
-        constructBloomFilter(pWInfo, ii, pLevel, notReady);
+        sqlite3ConstructBloomFilter(pWInfo, ii, pLevel, notReady);
       }
       if( db->mallocFailed ) goto whereBeginError;
     }
