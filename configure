@@ -770,11 +770,11 @@ ac_includes_default="\
 ac_subst_vars='LTLIBOBJS
 LIBOBJS
 BUILD_CFLAGS
-AMALGAMATION_LINE_MACROS
 USE_GCOV
 OPT_FEATURE_FLAGS
 HAVE_ZLIB
 USE_AMALGAMATION
+AMALGAMATION_LINE_MACROS
 TARGET_DEBUG
 TARGET_HAVE_EDITLINE
 TARGET_HAVE_READLINE
@@ -11862,7 +11862,7 @@ fi
 
 
 #########
-# Enable/disabled amalagamation line macros
+# Enable/disabled amalagmation line macros
 ########
 AMALGAMATION_LINE_MACROS=--linemacros=0
 if test "${amalgamation_line_macros}" = "yes" ; then

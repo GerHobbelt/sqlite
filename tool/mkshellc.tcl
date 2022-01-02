@@ -23,6 +23,7 @@ set ::help {
     -inc-type <inc_type>=<include_filename>
     -source-tags <tags_degree>
     -top-dir <project_root>
+    -linemacros=?  => Emit #line directives into output or not. (? = 1 or 0)
     -tcl
  If no input files are specified, <PROJECT_ROOT>/src/shell.c.in is read.
  Input files are read and processed in order, producing output to sdout.
@@ -73,6 +74,7 @@ set ::headCommentLines [expr 1+[regexp -all "\n" $::headComment]]
 
 set ::topDir [file dir [file dir [file normal $argv0]]]
 set runMode normal
+set linemacros 0
 
 set ::lineTags 1 ; # 0 => none, 1 => source change, 2 => line syncs, 3 => more
 
@@ -82,25 +84,38 @@ set ::inFiles {}
 array set ::incTypes [list "*" "$::topDir/src/shell.c.in"]
 array set ::ignoringCommands [list]
 
-while  {[llength $argv] > 0} {
-  foreach {opt} $arv { set argv [lreplace $argv 1 end] ; break }
+for {set i 0} {$i<[llength $argv]} {incr i} {
+  set opt [lindex $argv $i]
   if {[regexp {^-{1,2}((help)|(details)|(parameters))$} $opt ma ho]} {
     set runMode $ho
   } elseif {[regexp {^-it$} $opt]} {
-    foreach {nextOpt} $arv { set argv [lreplace $argv 1 end] ; break }
+    incr i
+    if {$i==[llength $argv]} {
+      error "No argument following $opt"
+    }
+    set nextOpt [lindex $argv $i]
     if {![regexp {^(\w+)=(.+)$} $nextOpt ma k v]} {
       puts stderr "Get help with --help."
       exit 1 
     }
     set ::incTypes($k) $v
   } elseif {$opt eq "-top-dir"} {
-    foreach {::topDir} $arv { set argv [lreplace $argv 1 end] ; break }
+    if {$i==[llength $argv]} {
+      error "No argument following $opt"
+    }
+    set ::topDir [lindex $argv $i]
     if {::topDir eq ""} { set ::topDir . }
   } elseif {$opt eq "-source-tags"} {
-    foreach {nextOpt} $arv { set argv [lreplace $argv 1 end] ; break }
+    if {$i==[llength $argv]} {
+      error "No argument following $opt"
+    }
+    set nextOpt [lindex $argv $i]
     if {![regexp {^\d$} $nextOpt ::lineTags]} {
       puts stderr "Argument following -source-tags must be a digit."
     }
+  } elseif {[regexp {^-?-linemacros(?:=([01]))?$} $opt ma ulm]} {
+    if {$ulm == ""} {set ulm 1}
+    set linemacros $ulm
   } elseif {$opt eq "-tcl"} {
     puts stderr "Warning: Tcl extension not wholly implemented."
     set ::tclGenerate 1
@@ -164,13 +179,18 @@ set ::apparentSrcPrecLines $::headCommentLines
 # A #line directive is only emitted if its kind is enabled
 # All #line emits pass through this proc.
 proc line_tag { ostrm srcPrecLines {srcFile ""} } {
+  global linemacros
   if {$::lineTags == 0} return
   set sayLine [expr {$srcPrecLines + 1}]
   if {$srcFile ne ""} {
     set ::apparentSrcFile $srcFile
-    puts $ostrm "#line $sayLine \"$::apparentSrcFile\""
+    if {$linemacros} {
+      puts $ostrm "#line $sayLine \"$::apparentSrcFile\""
+    }
   } elseif {$::lineTags > 1} {
-    puts $ostrm "#line $sayLine"
+    if {$linemacros} {
+      puts $ostrm "#line $sayLine"
+    }
   }
   set ::apparentSrcPrecLines $srcPrecLines
 }
