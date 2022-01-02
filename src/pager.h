@@ -179,13 +179,14 @@ void *sqlite3PagerGetExtra(DbPage *);
 void sqlite3PagerPagecount(Pager*, int*);
 int sqlite3PagerBegin(Pager*, int exFlag, int);
 int sqlite3PagerCommitPhaseOne(Pager*,const char *zSuper, int);
-int sqlite3PagerExclusiveLock(Pager*);
+int sqlite3PagerExclusiveLock(Pager*, DbPage *pPage1, Pgno*);
 int sqlite3PagerSync(Pager *pPager, const char *zSuper);
 int sqlite3PagerCommitPhaseTwo(Pager*);
 int sqlite3PagerRollback(Pager*);
 int sqlite3PagerOpenSavepoint(Pager *pPager, int n);
 int sqlite3PagerSavepoint(Pager *pPager, int op, int iSavepoint);
 int sqlite3PagerSharedLock(Pager *pPager);
+
 
 #ifndef SQLITE_OMIT_WAL
   int sqlite3PagerCheckpoint(Pager *pPager, sqlite3*, int, int*, int*);
@@ -241,10 +242,26 @@ void sqlite3PagerTruncateImage(Pager*,Pgno);
 
 void sqlite3PagerRekey(DbPage*, Pgno, u16);
 
+#ifndef SQLITE_OMIT_CONCURRENT
+void sqlite3PagerEndConcurrent(Pager*);
+int sqlite3PagerBeginConcurrent(Pager*);
+void sqlite3PagerDropExclusiveLock(Pager*);
+int sqlite3PagerUpgradeSnapshot(Pager *pPager, DbPage*);
+void sqlite3PagerSetDbsize(Pager *pPager, Pgno);
+int sqlite3PagerIsWal(Pager*);
+#else
+# define sqlite3PagerEndConcurrent(x)
+#endif
+
+#if defined(SQLITE_DEBUG) || !defined(SQLITE_OMIT_CONCURRENT)
+int sqlite3PagerIswriteable(DbPage*);
+#endif
+
+int sqlite3PagerWalInfo(Pager*, u32 *pnPrior, u32 *pnFrame);
+
 /* Functions to support testing and debugging. */
 #if !defined(NDEBUG) || defined(SQLITE_TEST)
   Pgno sqlite3PagerPagenumber(DbPage*);
-  int sqlite3PagerIswriteable(DbPage*);
 #endif
 #ifdef SQLITE_TEST
   int *sqlite3PagerStats(Pager*);

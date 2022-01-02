@@ -1166,6 +1166,7 @@ typedef struct DbFixer DbFixer;
 typedef struct Schema Schema;
 typedef struct Expr Expr;
 typedef struct ExprList ExprList;
+typedef struct FastPrng FastPrng;
 typedef struct FKey FKey;
 typedef struct FuncDestructor FuncDestructor;
 typedef struct FuncDef FuncDef;
@@ -1286,6 +1287,14 @@ typedef int VList;
 #ifndef SQLITE_DEFAULT_WAL_SYNCHRONOUS
 # define SQLITE_DEFAULT_WAL_SYNCHRONOUS SQLITE_DEFAULT_SYNCHRONOUS
 #endif
+
+/*
+** State of a simple PRNG used for the per-connection and per-pager
+** pseudo-random number generators.
+*/
+struct FastPrng {
+  unsigned int x, y;
+};
 
 /*
 ** Each database file to be accessed by the system is an instance
@@ -1532,6 +1541,7 @@ struct sqlite3 {
   u32 dbOptFlags;               /* Flags to enable/disable optimizations */
   u8 enc;                       /* Text encoding */
   u8 autoCommit;                /* The auto-commit flag. */
+  u8 eConcurrent;               /* CONCURRENT_* value */
   u8 temp_store;                /* 1: file 2: memory 0: default */
   u8 mallocFailed;              /* True if we have seen a malloc failure */
   u8 bBenignMalloc;             /* Do not require OOMs if true */
@@ -1545,6 +1555,7 @@ struct sqlite3 {
   u8 nSqlExec;                  /* Number of pending OP_SqlExec opcodes */
   u8 eOpenState;                /* Current condition of the connection */
   int nextPagesize;             /* Pagesize after VACUUM if >0 */
+  FastPrng sPrng;               /* State of the per-connection PRNG */
   i64 nChange;                  /* Value returned by sqlite3_changes() */
   i64 nTotalChange;             /* Value returned by sqlite3_total_changes() */
   int aLimit[SQLITE_N_LIMIT];   /* Limits */
@@ -1655,6 +1666,13 @@ struct sqlite3 {
 };
 
 /*
+** Candidate values for sqlite3.eConcurrent
+*/
+#define CONCURRENT_NONE   0
+#define CONCURRENT_OPEN   1
+#define CONCURRENT_SCHEMA 2
+
+/*
 ** A macro to discover the encoding of a database.
 */
 #define SCHEMA_ENC(db) ((db)->aDb[0].pSchema->enc)
@@ -1714,6 +1732,7 @@ struct sqlite3 {
                                           /*   the count using a callback. */
 #define SQLITE_CorruptRdOnly  HI(0x00002) /* Prohibit writes due to error */
 
+#define SQLITE_NoopUpdate     0x01000000  /* UPDATE operations are no-ops */
 /* Flags used only if debugging */
 #ifdef SQLITE_DEBUG
 #define SQLITE_SqlTrace       HI(0x0100000) /* Debug print SQL as it executes */
@@ -4632,6 +4651,8 @@ Vdbe *sqlite3GetVdbe(Parse*);
 void sqlite3PrngSaveState(void);
 void sqlite3PrngRestoreState(void);
 #endif
+void sqlite3FastPrngInit(FastPrng*);
+void sqlite3FastRandomness(FastPrng*, int N, void *P);
 void sqlite3RollbackAll(sqlite3*,int);
 void sqlite3CodeVerifySchema(Parse*, int);
 void sqlite3CodeVerifyNamedSchema(Parse*, const char *zDb);

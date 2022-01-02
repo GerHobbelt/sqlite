@@ -220,6 +220,7 @@ foreach {tn nCkpt1 nCkpt2 res} [list \
   db2 close
 }
 
+
 #-------------------------------------------------------------------------
 reset_db
 do_execsql_test 1.8.1 {
@@ -261,5 +262,51 @@ do_test 1.8.6 {
   catchsql { SELECT * FROM sqlite_master } db2
 } {1 {malformed database schema (?)}}
 db2 close
+
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 1.0 {
+  CREATE TABLE t1(a, b, c);
+  CREATE INDEX t1a ON t1(a);
+  CREATE INDEX t1b ON t1(b);
+  CREATE INDEX t1c ON t1(c);
+  PRAGMA journal_mode = wal2;
+
+  INSERT INTO t1 VALUES(randomblob(50), randomblob(50), randomblob(50));
+  INSERT INTO t1 VALUES(randomblob(50), randomblob(50), randomblob(50));
+  INSERT INTO t1 VALUES(randomblob(50), randomblob(50), randomblob(50));
+  PRAGMA journal_size_limit = 5000;
+  INSERT INTO t1 VALUES(randomblob(50), randomblob(50), randomblob(50));
+  INSERT INTO t1 VALUES(randomblob(50), randomblob(50), randomblob(50));
+  INSERT INTO t1 VALUES(randomblob(50), randomblob(50), randomblob(50));
+  INSERT INTO t1 VALUES(randomblob(50), randomblob(50), randomblob(50));
+  INSERT INTO t1 VALUES(randomblob(50), randomblob(50), randomblob(50));
+} {wal2 5000}
+
+do_test 2.1 {
+  forcecopy test.db test.db2
+  forcecopy test.db-wal2 test.db2-wal
+  forcecopy test.db-wal test.db2-wal2
+  
+  hexio_write test.db2-wal 5000 1234567890
+} {5}
+
+do_test 2.2 {
+  sqlite3 db2 test.db2
+  breakpoint
+  execsql {
+    SELECT count(*) FROM t1;
+    PRAGMA integrity_check
+  } db2
+} {4 ok}
+
+do_test 2.3 {
+  execsql {
+    INSERT INTO t1 VALUES(randomblob(50), randomblob(50), randomblob(50));
+    SELECT count(*) FROM t1;
+    PRAGMA integrity_check
+  } db2
+} {5 ok}
+
 
 finish_test
