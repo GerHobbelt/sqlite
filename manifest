@@ -1,5 +1,5 @@
-C Check\sfor\sforeign\skey\sconstraint\serrors\sprior\sto\sreturning\sthe\sresults\sfrom\na\sRETURNING\sclause.\s\sSee\s[forum:/forumpost/793beaf322|forum\spost\s793beaf322].
-D 2021-12-01T19:17:14.951
+C Move\sthe\sTK_IS\stoken\sso\sthat\sit\sis\sadjacent\sto\sthe\sTK_IN\stoken,\sas\sthis\nallows\sthe\sC\scompiler\sto\soptimize\sbetter,\sresulting\sin\sa\sslightly\ssmaller\nand\sfaster\sexecutable.
+D 2021-12-02T14:28:36.785
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -539,7 +539,7 @@ F src/os_win.c 77d39873836f1831a9b0b91894fec45ab0e9ca8e067dc8c549e1d1eca1566fe9
 F src/os_win.h 7b073010f1451abe501be30d12f6bc599824944a
 F src/pager.c bc10c191d18bffd3d76eda5f162799e43a9f875ecfe7c4869f752e2ddef87ea2
 F src/pager.h 4bf9b3213a4b2bebbced5eaa8b219cf25d4a82f385d093cd64b7e93e5285f66f
-F src/parse.y 0bd7971a7489bbf6c3726f1b50da6e508bdff8fa493e9cc3f5a96b12cbb2361e
+F src/parse.y 761b5d30a7ea9bd2db3b3571438cfcceb5f7dbf4fcad6881c8de65bdda07135a
 F src/pcache.c 084e638432c610f95aea72b8509f0845d2791293f39d1b82f0c0a7e089c3bb6b
 F src/pcache.h 4f87acd914cef5016fae3030343540d75f5b85a1877eed1a2a19b9f284248586
 F src/pcache1.c 54881292a9a5db202b2c0ac541c5e3ef9a5e8c4f1c1383adb2601d5499a60e65
@@ -551,7 +551,7 @@ F src/random.c 097dc8b31b8fba5a9aca1697aeb9fd82078ec91be734c16bffda620ced7ab83c
 F src/resolve.c 4a1db4aadd802683db40ca2dbbb268187bd195f10cbdb7206dbd8ac988795571
 F src/rowset.c ba9515a922af32abe1f7d39406b9d35730ed65efab9443dc5702693b60854c92
 F src/select.c a7a3d9f54eb24821ec5f67f2e5589b68a5d42d46fc5849d7376886777d93a85a
-F src/shell.c.in 975f268ef261773fcbed1e519dfa10c4f33e8b1cffc12120563e61857fff07c6
+F src/shell.c.in e7ee6517544d075d9f06ee2571567026b89cf9fbeef16a74918019b1cb425764
 F src/sqlite.h.in 5cd209ac7dc4180f0e19292846f40440b8488015849ca0110c70b906b57d68f0
 F src/sqlite3.rc 5121c9e10c3964d5755191c80dd1180c122fc3a8
 F src/sqlite3ext.h 8ff2fd2c166150b2e48639f5e506fb44e29f1a3f65031710b9e89d1c126ac839
@@ -637,10 +637,10 @@ F src/vxworks.h d2988f4e5a61a4dfe82c6524dd3d6e4f2ce3cdb9
 F src/wal.c ed0398a7adf02c31e34aada42cc86c58f413a7afe5f741a5d373ad087abde028
 F src/wal.h c3aa7825bfa2fe0d85bef2db94655f99870a285778baa36307c0a16da32b226a
 F src/walker.c f890a3298418d7cba3b69b8803594fdc484ea241206a8dfa99db6dd36f8cbb3b
-F src/where.c 4b276017881185d0e1dc984df66c835cde6faf03834ef9ff34f48653f9144dec
-F src/whereInt.h 83877a75a1bce056ea44aff02f1dfa958ad1d6038c213ddadb8652003b45151d
+F src/where.c b50391df607937593596fbb8ea39f673d9a3715a65750567b442d22dd20720ca
+F src/whereInt.h 1630d9418512b080598e9a72b8af6b8bd1b9ab13fee1458f151762b6df206791
 F src/wherecode.c 1f5b62f46d284c8886945eb7438415bc27e23e87bb60b9ee468fa6bd31268f33
-F src/whereexpr.c 17bdbf4f5b490e70a18635498f0b910a558f953a9bf80af7f19cbde6e60e6825
+F src/whereexpr.c da93d2227cc5246fe4a79d130f2a1a215017e12d76a035434145c443abd6f64b
 F src/window.c 5d3b397b0c026d0ff5890244ac41359e524c01ae31e78782e1ff418c3e271a9e
 F test/8_3_names.test ebbb5cd36741350040fd28b432ceadf495be25b2
 F test/affinity2.test ce1aafc86e110685b324e9a763eab4f2a73f737842ec3b687bd965867de90627
@@ -1933,7 +1933,7 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P 8c986782547211098eb0e4e722eda0097421223af279381373d0055211b5e9d2
-R 21e311cc3a849b363a459e68e73e4039
+P fcc509d325dabe06275e7804183bb8b4ba6470a45b443bc8292eecd0974e6367
+R 888c8c19b41c8406ec3840142d61350f
 U drh
-Z aa1759274fb4dd09e62bccb20e559386
+Z 0b6dacbe87596435aee017d0aa63fe31
