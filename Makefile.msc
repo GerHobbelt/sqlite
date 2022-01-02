@@ -809,6 +809,15 @@ MKSQLITE3H_ARGS = --useapicall
 MKSQLITE3H_ARGS =
 !ENDIF
 !ENDIF
+
+!IFNDEF MKSHELLC_ARGS
+!IF $(DEBUG)>1 && $(NO_LINEMACROS)==0
+MKSHELLC_ARGS = --linemacros=1
+!ELSE
+MKSHELLC_ARGS = --linemacros=0
+!ENDIF
+!ENDIF
+
 # <</mark>>
 
 # Define -DNDEBUG to compile without debugging (i.e., for production usage)
@@ -2232,7 +2241,7 @@ SHELL_SRC = $(SHELL_SRC) $(TOP)\ext\misc\zipfile.c
 !ENDIF
 
 shell.c:	$(SHELL_SRC) $(TOP)\tool\mkshellc.tcl
-	$(TCLSH_CMD) $(TOP)\tool\mkshellc.tcl > shell.c
+	$(TCLSH_CMD) $(TOP)\tool\mkshellc.tcl $(MKSHELLC_ARGS) > shell.c
 
 zlib:
 	pushd $(ZLIBDIR) && $(MAKE) /f win32\Makefile.msc clean $(ZLIBLIB) && popd

@@ -1102,7 +1102,7 @@ SHELL_SRC = \
         $(TOP)/src/test_windirent.c
 
 shell.c:	$(SHELL_SRC) $(TOP)/tool/mkshellc.tcl
-	$(TCLSH_CMD) $(TOP)/tool/mkshellc.tcl >shell.c
+	$(TCLSH_CMD) $(TOP)/tool/mkshellc.tcl $(AMALGAMATION_LINE_MACROS) >shell.c
 
 
 
