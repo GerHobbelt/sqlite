@@ -1,123 +1,144 @@
-# Proposed Enhancements To JSON Functions
+# JSON Functions Enhancements (2022)
 
-## 1.0 New function json_nextract()
+This document summaries enhancements to the SQLite JSON support added in
+early 2022.
 
-The new function json_nextract() works the same as json_extract() except
-when the input JSON is not well-formed.  This is what the routines do
-when the input JSON in the first argument is not well-formed:
+## 1.0 Change summary:
 
-  1.  **json_extract()** &rarr; raises an error and aborts the query.
+  1.  New **->** and **->>** operators that work like MySQL and PostgreSQL (PG).
+  2.  JSON functions are built-in rather than being an extension.  They
+      are included by default, but can be omitted using the
+      -DSQLITE_OMIT_JSON compile-time option.
 
-  2.  **json_nextract()** with 2 arguments the second argument is
-      exactly `'$'` &rarr; work like json_quote() and return the first
-      argument as a JSON quoted string.
 
-  3.  **json_nextract()** otherwise &rarr; return NULL.
+## 2.0 New operators **->** and **->>**
 
-If the input is known to be JSON, then json_extract() should work just
-fine for all your needs.  But sometimes a table might have a column that
-sometimes holds JSON and sometimes holds some other content.  Suppose,
-for example, an application started out holding a single phone number for
-each user, but later was enhanced so that the same database file could
-hold a JSON array of phone numbers.  The USER table might have some entries
-that are JSON arrays and some entries which are just text strings containing
-phone numbers.  The application can use json_nextract() to be robust in
-extracting values from that column.
+The SQLite language adds two new binary operators **->** and **->>**.
+Both operators are similar to json_extract().  The left operand is
+JSON and the right operand is a JSON path expression (possibly abbreviated
+for compatibility with PG - see below).  So they are similar to a
+two-argument call to json_extract().
 
-The feature (2) above is envisioned to be useful for sanitizing table
-content.  Suppose a table is populated from dirty CSV, and some of the
-JSON is mis-formatted.  You could convert all entries in a table to use
-well-formed JSON using something like this:
+The difference between -> and ->> (and json_extract()) is as follows:
 
-> ~~~
-UPDATE data SET jsonData = json_nextract(jsonData,'$');
-~~~
+  *  The -> operator always returns JSON.
 
-In the query above, well-formed JSON would be unchanged, and mis-formatted
-JSON would be converted into a well-formatted JSON string.
+  *  The ->> operator converts the answer into a primitive SQL datatype
+     such as TEXT, INTEGER, REAL, or NULL.  If a JSON object or array
+     is selected, that object or array is rendered as text.  If a JSON
+     value is selected, that value is converted into its corresponding
+     SQL type
 
-## 2.0 Add the `->` and '->>` operators as aliases for json_extract().
+  *  The json_extract() interface returns JSON when a JSON object or
+     array is selected, or a primitive SQL datatype when a JSON value
+     is selected.  This is different from MySQL, in which json_extract()
+     always returns JSON, but the difference is retained because it has
+     worked that way for 6 years and changing it now would likely break
+     a lot of legacy code.
 
-Two new binary operators "`->`" and "`->>`" operators are the same
-as json_nextract() and json_extract(), respectively.
+In MySQL and PG, the ->> operator always returns TEXT (or NULL) and never
+INTEGER or REAL.  This is due to limitations in the type handling capabilities
+of those systems.  In MySQL and PG, the result type a function or operator
+may only depend on the type of its arguments, never the value of its arguments.
+But the underlying JSON type depends on the value of the JSON path
+expression, not the type of the JSON path expression (which is always TEXT).
+Hence, the result type of ->> in MySQL and PG is unable to vary according
+to the type of the JSON value being extracted.
 
-> ~~~
-SELECT '{"a":5,"b":17}' -> '$.a',  '[4,1,-6]' ->> '$[0]';
-~~~
+The type system in SQLite is more general.  Functions in SQLite are able
+to return different datatypes depending on the value of their arguments.
+So the ->> operator in SQLite is able to return TEXT, INTEGER, REAL, or NULL
+depending on the JSON type of the value being extracted.  This means that
+the behavior of the ->> is slightly different in SQLite versus MySQL and PG
+in that it will sometimes return INTEGER and REAL values, depending on its
+inputs.  It is possible to implement the ->> operator in SQLite so that it
+always operates exactly like MySQL and PG and always returns TEXT or NULL,
+but I have been unable to think of any situations where returning the
+actual JSON value this would cause problems, so I'm including the enhanced
+functionality in SQLite.
 
-Is equivalent to (and generates the same bytecode as):
+The table below attempts to summarize the differences between the
+-> and ->> operators and the json_extract() function, for SQLite, MySQL,
+and PG.  JSON values are shown using their SQL text representation but
+in a bold font.
 
-> ~~~
-SELECT json_nextract('{"a":5,"b":17}','$.a'), json_extract('[4,1,-6]','$[0]');
-~~~
 
-The ->> operator works the same as the ->> operator in MySQL
-and mostly compatible with PostgreSQL (hereafter "PG").  Addition enhancements
-in section 3.0 below are required to bring ->> into compatibility with PG.
+<table border=1 cellpadding=5 cellspacing=0>
+<tr><th>JSON<th>PATH<th>-&gt; operator<br>(all)<th>-&gt;&gt; operator<br>(MySQL/PG)
+    <th>-&gt;&gt; operator<br>(SQLite)<th>json_extract()<br>(SQLite)
+<tr><td> **'{"a":123}'**     <td>'$.a'<td> **'123'**     <td> '123'          <td> 123           <td> 123
+<tr><td> **'{"a":4.5}'**     <td>'$.a'<td> **'4.5'**     <td> '4.5'          <td> 4.5           <td> 4.5
+<tr><td> **'{"a":"xyz"}'**   <td>'$.a'<td> **'"xyz"'**   <td> 'xyz'          <td> 'xyz'         <td> 'xyz'
+<tr><td> **'{"a":null}'**    <td>'$.a'<td> **'null'**    <td> NULL           <td> NULL          <td> NULL
+<tr><td> **'{"a":[6,7,8]}'** <td>'$.a'<td> **'[6,7,8]'** <td> '[6,7,8]'      <td> '[6,7,8]'     <td> **'[6,7,8]'**
+<tr><td> **'{"a":{"x":9}}'** <td>'$.a'<td> **'{"x":9}'** <td> '{"x":9}'      <td> '{"x":9}'     <td> **'{"x":9}'**
+<tr><td> **'{"b":999}'**     <td>'$.a'<td> NULL          <td> NULL           <td> NULL          <td> NULL
+</table>
 
-The -> operator is mostly compatible with MySQL and PG too.  The main
-difference is that in MySQL and PG, the result from -> is not a primitive
-SQL datatype type but rather more JSON.  It is unclear how this would ever
-be useful for anything, and so I am unsure why they do this.  But that is
-the way it is done in those system.
+Important points about the table above:
 
-SQLite strives to be compatible with MySQL and PG with the ->> operator,
-but not with the -> operator.
+  *  The -> operator always returns either JSON or NULL.
 
-## 3.0 Abbreviated JSON path specifications for use with -> and ->>
+  *  The ->> operator never returns JSON.  It always returns TEXT or NULL, or in the
+     case of SQLite, INTEGER or REAL.
 
-The "->" and "->>" and operators allow abbreviated
-forms of JSON path specs that omit unnecessary $-prefix text.  For
-example, the following queries are equivalent:
+  *  The MySQL json_extract() function works exactly the same
+     as the MySQL -> operator.
 
-> ~~~
-SELECT '{"a":17, "b":4.5}' ->> '$.a';
-SELECT '{"a":17, "b":4.5}' ->> 'a';
-~~~
+  *  The SQLite json_extract() operator works like -> for JSON objects and
+     arrays, and like ->> for JSON values.
 
-Similarly, these queries mean exactly the same thing:
+  *  The -> operator works the same for all systems.
 
-> ~~~
-SELECT '[17,4.5,"hello",0]' ->> '$[1]';
-SELECT '[17,4.5,"hello",0]' ->> 1;
-~~~
+  *  The only difference in ->> between SQLite and other systems is that
+     when the JSON value is numeric, SQLite returns a numeric SQL value,
+     whereas the other systems return a text representation of the numeric
+     value.
 
-The abbreviated JSON path specs are allowed with the -> and ->> operators
-only.  The json_extract() and json_nextract() functions, and all the other
-JSON functions, still use the full path spec and will raise an error if
-the full path spec is not provided.
+### 2.1 Abbreviated JSON path expressions for PG compatibility
 
-This enhancement provides compatibility with PG.
-PG does not support JSON path specs on its ->> operator.  With PG, the
-right-hand side of ->> must be either an integer (if the left-hand side
-is a JSON array) or a text string which is interpreted as a field name
-(if the left-hand side is a JSON object).  So the ->> operator in PG is
-rather limited.  With this enhancement, the ->> operator in SQLite
-covers all the functionality of PG, plus a lot more.
+The table above always shows the full JSON path expression: '$.a'.  But
+PG does not accept this syntax.  PG only allows a single JSON object label
+name or a single integer array index.  In order to provide compatibility
+with PG, The -> and ->> operators in SQLite are extended to also support
+a JSON object label or an integer array index for the right-hand side
+operand, in addition to a full JSON path expression.
 
-MySQL also supports the ->> operator, but it requires a full JSON path
-spec on the right-hand side.  SQLite also supports this, so SQLite is
-compatibility with MySQL as well.  Note, however, that MySQL and PG
-are incompatible with each other.  You can (in theory) write SQL that
-uses the ->> operator that is compatible between SQLite and MySQL,
-or that is compatible between SQLite and PG, but not that is compatible
-with all three.
+Thus, a -> or ->> operator that works on MySQL will work in
+SQLite.  And a -> or ->> operator that works in PG will work in SQLite.
+But because SQLite supports the union of the disjoint capabilities of
+MySQL and PG, there will always be -> and ->> operators that work in
+SQLite that do not work in one of MySQL and PG.  This is an unavoidable
+consequence of the different syntax for -> and ->> in MySQL and PG.
 
-## 4.0 New json_ntype() SQL function
+In the following table, assume that "value1" is a JSON object and
+"value2" is a JSON array.
 
-A new function "json_ntype(JSON)" works like the existing one-argument
-version of the "json_type(JSON)" function, except that json_ntype(JSON)
-returns NULL if the argument is not well-formed JSON, whereas the
-existing json_type() function raises an error in that case.
+<table border=1 cellpadding=5 cellspacing=0>
+<tr><th>SQL expression     <th>Works in MySQL?<th>Works in PG?<th>Works in SQLite
+<tr><td>value1-&gt;'$.a'   <td> yes           <td>  no        <td> yes
+<tr><td>value1-&gt;'a'     <td> no            <td>  yes       <td> yes
+<tr><td>value2-&gt;'$[2]'  <td> yes           <td>  no        <td> yes
+<tr><td>value2-&gt;2       <td> no            <td>  yes       <td> yes
+</table>
 
-In other words, "`json_ntype($json)`" is equivalent to
-"`CASE WHEN json_valid($json) THEN json_type($json) END`".
+The abbreviated JSON path expressions only work for the -> and ->> operators
+in SQLite.  The json_extract() function, and all other built-in SQLite
+JSON functions, continue to require complete JSON path expressions for their
+PATH arguments.
 
-This function is seen as useful for figuring out which rows of a table
-have a JSON type in a column and which do not.  For example, to find
-all rows in a table in which the value of the the "phonenumber" column
-contains a JSON array, you could write:
+## 3.0 JSON moved into the core
 
-> ~~~
-SELECT * FROM users WHERE json_ntype(phonenumber) IS 'array';
-~~~
+The JSON interface is now moved into the SQLite core.
+
+When originally written in 2015, the JSON functions were an extension
+that could be optionally included at compile-time, or loaded at run-time.
+The implementation was in a source file named ext/misc/json1.c in the
+source tree.  JSON functions were only compiled in if the
+-DSQLITE_ENABLE_JSON1 compile-time option was used.
+
+After these enhancements, the JSON functions are now built-ins.
+The source file that implements the JSON functions is moved to src/json.c.
+No special compile-time options are needed to load JSON into the build.
+Instead, there is a new -DSQLITE_OMIT_JSON compile-time option to leave
+them out.
