@@ -1,5 +1,5 @@
-C Fix\sincorrect\stestcase()\sand\sassert()\smacros\sin\sjson.c.\s\sThey\swere\snot\scausing\nproblems.\s\sThe\sassert()\swas\ssimply\sunreachable.\s\sThe\stestcase()\sadded\san\nunreachable\scondition.
-D 2022-01-17T15:23:57.622
+C Fix\sa\stest\sresult\sfor\salterauth2.test\sdue\sto\sthe\srecent\sfix\sto\sauthorizer\ncalls\sfor\sALTER\sTABLE\sDROP\sCOLUMN.
+D 2022-01-19T18:31:43.542
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -484,7 +484,7 @@ F spec.template 86a4a43b99ebb3e75e6b9a735d5fd293a24e90ca
 F sqlite.pc.in 42b7bf0d02e08b9e77734a47798d1a55a9e0716b
 F sqlite3.1 fc7ad8990fc8409983309bb80de8c811a7506786
 F sqlite3.pc.in 48fed132e7cb71ab676105d2a4dc77127d8c1f3a
-F src/alter.c 67ef8e685f547038b7ad93a7c6571f790d0a5bb1c00632d5466ffb4ccf3ee6e8
+F src/alter.c e3943d8fbcaf60f79f39d4aecc56a6a8092f51f93d6a7c5b1db2633c5fa10c30
 F src/analyze.c 7518b99e07c5494111fe3bd867f28f804b6c5c1ad0703ec3d116de9bab3fa516
 F src/attach.c e3f9d9a2a4a844750f3f348f37afb244535f21382cbfcd840152cb21cb41cfaf
 F src/auth.c f4fa91b6a90bbc8e0d0f738aa284551739c9543a367071f55574681e0f24f8cf
@@ -623,7 +623,7 @@ F src/upsert.c 8789047a8f0a601ea42fa0256d1ba3190c13746b6ba940fe2d25643a7e991937
 F src/utf.c ee39565f0843775cc2c81135751ddd93eceb91a673ea2c57f61c76f288b041a0
 F src/util.c 89e51820bcb468ff3877a8d942f5cc807208087f021227e0927693e928a195bc
 F src/vacuum.c 6c38ddc52f0619865c91dae9c441d4d48bf3040d7dc1bc5b22da1e45547ed0b3
-F src/vdbe.c 93b2403c28a9b902da1bc4dff82350c72eeb982976c95afca32b660a2dd33273
+F src/vdbe.c 71fbbf8da3d8aadf14a574b35b48f488166793e5add34908380ee2dc7c732c99
 F src/vdbe.h 25dabb25c7e157b84e59260cfb5b466c3ac103ede9f36f4db371332c47601abe
 F src/vdbeInt.h d89d5d2150500cfb08615329fd20aea9d746bba5f2c3ecb8a17e2d2d9be029e5
 F src/vdbeapi.c 22c79072ae7d8a01e9bcae8ba16e918d60d202eaa9553b5fda38f99f7464d99a
@@ -655,7 +655,7 @@ F test/alter2.test a966ccfcddf9ce0a4e0e6ff1aca9e6e7948e0e242cd7e43fc091948521807
 F test/alter3.test ffc4ab29ce78a3517a66afd69b2730667e3471622509c283b2bd4c46f680fba3
 F test/alter4.test 716caa071dd8a3c6d57225778d15d3c3cbf5e34b2e84ae44199aeb2bbf50a707
 F test/alterauth.test 63442ba61ceb0c1eeb63aac1f4f5cebfa509d352276059d27106ae256bafc959
-F test/alterauth2.test 381b1ab603c9ef96314a3158528ea17f7964449385a28eeaf8191120b2e24a8d
+F test/alterauth2.test 48967abae0494d9a300d1c92473d99fcb66edfcc23579c89322f033f49410adc
 F test/altercol.test 9471187fe155d9c4211ae185e104ff48ce8f114262ee1256cf1e110b339c725f
 F test/altercorrupt.test 2e1d705342cf9d7de884518ddbb053fd52d7e60d2b8869b7b63b2fda68435c12
 F test/alterdropcol.test a653a3945f964d26845ec0cd0a8e74189f46de3119a984c5bc45457da392612e
@@ -698,7 +698,7 @@ F test/attach2.test 256bd240da1835fb8408dd59fb7ef71f8358c7a756c46662434d11d07ba3
 F test/attach3.test c59d92791070c59272e00183b7353eeb94915976
 F test/attach4.test 00e754484859998d124d144de6d114d920f2ed6ca2f961e6a7f4183c714f885e
 F test/attachmalloc.test 12c4f028e570acf9e0a4b0b7fe6f536e21f3d5ebddcece423603d0569beaf438
-F test/auth.test 567d917e0baddb6d0026a251cff977a3ab2c805a3cef906ba8653aafe7ad7240
+F test/auth.test 0f246deec5cb2f6f893f8fbb76628f182c08fe40f178b254dd72467ca012f657
 F test/auth2.test 9eb7fce9f34bf1f50d3f366fb3e606be5a2000a1
 F test/auth3.test 76d20a7fa136d63bcfcf8bcb65c0b1455ed71078d81f22bcd0550d3eb18594ab
 F test/autoanalyze1.test b9cc3f32a990fa56669b668d237c6d53e983554ae80c0604992e18869a0b2dec
@@ -1438,7 +1438,7 @@ F test/stat.test 123212a20ceb496893d5254a5f6c76442ce549fdc08d1702d8288a2bbaac840
 F test/statfault.test 55f86055f9cd7b2d962a621b8a04215c1cebd4eaaecde92d279442327fe648a0
 F test/stmt.test 54ed2cc0764bf3e48a058331813c3dbd19fc1d0827c3d8369914a5d8f564ec75
 F test/stmtvtab1.test 6873dfb24f8e79cbb5b799b95c2e4349060eb7a3b811982749a84b359468e2d5
-F test/strict1.test a3ec495471f24c1a6e1a1664bd23e24ccdb27ae93b1a763ee1942ec955b68e71
+F test/strict1.test 4d2b492152b984fd7e8196d23eb88e2ccb0ef9e46ca2f96c2ce7147ceef9d168
 F test/strict2.test b22c7a98b5000aef937f1990776497f0e979b1a23bc4f63e2d53b00e59b20070
 F test/subjournal.test 8d4e2572c0ee9a15549f0d8e40863161295107e52f07a3e8012a2e1fdd093c49
 F test/subquery.test 3a1a5b600b8d4f504d2a2c61f33db820983dba94a0ef3e4aedca8f0165eaecb8
@@ -1938,8 +1938,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P 0407c8793700491b8519a649b9624f569b0e7e9b94d0db79d4a08139e0ecdb69
-R 670ac84bd1cbcf3ee71909c2b9111d9c
+P aca6c61d79215519fb006af19d9011029df68f195a4ce65aff7a1bf4e36efb94
+R 49af707cd669468ece46f1dd370b2f63
 U drh
-Z c2bcb8ac21e89e27e00a6871302a21a2
+Z 256bb3763483caaf79af6f149c662bf0
 # Remove this line to create a well-formed Fossil manifest.
