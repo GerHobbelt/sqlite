@@ -782,7 +782,7 @@ void sqlite3VdbeAssertAbortable(Vdbe *p){
 ** (3) Update the Vdbe.readOnly and Vdbe.bIsReader flags to accurately
 **     indicate what the prepared statement actually does.
 **
-** (4) Initialize the p4.xAdvance pointer on opcodes that use it.
+** (4) (discontinued)
 **
 ** (5) Reclaim the memory allocated for storing labels.
 **
@@ -826,25 +826,6 @@ static void resolveP2Values(Vdbe *p, int *pMaxFuncArgs){
         case OP_JournalMode: {
           p->readOnly = 0;
           p->bIsReader = 1;
-          break;
-        }
-        case OP_Next:
-        case OP_SorterNext: {
-          pOp->p4.xAdvance = sqlite3BtreeNext;
-          pOp->p4type = P4_ADVANCE;
-          /* The code generator never codes any of these opcodes as a jump
-          ** to a label.  They are always coded as a jump backwards to a 
-          ** known address */
-          assert( pOp->p2>=0 );
-          break;
-        }
-        case OP_Prev: {
-          pOp->p4.xAdvance = sqlite3BtreePrevious;
-          pOp->p4type = P4_ADVANCE;
-          /* The code generator never codes any of these opcodes as a jump
-          ** to a label.  They are always coded as a jump backwards to a 
-          ** known address */
-          assert( pOp->p2>=0 );
           break;
         }
 #ifndef SQLITE_OMIT_VIRTUALTABLE
@@ -1130,7 +1111,6 @@ static void freeP4(sqlite3 *db, int p4type, void *p4){
     case P4_REAL:
     case P4_INT64:
     case P4_DYNAMIC:
-    case P4_DYNBLOB:
     case P4_INTARRAY: {
       sqlite3DbFree(db, p4);
       break;
@@ -1725,10 +1705,6 @@ char *sqlite3VdbeDisplayP4(sqlite3 *db, Op *pOp){
     }
     case P4_SUBPROGRAM: {
       zP4 = "program";
-      break;
-    }
-    case P4_DYNBLOB:
-    case P4_ADVANCE: {
       break;
     }
     case P4_TABLE: {
