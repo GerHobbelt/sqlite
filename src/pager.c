@@ -630,6 +630,7 @@ struct Pager {
   u8 noLock;                  /* Do not lock (except in WAL mode) */
   u8 readOnly;                /* True for a read-only database */
   u8 memDb;                   /* True to inhibit all file I/O */
+  u8 memVfs;                  /* VFS-implemented memory database */
 
   /**************************************************************************
   ** The following block contains those class members that change during
@@ -657,6 +658,9 @@ struct Pager {
   u32 cksumInit;              /* Quasi-random value added to every checksum */
   u32 nSubRec;                /* Number of records written to sub-journal */
   Bitvec *pInJournal;         /* One bit for each page in the database file */
+#ifndef SQLITE_OMIT_CONCURRENT
+  Bitvec *pAllRead;           /* Pages read within current CONCURRENT trans. */
+#endif
   sqlite3_file *fd;           /* File descriptor for database */
   sqlite3_file *jfd;          /* File descriptor for main journal */
   sqlite3_file *sjfd;         /* File descriptor for sub-journal */
@@ -899,7 +903,9 @@ static int assert_pager_state(Pager *p){
       if( !pagerUseWal(pPager) ){
         assert( p->eLock>=RESERVED_LOCK );
       }
-      assert( pPager->dbSize==pPager->dbOrigSize );
+#ifndef SQLITE_OMIT_CONCURRENT
+      assert( pPager->dbSize==pPager->dbOrigSize || pPager->pAllRead );
+#endif
       assert( pPager->dbOrigSize==pPager->dbFileSize );
       assert( pPager->dbOrigSize==pPager->dbHintSize );
       assert( pPager->setSuper==0 );
@@ -1787,6 +1793,53 @@ static int addToSavepointBitvecs(Pager *pPager, Pgno pgno){
   return rc;
 }
 
+#ifndef SQLITE_OMIT_CONCURRENT
+/*
+** If they are not already, begin recording all pages read from the pager layer
+** by the b-tree layer This is used by concurrent transactions. Return
+** SQLITE_OK if successful, or an SQLite error code (SQLITE_NOMEM) if an error
+** occurs.
+*/
+int sqlite3PagerBeginConcurrent(Pager *pPager){
+  int rc = SQLITE_OK;
+  if( pPager->pAllRead==0 ){
+    pPager->pAllRead = sqlite3BitvecCreate(pPager->dbSize);
+    pPager->dbOrigSize = pPager->dbSize;
+    if( pPager->pAllRead==0 ){
+      rc = SQLITE_NOMEM;
+    }
+  }
+  return rc;
+}
+
+/* !defined(SQLITE_OMIT_CONCURRENT)
+**
+** Stop recording all pages read from the pager layer by the b-tree layer
+** and discard any current records.
+*/
+void sqlite3PagerEndConcurrent(Pager *pPager){
+  sqlite3BitvecDestroy(pPager->pAllRead);
+  pPager->pAllRead = 0;
+}
+
+/* !defined(SQLITE_OMIT_CONCURRENT)
+**
+** Return true if the database is in wal mode. False otherwise.
+*/
+int sqlite3PagerIsWal(Pager *pPager){
+  return pPager->pWal!=0;
+}
+#endif /* SQLITE_OMIT_CONCURRENT */
+
+/*
+** Free the Pager.pInJournal and Pager.pAllRead bitvec objects.
+*/
+static void pagerFreeBitvecs(Pager *pPager){
+  sqlite3BitvecDestroy(pPager->pInJournal);
+  pPager->pInJournal = 0;
+  sqlite3PagerEndConcurrent(pPager);
+}
+
 /*
 ** This function is a no-op if the pager is in exclusive mode and not
 ** in the ERROR state. Otherwise, it switches the pager to PAGER_OPEN
@@ -1811,8 +1864,7 @@ static void pager_unlock(Pager *pPager){
        || pPager->eState==PAGER_ERROR 
   );
 
-  sqlite3BitvecDestroy(pPager->pInJournal);
-  pPager->pInJournal = 0;
+  pagerFreeBitvecs(pPager);
   releaseAllSavepoints(pPager);
 
   if( pagerUseWal(pPager) ){
@@ -2080,8 +2132,7 @@ static int pager_end_transaction(Pager *pPager, int hasSuper, int bCommit){
   }
 #endif
 
-  sqlite3BitvecDestroy(pPager->pInJournal);
-  pPager->pInJournal = 0;
+  pagerFreeBitvecs(pPager);
   pPager->nRec = 0;
   if( rc==SQLITE_OK ){
     if( MEMDB || pagerFlushOnCommit(pPager, bCommit) ){
@@ -3014,6 +3065,7 @@ static int readDbPage(PgHdr *pPg){
 */
 static void pager_write_changecounter(PgHdr *pPg){
   u32 change_counter;
+  if( NEVER(pPg==0) ) return;
 
   /* Increment the value just read and write it back to byte 24. */
   change_counter = sqlite3Get4byte((u8*)pPg->pPager->dbFileVers)+1;
@@ -3086,8 +3138,24 @@ static int pagerRollbackWal(Pager *pPager){
   **   + Reload page content from the database (if refcount>0).
   */
   pPager->dbSize = pPager->dbOrigSize;
-  rc = sqlite3WalUndo(pPager->pWal, pagerUndoCallback, (void *)pPager);
+  rc = sqlite3WalUndo(pPager->pWal, pagerUndoCallback, (void *)pPager, 
+#ifdef SQLITE_OMIT_CONCURRENT
+      0
+#else
+      pPager->pAllRead!=0
+#endif
+  );
   pList = sqlite3PcacheDirtyList(pPager->pPCache);
+
+#ifndef SQLITE_OMIT_CONCURRENT
+  /* If this is an CONCURRENT transaction, then page 1 must be reread from 
+  ** the db file, even if it is not dirty. This is because the b-tree layer 
+  ** may have already zeroed the nFree and iTrunk header fields.  */
+  if( rc==SQLITE_OK && (pList==0 || pList->pgno!=1) && pPager->pAllRead ){
+    rc = pagerUndoCallback((void*)pPager, 1);
+  }
+#endif
+
   while( pList && rc==SQLITE_OK ){
     PgHdr *pNext = pList->pDirty;
     rc = pagerUndoCallback((void *)pPager, pList->pgno);
@@ -3137,6 +3205,8 @@ static int pagerWalFrames(
       if( p->pgno<=nTruncate ){
         ppNext = &p->pDirty;
         nList++;
+        PAGERTRACE(("TO-WAL %d page %d hash(%08x)\n",
+                     PAGERID(pPager), p->pgno, pager_pagehash(p)));
       }
     }
     assert( pList );
@@ -3892,8 +3962,7 @@ static int pager_wait_on_lock(Pager *pPager, int locktype){
 **      current database image, in pages, OR
 **
 **   b) if the page content were written at this time, it would not
-**      be necessary to write the current content out to the sub-journal
-**      (as determined by function subjRequiresPage()).
+**      be necessary to write the current content out to the sub-journal.
 **
 ** If the condition asserted by this function were not true, and the
 ** dirty page were to be discarded from the cache via the pagerStress()
@@ -3908,8 +3977,16 @@ static int pager_wait_on_lock(Pager *pPager, int locktype){
 */
 #if defined(SQLITE_DEBUG)
 static void assertTruncateConstraintCb(PgHdr *pPg){
+  Pager *pPager = pPg->pPager;
   assert( pPg->flags&PGHDR_DIRTY );
-  assert( !subjRequiresPage(pPg) || pPg->pgno<=pPg->pPager->dbSize );
+  if( pPg->pgno>pPager->dbSize ){      /* if (a) is false */
+    Pgno pgno = pPg->pgno;
+    int i;
+    for(i=0; i<pPg->pPager->nSavepoint; i++){
+      PagerSavepoint *p = &pPager->aSavepoint[i];
+      assert( p->nOrig<pgno || sqlite3BitvecTestNotNull(p->pInSavepoint,pgno) );
+    }
+  }
 }
 static void assertTruncateConstraint(Pager *pPager){
   sqlite3PcacheIterateDirty(pPager->pPCache, assertTruncateConstraintCb);
@@ -3930,8 +4007,7 @@ static void assertTruncateConstraint(Pager *pPager){
 ** then continue writing to the database.
 */
 void sqlite3PagerTruncateImage(Pager *pPager, Pgno nPage){
-  assert( pPager->dbSize>=nPage || CORRUPT_DB );
-  testcase( pPager->dbSize<nPage );
+  assert( pPager->dbSize>=nPage );
   assert( pPager->eState>=PAGER_WRITER_CACHEMOD );
   pPager->dbSize = nPage;
 
@@ -4205,7 +4281,7 @@ static int syncJournal(Pager *pPager, int newHdr){
   assert( assert_pager_state(pPager) );
   assert( !pagerUseWal(pPager) );
 
-  rc = sqlite3PagerExclusiveLock(pPager);
+  rc = sqlite3PagerExclusiveLock(pPager, 0, 0);
   if( rc!=SQLITE_OK ) return rc;
 
   if( !pPager->noSync ){
@@ -4556,6 +4632,12 @@ static int pagerStress(void *p, PgHdr *pPg){
   pPager->aStat[PAGER_STAT_SPILL]++;
   pPg->pDirty = 0;
   if( pagerUseWal(pPager) ){
+#ifndef SQLITE_OMIT_CONCURRENT
+    /* If the transaction is a "BEGIN CONCURRENT" transaction, the page 
+    ** cannot be flushed to disk. Return early in this case. */
+    if( pPager->pAllRead ) return SQLITE_OK;
+#endif
+
     /* Write a single frame for this page to the log. */
     rc = subjournalPageIfRequired(pPg); 
     if( rc==SQLITE_OK ){
@@ -4855,6 +4937,7 @@ int sqlite3PagerOpen(
     pPager->zWal = 0;
   }
 #endif
+  (void)pPtr;  /* Suppress warning about unused pPtr value */
 
   if( nPathname ) sqlite3DbFree(0, zPathname);
   pPager->pVfs = pVfs;
@@ -4867,7 +4950,7 @@ int sqlite3PagerOpen(
     rc = sqlite3OsOpen(pVfs, pPager->zFilename, pPager->fd, vfsFlags, &fout);
     assert( !memDb );
 #ifndef SQLITE_OMIT_DESERIALIZE
-    memJM = (fout&SQLITE_OPEN_MEMORY)!=0;
+    pPager->memVfs = memJM = (fout&SQLITE_OPEN_MEMORY)!=0;
 #endif
     readOnly = (fout&SQLITE_OPEN_READONLY)!=0;
 
@@ -5252,7 +5335,7 @@ int sqlite3PagerSharedLock(Pager *pPager){
       ** may mean that the pager was in the error-state when this
       ** function was called and the journal file does not exist.
       */
-      if( !isOpen(pPager->jfd) ){
+      if( !isOpen(pPager->jfd) && pPager->journalMode!=PAGER_JOURNALMODE_OFF ){
         sqlite3_vfs * const pVfs = pPager->pVfs;
         int bExists;              /* True if journal file exists */
         rc = sqlite3OsAccess(
@@ -5477,6 +5560,18 @@ static int getPageNormal(
   assert( assert_pager_state(pPager) );
   assert( pPager->hasHeldSharedLock==1 );
 
+#ifndef SQLITE_OMIT_CONCURRENT
+  /* If this is an CONCURRENT transaction and the page being read was
+  ** present in the database file when the transaction was opened,
+  ** mark it as read in the pAllRead vector.  */
+  pPg = 0;
+  if( pPager->pAllRead && pgno<=pPager->dbOrigSize ){
+    PAGERTRACE(("USING page %d\n", pgno));
+    rc = sqlite3BitvecSet(pPager->pAllRead, pgno);
+    if( rc!=SQLITE_OK ) goto pager_acquire_err;
+  }
+#endif
+
   if( pgno==0 ) return SQLITE_CORRUPT_BKPT;
   pBase = sqlite3PcacheFetch(pPager->pPCache, pgno, 3);
   if( pBase==0 ){
@@ -5654,6 +5749,7 @@ int sqlite3PagerGet(
   DbPage **ppPage,    /* Write a pointer to the page here */
   int flags           /* PAGER_GET_XXX flags */
 ){
+  /* printf("PAGE %u\n", pgno); fflush(stdout); */
   return pPager->xGet(pPager, pgno, ppPage, flags);
 }
 
@@ -5814,10 +5910,13 @@ static int pager_open_journal(Pager *pPager){
 ** Begin a write-transaction on the specified pager object. If a 
 ** write-transaction has already been opened, this function is a no-op.
 **
-** If the exFlag argument is false, then acquire at least a RESERVED
-** lock on the database file. If exFlag is true, then acquire at least
+** If the exFlag argument is 0, then acquire at least a RESERVED
+** lock on the database file. If exFlag is >0, then acquire at least
 ** an EXCLUSIVE lock. If such a lock is already held, no locking 
 ** functions need be called.
+**
+** If (exFlag<0) and the database is in WAL mode, do not take any locks.
+** The transaction will run in CONCURRENT mode instead.
 **
 ** If the subjInMemory argument is non-zero, then any sub-journal opened
 ** within this transaction will be opened as an in-memory file. This
@@ -5836,7 +5935,6 @@ int sqlite3PagerBegin(Pager *pPager, int exFlag, int subjInMemory){
 
   if( pPager->eState==PAGER_READER ){
     assert( pPager->pInJournal==0 );
-
     if( pagerUseWal(pPager) ){
       /* If the pager is configured to use locking_mode=exclusive, and an
       ** exclusive lock on the database is not already held, obtain it now.
@@ -5852,9 +5950,10 @@ int sqlite3PagerBegin(Pager *pPager, int exFlag, int subjInMemory){
       /* Grab the write lock on the log file. If successful, upgrade to
       ** PAGER_RESERVED state. Otherwise, return an error code to the caller.
       ** The busy-handler is not invoked if another connection already
-      ** holds the write-lock. If possible, the upper layer will call it.
-      */
-      rc = sqlite3WalBeginWriteTransaction(pPager->pWal);
+      ** holds the write-lock. If possible, the upper layer will call it.  */
+      if( exFlag>=0 ){
+        rc = sqlite3WalBeginWriteTransaction(pPager->pWal);
+      }
     }else{
       /* Obtain a RESERVED lock on the database file. If the exFlag parameter
       ** is true, then immediately upgrade this to an EXCLUSIVE lock. The
@@ -5862,7 +5961,7 @@ int sqlite3PagerBegin(Pager *pPager, int exFlag, int subjInMemory){
       ** lock, but not when obtaining the RESERVED lock.
       */
       rc = pagerLockDb(pPager, RESERVED_LOCK);
-      if( rc==SQLITE_OK && exFlag ){
+      if( rc==SQLITE_OK && exFlag>0 ){
         rc = pager_wait_on_lock(pPager, EXCLUSIVE_LOCK);
       }
     }
@@ -6162,7 +6261,7 @@ int sqlite3PagerWrite(PgHdr *pPg){
 ** to sqlite3PagerWrite().  In other words, return TRUE if it is ok
 ** to change the content of the page.
 */
-#ifndef NDEBUG
+#if !defined(SQLITE_OMIT_CONCURRENT) || !defined(NDEBUG)
 int sqlite3PagerIswriteable(DbPage *pPg){
   return pPg->flags & PGHDR_WRITEABLE;
 }
@@ -6318,17 +6417,26 @@ int sqlite3PagerSync(Pager *pPager, const char *zSuper){
 }
 
 /*
-** This function may only be called while a write-transaction is active in
-** rollback. If the connection is in WAL mode, this call is a no-op. 
-** Otherwise, if the connection does not already have an EXCLUSIVE lock on 
-** the database file, an attempt is made to obtain one.
+** This function is called to ensure that all locks required to commit the
+** current write-transaction to the database file are held. If the db is
+** in rollback mode, this means the EXCLUSIVE lock on the database file.
 **
-** If the EXCLUSIVE lock is already held or the attempt to obtain it is
-** successful, or the connection is in WAL mode, SQLITE_OK is returned.
-** Otherwise, either SQLITE_BUSY or an SQLITE_IOERR_XXX error code is 
-** returned.
+** Or, if this is a non-CONCURRENT transaction on a wal-mode database, this
+** function is a no-op.
+**
+** If this is an CONCURRENT transaction on a wal-mode database, this function
+** attempts to obtain the WRITER lock on the wal file and also checks to
+** see that the transaction can be safely committed (does not commit with 
+** any other transaction committed since it was opened).
+**
+** If the required locks are already held or successfully obtained and
+** the transaction can be committed, SQLITE_OK is returned. If a required lock
+** cannot be obtained, SQLITE_BUSY is returned. Or, if the current transaction
+** is CONCURRENT and cannot be committed due to a conflict, SQLITE_BUSY_SNAPSHOT
+** is returned. Otherwise, if some other error occurs (IO error, OOM etc.),
+** and SQLite error code is returned.
 */
-int sqlite3PagerExclusiveLock(Pager *pPager){
+int sqlite3PagerExclusiveLock(Pager *pPager, PgHdr *pPage1, Pgno *piConflict){
   int rc = pPager->errCode;
   assert( assert_pager_state(pPager) );
   if( rc==SQLITE_OK ){
@@ -6340,9 +6448,72 @@ int sqlite3PagerExclusiveLock(Pager *pPager){
     if( 0==pagerUseWal(pPager) ){
       rc = pager_wait_on_lock(pPager, EXCLUSIVE_LOCK);
     }
+#ifndef SQLITE_OMIT_CONCURRENT
+    else{
+      if( pPager->pAllRead ){
+        /* This is an CONCURRENT transaction. Attempt to lock the wal database
+        ** here. If SQLITE_BUSY (but not SQLITE_BUSY_SNAPSHOT) is returned,
+        ** invoke the busy-handler and try again for as long as it returns
+        ** non-zero.  */
+        do {
+          rc = sqlite3WalLockForCommit(
+              pPager->pWal, pPage1, pPager->pAllRead, piConflict
+          );
+        }while( rc==SQLITE_BUSY 
+             && pPager->xBusyHandler(pPager->pBusyHandlerArg) 
+        );
+      }
+    }
+#endif /* SQLITE_OMIT_CONCURRENT */
   }
   return rc;
 }
+
+#ifndef SQLITE_OMIT_CONCURRENT
+/*
+** This function is called as part of committing an CONCURRENT transaction.
+** At this point the wal WRITER lock is held, and all pages in the cache 
+** except for page 1 are compatible with the snapshot at the head of the
+** wal file. 
+**
+** This function updates the in-memory data structures and reloads the
+** contents of page 1 so that the client is operating on the snapshot 
+** at the head of the wal file.
+**
+** SQLITE_OK is returned if successful, or an SQLite error code otherwise.
+*/
+int sqlite3PagerUpgradeSnapshot(Pager *pPager, DbPage *pPage1){
+  int rc;
+
+  assert( pPager->pWal && pPager->pAllRead );
+  rc = sqlite3WalUpgradeSnapshot(pPager->pWal);
+  if( rc==SQLITE_OK ){
+    rc = readDbPage(pPage1);
+  }
+
+  return rc;
+}
+
+/* !defined(SQLITE_OMIT_CONCURRENT)
+**
+** Set the in-memory cache of the database file size to nSz pages.
+*/
+void sqlite3PagerSetDbsize(Pager *pPager, Pgno nSz){
+  pPager->dbSize = nSz;
+}
+
+/* !defined(SQLITE_OMIT_CONCURRENT)
+**
+** If this is a WAL mode connection and the WRITER lock is currently held,
+** relinquish it.
+*/
+void sqlite3PagerDropExclusiveLock(Pager *pPager){
+  if( pagerUseWal(pPager) ){
+    sqlite3WalEndWriteTransaction(pPager->pWal);
+  }
+}
+#endif  /* SQLITE_OMIT_CONCURRENT */
+
 
 /*
 ** Sync the database file for the pager pPager. zSuper points to the name
@@ -6804,7 +6975,7 @@ void sqlite3PagerCacheStat(Pager *pPager, int eStat, int reset, int *pnVal){
 ** Return true if this is an in-memory or temp-file backed pager.
 */
 int sqlite3PagerIsMemdb(Pager *pPager){
-  return pPager->tempFile;
+  return pPager->tempFile || pPager->memVfs;
 }
 
 /*
@@ -7124,7 +7295,7 @@ int sqlite3PagerMovepage(Pager *pPager, DbPage *pPg, Pgno pgno, int isCommit){
   pPgOld = sqlite3PagerLookup(pPager, pgno);
   assert( !pPgOld || pPgOld->nRef==1 || CORRUPT_DB );
   if( pPgOld ){
-    if( pPgOld->nRef>1 ){
+    if( NEVER(pPgOld->nRef>1) ){
       sqlite3PagerUnrefNotNull(pPgOld);
       return SQLITE_CORRUPT_BKPT;
     }
@@ -7259,13 +7430,13 @@ int sqlite3PagerSetJournalMode(Pager *pPager, int eMode){
   u8 eOld = pPager->journalMode;    /* Prior journalmode */
 
   /* The eMode parameter is always valid */
-  assert(      eMode==PAGER_JOURNALMODE_DELETE
-            || eMode==PAGER_JOURNALMODE_TRUNCATE
-            || eMode==PAGER_JOURNALMODE_PERSIST
-            || eMode==PAGER_JOURNALMODE_OFF 
-            || eMode==PAGER_JOURNALMODE_WAL 
+  assert(      eMode==PAGER_JOURNALMODE_DELETE    /* 0 */
+            || eMode==PAGER_JOURNALMODE_PERSIST   /* 1 */
+            || eMode==PAGER_JOURNALMODE_OFF       /* 2 */
+            || eMode==PAGER_JOURNALMODE_TRUNCATE  /* 3 */
             || eMode==PAGER_JOURNALMODE_WAL2
-            || eMode==PAGER_JOURNALMODE_MEMORY );
+            || eMode==PAGER_JOURNALMODE_MEMORY    /* 4 */
+            || eMode==PAGER_JOURNALMODE_WAL       /* 5 */ );
 
   /* This routine is only called from the OP_JournalMode opcode, and
   ** the logic there will never allow a temporary file to be changed
@@ -7305,7 +7476,6 @@ int sqlite3PagerSetJournalMode(Pager *pPager, int eMode){
     if( !pPager->exclusiveMode && (eOld & 5)==1 && (eMode & 1)==0 
      && eMode!=PAGER_JOURNALMODE_WAL2       /* TODO: fix this if possible */
     ){
-
       /* In this case we would like to delete the journal file. If it is
       ** not possible, then that is not a problem. Deleting the journal file
       ** here is an optimization only.
@@ -7694,6 +7864,11 @@ void sqlite3PagerSnapshotUnlock(Pager *pPager){
 }
 
 #endif /* SQLITE_ENABLE_SNAPSHOT */
+
+int sqlite3PagerWalInfo(Pager *pPager, u32 *pnPrior, u32 *pnFrame){
+  return sqlite3WalInfo(pPager->pWal, pnPrior, pnFrame);
+}
+
 #endif /* !SQLITE_OMIT_WAL */
 
 #ifdef SQLITE_ENABLE_ZIPVFS

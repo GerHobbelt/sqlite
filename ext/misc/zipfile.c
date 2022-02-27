@@ -54,9 +54,13 @@ typedef sqlite3_int64 i64;
 typedef unsigned char u8;
 typedef UINT32_TYPE u32;           /* 4-byte unsigned integer */
 typedef UINT16_TYPE u16;           /* 2-byte unsigned integer */
+#undef MIN     // may have already been defined in <zbuild.h>, which is included when we have ZLIB(NG) support enabled.
 #define MIN(a,b) ((a)<(b) ? (a) : (b))
 
 #if defined(SQLITE_COVERAGE_TEST) || defined(SQLITE_MUTATION_TEST)
+# define SQLITE_OMIT_AUXILIARY_SAFETY_CHECKS 1
+#endif
+#if defined(SQLITE_OMIT_AUXILIARY_SAFETY_CHECKS)
 # define ALWAYS(X)      (1)
 # define NEVER(X)       (0)
 #elif !defined(NDEBUG)
@@ -561,6 +565,7 @@ static u16 zipfileGetU16(const u8 *aBuf){
 ** Read and return a 32-bit little-endian unsigned integer from buffer aBuf.
 */
 static u32 zipfileGetU32(const u8 *aBuf){
+  if( aBuf==0 ) return 0;
   return ((u32)(aBuf[3]) << 24)
        + ((u32)(aBuf[2]) << 16)
        + ((u32)(aBuf[1]) <<  8)
@@ -863,7 +868,7 @@ static int zipfileGetEntry(
         aRead = (u8*)&aBlob[pNew->cds.iOffset];
       }
 
-      rc = zipfileReadLFH(aRead, &lfh);
+      if( rc==SQLITE_OK ) rc = zipfileReadLFH(aRead, &lfh);
       if( rc==SQLITE_OK ){
         pNew->iDataOff =  pNew->cds.iOffset + ZIPFILE_LFH_FIXED_SZ;
         pNew->iDataOff += lfh.nFile + lfh.nExtra;
@@ -1139,13 +1144,13 @@ static int zipfileReadEOCD(
   int nRead;                      /* Bytes to read from file */
   int rc = SQLITE_OK;
 
+  memset(pEOCD, 0, sizeof(ZipfileEOCD));
   if( aBlob==0 ){
     i64 iOff;                     /* Offset to read from */
     i64 szFile;                   /* Total size of file in bytes */
     fseek(pFile, 0, SEEK_END);
     szFile = (i64)ftell(pFile);
     if( szFile==0 ){
-      memset(pEOCD, 0, sizeof(ZipfileEOCD));
       return SQLITE_OK;
     }
     nRead = (int)(MIN(szFile, ZIPFILE_BUFFER_SIZE));
@@ -1934,7 +1939,7 @@ static int zipfileBufferGrow(ZipfileBuffer *pBuf, int nByte){
 **   SELECT zipfile(name,mode,mtime,data) ...
 **   SELECT zipfile(name,mode,mtime,data,method) ...
 */
-void zipfileStep(sqlite3_context *pCtx, int nVal, sqlite3_value **apVal){
+static void zipfileStep(sqlite3_context *pCtx, int nVal, sqlite3_value **apVal){
   ZipfileCtx *p;                  /* Aggregate function context */
   ZipfileEntry e;                 /* New entry to add to zip archive */
 
@@ -2109,7 +2114,7 @@ void zipfileStep(sqlite3_context *pCtx, int nVal, sqlite3_value **apVal){
 /*
 ** xFinalize() callback for zipfile aggregate function.
 */
-void zipfileFinal(sqlite3_context *pCtx){
+static void zipfileFinal(sqlite3_context *pCtx){
   ZipfileCtx *p;
   ZipfileEOCD eocd;
   sqlite3_int64 nZip;

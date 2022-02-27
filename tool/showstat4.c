@@ -40,7 +40,7 @@ static int decodeVarint(const unsigned char *z, i64 *pVal){
 #define main(cnt, arr)      sqlite_showstat4_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   sqlite3 *db;
   sqlite3_stmt *pStmt;
   char *zIdx = 0;

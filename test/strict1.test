@@ -47,6 +47,11 @@ do_execsql_test strict1-2.0 {
     e REAL
   ) STRICT;
 } {}
+ifcapable vtab {
+  do_execsql_test strict1-2.0a {
+    SELECT strict FROM pragma_table_list('t1');
+  } {1}
+}
 do_catchsql_test strict1-2.1 {
   INSERT INTO t1(a) VALUES('xyz');
 } {1 {cannot store TEXT value in INT column t1.a}}
@@ -62,6 +67,7 @@ do_catchsql_test strict1-2.4 {
 do_catchsql_test strict1-2.5 {
   INSERT INTO t1(e) VALUES('xyz');
 } {1 {cannot store TEXT value in REAL column t1.e}}
+
 
 do_execsql_test strict1-3.1 {
   INSERT INTO t1(a, b) VALUES(1,2),('3','4'),(5.0, 6.0),(null,null);
@@ -109,5 +115,51 @@ do_catchsql_test strict1-6.2 {
 do_catchsql_test strict1-6.3 {
   INSERT INTO t1(e) VALUES(x'3456');
 } {1 {cannot store BLOB value in REAL column t1.e}}
+
+ifcapable altertable {
+  do_execsql_test strict1-7.1 {
+    DROP TABLE IF EXISTS t4;
+    CREATE TABLE t4(
+      a INT AS (b*2) VIRTUAL,
+      b INT AS (c*2) STORED,
+      c INT PRIMARY KEY
+    ) STRICT;
+    INSERT INTO t4(c) VALUES(1);
+    SELECT * FROM t4;
+  } {4 2 1}
+  do_catchsql_test strict1-7.2 {
+    ALTER TABLE t4 ADD COLUMN d VARCHAR;
+  } {1 {error in table t4 after add column: unknown datatype for t4.d: "VARCHAR"}}
+  do_catchsql_test strict1-7.3 {
+    ALTER TABLE t4 ADD COLUMN d;
+  } {1 {error in table t4 after add column: missing datatype for t4.d}}
+}
+
+# 2022-01-17 https://sqlite.org/forum/forumpost/fa012c77796d9399
+# 
+reset_db
+do_execsql_test strict1-8.1 {
+  CREATE TABLE csv_import_table (
+    "debit" TEXT,
+    "credit" TEXT
+  );
+  INSERT INTO csv_import_table VALUES ('', '250.00');
+  CREATE TABLE IF NOT EXISTS transactions (
+      debit REAL,
+      credit REAL,
+      amount REAL GENERATED ALWAYS AS (ifnull(credit, 0.0) - ifnull(debit, 0.0))
+  ) STRICT;
+  INSERT INTO transactions
+  SELECT
+      nullif(debit, '') AS debit,
+      nullif(credit, '') AS credit
+  FROM csv_import_table;
+  SELECT * FROM transactions;
+} {{} 250.0 250.0}
+do_execsql_test strict1-8.2 {
+  CREATE TABLE t1(x REAL, y REAL AS (x)) STRICT;
+  INSERT INTO t1 VALUES(5),(4611686018427387904);
+  SELECT *, '|' FROM t1;
+} {/5.0 5.0 4.6116\d*e\+18 4.6116\d+e\+18 |/}
 
 finish_test

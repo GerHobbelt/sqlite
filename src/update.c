@@ -347,9 +347,11 @@ void sqlite3Update(
 
   memset(&sContext, 0, sizeof(sContext));
   db = pParse->db;
-  if( pParse->nErr || db->mallocFailed ){
+  assert( db->pParse==pParse );
+  if( pParse->nErr ){
     goto update_cleanup;
   }
+  assert( db->mallocFailed==0 );
 
   /* Locate the table which we want to update. 
   */
@@ -451,6 +453,17 @@ void sqlite3Update(
   */
   chngRowid = chngPk = 0;
   for(i=0; i<pChanges->nExpr; i++){
+#if defined(SQLITE_ENABLE_NOOP_UPDATE) && !defined(SQLITE_OMIT_FLAG_PRAGMAS)
+    if( db->flags & SQLITE_NoopUpdate ){
+      Token x;
+      sqlite3ExprDelete(db, pChanges->a[i].pExpr);
+      x.z = pChanges->a[i].zEName;
+      x.n = sqlite3Strlen30(x.z);
+      pChanges->a[i].pExpr =
+         sqlite3PExpr(pParse, TK_UPLUS, sqlite3ExprAlloc(db, TK_ID, &x, 0), 0);
+      if( db->mallocFailed ) goto update_cleanup;
+    }
+#endif
     u8 hCol = sqlite3StrIHash(pChanges->a[i].zEName);
     /* If this is an UPDATE with a FROM clause, do not resolve expressions
     ** here. The call to sqlite3Select() below will do that. */
@@ -721,7 +734,7 @@ void sqlite3Update(
       if( !pParse->nested && !pTrigger && !hasFK && !chngKey && !bReplace ){
         flags |= WHERE_ONEPASS_MULTIROW;
       }
-      pWInfo = sqlite3WhereBegin(pParse, pTabList, pWhere, 0, 0, flags,iIdxCur);
+      pWInfo = sqlite3WhereBegin(pParse, pTabList, pWhere,0,0,0,flags,iIdxCur);
       if( pWInfo==0 ) goto update_cleanup;
 
       /* A one-pass strategy that might update more than one row may not
@@ -1121,9 +1134,7 @@ void sqlite3Update(
   ** that information.
   */
   if( regRowCount ){
-    sqlite3VdbeAddOp2(v, OP_ChngCntRow, regRowCount, 1);
-    sqlite3VdbeSetNumCols(v, 1);
-    sqlite3VdbeSetColName(v, 0, COLNAME_NAME, "rows updated", SQLITE_STATIC);
+    sqlite3CodeChangeCount(v, regRowCount, "rows updated");
   }
 
 update_cleanup:
@@ -1245,7 +1256,9 @@ static void updateVirtualTable(
     regRowid = ++pParse->nMem;
 
     /* Start scanning the virtual table */
-    pWInfo = sqlite3WhereBegin(pParse, pSrc,pWhere,0,0,WHERE_ONEPASS_DESIRED,0);
+    pWInfo = sqlite3WhereBegin(
+        pParse, pSrc, pWhere, 0, 0, 0, WHERE_ONEPASS_DESIRED, 0
+    );
     if( pWInfo==0 ) return;
 
     /* Populate the argument registers. */

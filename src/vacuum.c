@@ -250,7 +250,9 @@ SQLITE_NOINLINE int sqlite3RunVacuum(
 
   /* Do not attempt to change the page size for a WAL database */
   if( sqlite3PagerGetJournalMode(sqlite3BtreePager(pMain))
-                                               ==PAGER_JOURNALMODE_WAL ){
+                                               ==PAGER_JOURNALMODE_WAL
+   && pOut==0
+  ){
     db->nextPagesize = 0;
   }
 
@@ -387,6 +389,7 @@ end_of_vacuum:
   ** is closed by the DETACH.
   */
   db->autoCommit = 1;
+  assert( db->eConcurrent==0 );
 
   if( pDb ){
     sqlite3BtreeClose(pDb->pBt);

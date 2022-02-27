@@ -115,7 +115,7 @@ static void execExecSql(sqlite3 *db, const char *zSql){
 #define main(cnt, arr)      sqlite_fast_vacuum_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   sqlite3 *db;                 /* Connection to the database file */
   int rc;                      /* Return code from SQLite interface calls */
   sqlite3_uint64 r;            /* A random number */

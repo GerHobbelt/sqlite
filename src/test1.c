@@ -1097,7 +1097,7 @@ static int SQLITE_TCLAPI test_drop_modules(
 ){
   sqlite3 *db;
 
-  if( argc!=2 ){
+  if( argc<2 ){
     Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
        " DB\"", 0);
     return TCL_ERROR;
@@ -4366,6 +4366,34 @@ static int SQLITE_TCLAPI test_errmsg(
   return TCL_OK;
 }
 
+
+/*
+** Usage:   sqlite3_error_offset DB
+**
+** Return the byte offset into the input UTF8 SQL for the most recent
+** error, or -1 of the error does not refer to a specific token.
+*/
+static int SQLITE_TCLAPI test_error_offset(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  sqlite3 *db;
+  int iByteOffset;
+
+  if( objc!=2 ){
+    Tcl_AppendResult(interp, "wrong # args: should be \"", 
+       Tcl_GetString(objv[0]), " DB", 0);
+    return TCL_ERROR;
+  }
+  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
+
+  iByteOffset = sqlite3_error_offset(db);
+  Tcl_SetObjResult(interp, Tcl_NewIntObj(iByteOffset));
+  return TCL_OK;
+}
+
 /*
 ** Usage:   test_errmsg16 DB
 **
@@ -4850,6 +4878,7 @@ static int SQLITE_TCLAPI test_open_v2(
       { "SQLITE_OPEN_PRIVATECACHE", SQLITE_OPEN_PRIVATECACHE },
       { "SQLITE_OPEN_WAL", SQLITE_OPEN_WAL },
       { "SQLITE_OPEN_URI", SQLITE_OPEN_URI },
+      { "SQLITE_OPEN_EXRESCODE", SQLITE_OPEN_EXRESCODE },
       { 0, 0 }
     };
     rc = Tcl_GetIndexFromObjStruct(interp, apFlag[i], aFlag, sizeof(aFlag[0]), 
@@ -7483,6 +7512,7 @@ static int SQLITE_TCLAPI optimization_control(
     { "stat4",               SQLITE_Stat4          },
     { "skip-scan",           SQLITE_SkipScan       },
     { "push-down",           SQLITE_PushDown       },
+    { "balanced-merge",      SQLITE_BalancedMerge  },
   };
 
   if( objc!=4 ){
@@ -7538,6 +7568,7 @@ static int SQLITE_TCLAPI tclLoadStaticExtensionCmd(
 #ifndef SQLITE_OMIT_VIRTUALTABLE
   extern int sqlite3_prefixes_init(sqlite3*,char**,const sqlite3_api_routines*);
 #endif
+  extern int sqlite3_qpvtab_init(sqlite3*,char**,const sqlite3_api_routines*);
   extern int sqlite3_regexp_init(sqlite3*,char**,const sqlite3_api_routines*);
   extern int sqlite3_remember_init(sqlite3*,char**,const sqlite3_api_routines*);
   extern int sqlite3_series_init(sqlite3*,char**,const sqlite3_api_routines*);
@@ -7568,6 +7599,7 @@ static int SQLITE_TCLAPI tclLoadStaticExtensionCmd(
 #ifndef SQLITE_OMIT_VIRTUALTABLE
     { "prefixes",              sqlite3_prefixes_init             },
 #endif
+    { "qpvtab",                sqlite3_qpvtab_init               },
     { "regexp",                sqlite3_regexp_init               },
     { "remember",              sqlite3_remember_init             },
     { "series",                sqlite3_series_init               },
@@ -8051,6 +8083,41 @@ static int SQLITE_TCLAPI test_dbconfig_maindbname_icecube(
 }
 
 /*
+** Usage: sqlite3_wal_info DB DBNAME
+*/
+static int SQLITE_TCLAPI test_wal_info(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  int rc;
+  sqlite3 *db;
+  char *zName;
+  unsigned int nPrior;
+  unsigned int nFrame;
+
+  if( objc!=3 ){
+    Tcl_WrongNumArgs(interp, 1, objv, "DB DBNAME");
+    return TCL_ERROR;
+  }
+  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
+  zName = Tcl_GetString(objv[2]);
+
+  rc = sqlite3_wal_info(db, zName, &nPrior, &nFrame);
+  if( rc!=SQLITE_OK ){
+    Tcl_SetObjResult(interp, Tcl_NewStringObj(sqlite3ErrName(rc), -1));
+    return TCL_ERROR;
+  }else{
+    Tcl_Obj *pNew = Tcl_NewObj();
+    Tcl_ListObjAppendElement(interp, pNew, Tcl_NewWideIntObj((i64)nPrior));
+    Tcl_ListObjAppendElement(interp, pNew, Tcl_NewWideIntObj((i64)nFrame));
+    Tcl_SetObjResult(interp, pNew);
+  }
+  return TCL_OK;
+}
+
+/*
 ** Usage: sqlite3_mmap_warm DB DBNAME
 */
 static int SQLITE_TCLAPI test_mmap_warm(
@@ -8233,6 +8300,96 @@ static int SQLITE_TCLAPI test_decode_hexdb(
   return TCL_OK;
 }
 
+/*
+** Client data for the autovacuum_pages callback.
+*/
+struct AutovacPageData {
+  Tcl_Interp *interp;
+  char *zScript;
+};
+typedef struct AutovacPageData AutovacPageData;
+
+/*
+** Callback functions for sqlite3_autovacuum_pages
+*/
+static unsigned int test_autovacuum_pages_callback(
+  void *pClientData,
+  const char *zSchema,
+  unsigned int nFilePages,
+  unsigned int nFreePages,
+  unsigned int nBytePerPage
+){
+  AutovacPageData *pData = (AutovacPageData*)pClientData;
+  Tcl_DString str;
+  unsigned int x;
+  char zBuf[100];
+  Tcl_DStringInit(&str);
+  Tcl_DStringAppend(&str, pData->zScript, -1);
+  Tcl_DStringAppendElement(&str, zSchema);
+  sqlite3_snprintf(sizeof(zBuf), zBuf, "%u", nFilePages);
+  Tcl_DStringAppendElement(&str, zBuf);
+  sqlite3_snprintf(sizeof(zBuf), zBuf, "%u", nFreePages);
+  Tcl_DStringAppendElement(&str, zBuf);
+  sqlite3_snprintf(sizeof(zBuf), zBuf, "%u", nBytePerPage);
+  Tcl_DStringAppendElement(&str, zBuf);
+  Tcl_ResetResult(pData->interp);
+  Tcl_Eval(pData->interp, Tcl_DStringValue(&str));
+  Tcl_DStringFree(&str);
+  x = nFreePages;
+  (void)Tcl_GetIntFromObj(0, Tcl_GetObjResult(pData->interp), (int*)&x);
+  return x;
+}
+
+/*
+** Usage:  sqlite3_autovacuum_pages DB SCRIPT
+**
+** Add an autovacuum-pages callback to database connection DB.  The callback
+** will invoke SCRIPT, after appending parameters.
+**
+** If SCRIPT is an empty string or is omitted, then the callback is
+** cancelled.
+*/
+static int SQLITE_TCLAPI test_autovacuum_pages(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  AutovacPageData *pData;
+  sqlite3 *db;
+  int rc;
+  const char *zScript;
+  if( objc!=2 && objc!=3 ){
+    Tcl_WrongNumArgs(interp, 1, objv, "DB ?SCRIPT?");
+    return TCL_ERROR;
+  }
+  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
+  zScript = objc==3 ? Tcl_GetString(objv[2]) : 0;
+  if( zScript ){
+    size_t nScript = strlen(zScript);
+    pData = sqlite3_malloc64( sizeof(*pData) + nScript + 1 );
+    if( pData==0 ){
+      Tcl_AppendResult(interp, "out of memory", (void*)0);
+      return TCL_ERROR;
+    }
+    pData->interp = interp;
+    pData->zScript = (char*)&pData[1];
+    memcpy(pData->zScript, zScript, nScript+1);
+    rc = sqlite3_autovacuum_pages(db,test_autovacuum_pages_callback,
+                                  pData, sqlite3_free);
+  }else{
+    rc = sqlite3_autovacuum_pages(db, 0, 0, 0);
+  }
+  if( rc ){
+    char zBuf[1000];
+    sqlite3_snprintf(sizeof(zBuf), zBuf,
+       "sqlite3_autovacuum_pages() returns %d", rc);
+    Tcl_AppendResult(interp, zBuf, (void*)0);
+    return TCL_ERROR;
+  }
+  return TCL_OK;
+}
+
 
 /*
 ** Register commands with the TCL interpreter.
@@ -8331,6 +8488,7 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite3_errcode",               test_errcode       ,0 },
      { "sqlite3_extended_errcode",      test_ex_errcode    ,0 },
      { "sqlite3_errmsg",                test_errmsg        ,0 },
+     { "sqlite3_error_offset",          test_error_offset  ,0 },
      { "sqlite3_errmsg16",              test_errmsg16      ,0 },
      { "sqlite3_open",                  test_open          ,0 },
      { "sqlite3_open16",                test_open16        ,0 },
@@ -8520,10 +8678,12 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite3_snapshot_open_blob", test_snapshot_open_blob, 0 },
      { "sqlite3_snapshot_cmp_blob", test_snapshot_cmp_blob, 0 },
 #endif
-     { "sqlite3_delete_database", test_delete_database,    0 },
-     { "atomic_batch_write",      test_atomic_batch_write, 0 },
+     { "sqlite3_delete_database", test_delete_database, 0 },
+     { "sqlite3_wal_info", test_wal_info, 0 },
+     { "atomic_batch_write",      test_atomic_batch_write,     0   },
      { "sqlite3_mmap_warm",       test_mmap_warm,          0 },
      { "sqlite3_config_sorterref", test_config_sorterref,   0 },
+     { "sqlite3_autovacuum_pages", test_autovacuum_pages,   0 },
      { "decode_hexdb",             test_decode_hexdb,       0 },
      { "test_write_db",            test_write_db,           0 },
      { "sqlite3_register_cksumvfs", test_register_cksumvfs,  0 },

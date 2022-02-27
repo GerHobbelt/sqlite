@@ -145,7 +145,7 @@ static char et_getdigit(LONGDOUBLE_TYPE *val, int *cnt){
 /*
 ** Set the StrAccum object to an error mode.
 */
-static void setStrAccumError(StrAccum *p, u8 eError){
+void sqlite3StrAccumSetError(StrAccum *p, u8 eError){
   assert( eError==SQLITE_NOMEM || eError==SQLITE_TOOBIG );
   p->accError = eError;
   if( p->mxAlloc ) sqlite3_str_reset(p);
@@ -181,12 +181,12 @@ static char *printfTempBuf(sqlite3_str *pAccum, sqlite3_int64 n){
   char *z;
   if( pAccum->accError ) return 0;
   if( n>pAccum->nAlloc && n>pAccum->mxAlloc ){
-    setStrAccumError(pAccum, SQLITE_TOOBIG);
+    sqlite3StrAccumSetError(pAccum, SQLITE_TOOBIG);
     return 0;
   }
   z = sqlite3DbMallocRaw(pAccum->db, n);
   if( z==0 ){
-    setStrAccumError(pAccum, SQLITE_NOMEM);
+    sqlite3StrAccumSetError(pAccum, SQLITE_NOMEM);
   }
   return z;
 }
@@ -855,6 +855,7 @@ void sqlite3_str_vappendf(
         assert( bArgList==0 );
         if( pToken && pToken->n ){
           sqlite3_str_append(pAccum, (const char*)pToken->z, pToken->n);
+          sqlite3RecordErrorByteOffset(pAccum->db, pToken->z);
         }
         length = width = 0;
         break;
@@ -909,6 +910,30 @@ void sqlite3_str_vappendf(
   }/* End for loop over the format string */
 } /* End of function */
 
+
+/*
+** The z string points to the first character of a token that is
+** associated with an error.  If db does not already have an error
+** byte offset recorded, try to compute the error byte offset for
+** z and set the error byte offset in db.
+*/
+void sqlite3RecordErrorByteOffset(sqlite3 *db, const char *z){
+  const Parse *pParse;
+  const char *zText;
+  const char *zEnd;
+  assert( z!=0 );
+  if( NEVER(db==0) ) return;
+  if( db->errByteOffset!=(-2) ) return;
+  pParse = db->pParse;
+  if( NEVER(pParse==0) ) return;
+  zText =pParse->zTail;
+  if( NEVER(zText==0) ) return;
+  zEnd = &zText[strlen(zText)];
+  if( SQLITE_WITHIN(z,zText,zEnd) ){
+    db->errByteOffset = (int)(z-zText);
+  }
+}
+
 /*
 ** Enlarge the memory allocation on a StrAccum object so that it is
 ** able to accept at least N more bytes of text.
@@ -916,7 +941,7 @@ void sqlite3_str_vappendf(
 ** Return the number of bytes of text that StrAccum is able to accept
 ** after the attempted enlargement.  The value returned might be zero.
 */
-static int sqlite3StrAccumEnlarge(StrAccum *p, int N){
+int sqlite3StrAccumEnlarge(StrAccum *p, int N){
   char *zNew;
   assert( p->nChar+(i64)N >= p->nAlloc ); /* Only called if really needed */
   if( p->accError ){
@@ -925,7 +950,7 @@ static int sqlite3StrAccumEnlarge(StrAccum *p, int N){
     return 0;
   }
   if( p->mxAlloc==0 ){
-    setStrAccumError(p, SQLITE_TOOBIG);
+    sqlite3StrAccumSetError(p, SQLITE_TOOBIG);
     return p->nAlloc - p->nChar - 1;
   }else{
     char *zOld = isMalloced(p) ? p->zText : 0;
@@ -938,7 +963,7 @@ static int sqlite3StrAccumEnlarge(StrAccum *p, int N){
     }
     if( szNew > p->mxAlloc ){
       sqlite3_str_reset(p);
-      setStrAccumError(p, SQLITE_TOOBIG);
+      sqlite3StrAccumSetError(p, SQLITE_TOOBIG);
       return 0;
     }else{
       p->nAlloc = (int)szNew;
@@ -956,7 +981,7 @@ static int sqlite3StrAccumEnlarge(StrAccum *p, int N){
       p->printfFlags |= SQLITE_PRINTF_MALLOCED;
     }else{
       sqlite3_str_reset(p);
-      setStrAccumError(p, SQLITE_NOMEM);
+      sqlite3StrAccumSetError(p, SQLITE_NOMEM);
       return 0;
     }
   }
@@ -1029,7 +1054,7 @@ static SQLITE_NOINLINE char *strAccumFinishRealloc(StrAccum *p){
     memcpy(zText, p->zText, p->nChar+1);
     p->printfFlags |= SQLITE_PRINTF_MALLOCED;
   }else{
-    setStrAccumError(p, SQLITE_NOMEM);
+    sqlite3StrAccumSetError(p, SQLITE_NOMEM);
   }
   p->zText = zText;
   return zText;
@@ -1042,6 +1067,22 @@ char *sqlite3StrAccumFinish(StrAccum *p){
     }
   }
   return p->zText;
+}
+
+/*
+** Use the content of the StrAccum passed as the second argument
+** as the result of an SQL function.
+*/
+void sqlite3ResultStrAccum(sqlite3_context *pCtx, StrAccum *p){
+  if( p->accError ){
+    sqlite3_result_error_code(pCtx, p->accError);
+    sqlite3_str_reset(p);
+  }else if( isMalloced(p) ){
+    sqlite3_result_text(pCtx, p->zText, p->nChar, SQLITE_DYNAMIC);
+  }else{
+    sqlite3_result_text(pCtx, "", 0, SQLITE_STATIC);
+    sqlite3_str_reset(p);
+  }
 }
 
 /*

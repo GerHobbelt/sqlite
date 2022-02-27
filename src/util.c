@@ -22,16 +22,6 @@
 #endif
 
 /*
-** Routine needed to support the testcase() macro.
-*/
-#ifdef SQLITE_COVERAGE_TEST
-void sqlite3Coverage(int x){
-  static unsigned dummy = 0;
-  dummy += (unsigned)x;
-}
-#endif
-
-/*
 ** Calls to sqlite3FaultSim() are used to simulate a failure during testing,
 ** or to bypass normal error detection during testing in order to let 
 ** execute proceed futher downstream.
@@ -127,7 +117,11 @@ static SQLITE_NOINLINE void  sqlite3ErrorFinish(sqlite3 *db, int err_code){
 void sqlite3Error(sqlite3 *db, int err_code){
   assert( db!=0 );
   db->errCode = err_code;
-  if( err_code || db->pErr ) sqlite3ErrorFinish(db, err_code);
+  if( err_code || db->pErr ){
+    sqlite3ErrorFinish(db, err_code);
+  }else{
+    db->errByteOffset = -1;
+  }
 }
 
 /*
@@ -137,6 +131,7 @@ void sqlite3Error(sqlite3 *db, int err_code){
 void sqlite3ErrorClear(sqlite3 *db){
   assert( db!=0 );
   db->errCode = SQLITE_OK;
+  db->errByteOffset = -1;
   if( db->pErr ) sqlite3ValueSetNull(db->pErr);
 }
 
@@ -157,17 +152,8 @@ void sqlite3SystemError(sqlite3 *db, int rc){
 ** handle "db". The error code is set to "err_code".
 **
 ** If it is not NULL, string zFormat specifies the format of the
-** error string in the style of the printf functions: The following
-** format characters are allowed:
-**
-**      %s      Insert a string
-**      %z      A string that should be freed after use
-**      %d      Insert an integer
-**      %T      Insert a token
-**      %S      Insert the first element of a SrcList
-**
-** zFormat and any string tokens that follow it are assumed to be
-** encoded in UTF-8.
+** error string.  zFormat and any string tokens that follow it are
+** assumed to be encoded in UTF-8.
 **
 ** To clear the most recent error for sqlite handle "db", sqlite3Error
 ** should be called with err_code set to SQLITE_OK and zFormat set
@@ -191,13 +177,6 @@ void sqlite3ErrorWithMsg(sqlite3 *db, int err_code, const char *zFormat, ...){
 
 /*
 ** Add an error message to pParse->zErrMsg and increment pParse->nErr.
-** The following formatting characters are allowed:
-**
-**      %s      Insert a string
-**      %z      A string that should be freed after use
-**      %d      Insert an integer
-**      %T      Insert a token
-**      %S      Insert the first element of a SrcList
 **
 ** This function should be used to report any error that occurs while
 ** compiling an SQL statement (i.e. within sqlite3_prepare()). The
@@ -210,11 +189,19 @@ void sqlite3ErrorMsg(Parse *pParse, const char *zFormat, ...){
   char *zMsg;
   va_list ap;
   sqlite3 *db = pParse->db;
+  assert( db!=0 );
+  assert( db->pParse==pParse );
+  db->errByteOffset = -2;
   va_start(ap, zFormat);
   zMsg = sqlite3VMPrintf(db, zFormat, ap);
   va_end(ap);
+  if( db->errByteOffset<-1 ) db->errByteOffset = -1;
   if( db->suppressErr ){
     sqlite3DbFree(db, zMsg);
+    if( db->mallocFailed ){
+      pParse->nErr++;
+      pParse->rc = SQLITE_NOMEM;
+    }
   }else{
     pParse->nErr++;
     sqlite3DbFree(db, pParse->zErrMsg);
@@ -277,6 +264,7 @@ void sqlite3Dequote(char *z){
   z[j] = 0;
 }
 void sqlite3DequoteExpr(Expr *p){
+  assert( !ExprHasProperty(p, EP_IntValue) );
   assert( sqlite3Isquote(p->u.zToken[0]) );
   p->flags |= p->u.zToken[0]=='"' ? EP_Quoted|EP_DblQuoted : EP_Quoted;
   sqlite3Dequote(p->u.zToken);
@@ -1595,7 +1583,6 @@ LogEst sqlite3LogEst(u64 x){
   return a[x&7] + y - 10;
 }
 
-#ifndef SQLITE_OMIT_VIRTUALTABLE
 /*
 ** Convert a double into a LogEst
 ** In other words, compute an approximation for 10*log2(x).
@@ -1610,16 +1597,9 @@ LogEst sqlite3LogEstFromDouble(double x){
   e = (a>>52) - 1022;
   return e*10;
 }
-#endif /* SQLITE_OMIT_VIRTUALTABLE */
 
-#if defined(SQLITE_ENABLE_STMT_SCANSTATUS) || \
-    defined(SQLITE_ENABLE_STAT4) || \
-    defined(SQLITE_EXPLAIN_ESTIMATED_ROWS)
 /*
 ** Convert a LogEst into an integer.
-**
-** Note that this routine is only used when one or more of various
-** non-standard compile-time options is enabled.
 */
 u64 sqlite3LogEstToInt(LogEst x){
   u64 n;
@@ -1627,17 +1607,9 @@ u64 sqlite3LogEstToInt(LogEst x){
   x /= 10;
   if( n>=5 ) n -= 2;
   else if( n>=1 ) n -= 1;
-#if defined(SQLITE_ENABLE_STMT_SCANSTATUS) || \
-    defined(SQLITE_EXPLAIN_ESTIMATED_ROWS)
   if( x>60 ) return (u64)LARGEST_INT64;
-#else
-  /* If only SQLITE_ENABLE_STAT4 is on, then the largest input
-  ** possible to this routine is 310, resulting in a maximum x of 31 */
-  assert( x<=60 );
-#endif
   return x>=3 ? (n+8)<<(x-3) : (n+8)>>(3-x);
 }
-#endif /* defined SCANSTAT or STAT4 or ESTIMATED_ROWS */
 
 /*
 ** Add a new name/number pair to a VList.  This might require that the

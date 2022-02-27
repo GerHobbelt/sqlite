@@ -50,9 +50,6 @@ int sqlite3Fts2Init(sqlite3*);
 #ifdef SQLITE_ENABLE_FTS5
 int sqlite3Fts5Init(sqlite3*);
 #endif
-#ifdef SQLITE_ENABLE_JSON1
-int sqlite3Json1Init(sqlite3*);
-#endif
 #ifdef SQLITE_ENABLE_STMTVTAB
 int sqlite3StmtVtabInit(sqlite3*);
 #endif
@@ -87,8 +84,8 @@ static int (*const sqlite3BuiltinExtensions[])(sqlite3*) = {
   sqlite3DbstatRegister,
 #endif
   sqlite3TestExtInit,
-#ifdef SQLITE_ENABLE_JSON1
-  sqlite3Json1Init,
+#if !defined(SQLITE_OMIT_VIRTUALTABLE) && !defined(SQLITE_OMIT_JSON)
+  sqlite3JsonTableFunctions,
 #endif
 #ifdef SQLITE_ENABLE_STMTVTAB
   sqlite3StmtVtabInit,
@@ -1138,7 +1135,9 @@ void sqlite3CloseSavepoints(sqlite3 *db){
 ** with SQLITE_ANY as the encoding.
 */
 static void functionDestroy(sqlite3 *db, FuncDef *p){
-  FuncDestructor *pDestructor = p->u.pDestructor;
+  FuncDestructor *pDestructor;
+  assert( (p->funcFlags & SQLITE_FUNC_BUILTIN)==0 );
+  pDestructor = p->u.pDestructor;
   if( pDestructor ){
     pDestructor->nRef--;
     if( pDestructor->nRef==0 ){
@@ -1401,6 +1400,9 @@ void sqlite3LeaveMutexAndCloseZombie(sqlite3 *db){
   ** structure?
   */
   sqlite3DbFree(db, db->aDb[1].pSchema);
+  if( db->xAutovacDestr ){
+    db->xAutovacDestr(db->pAutovacPagesArg);
+  }
   sqlite3_mutex_leave(db->mutex);
   db->eOpenState = SQLITE_STATE_CLOSED;
   sqlite3_mutex_free(db->mutex);
@@ -1455,7 +1457,7 @@ void sqlite3RollbackAll(sqlite3 *db, int tripCode){
   /* Any deferred constraint violations have now been resolved. */
   db->nDeferredCons = 0;
   db->nDeferredImmCons = 0;
-  db->flags &= ~(u64)SQLITE_DeferFKs;
+  db->flags &= ~(u64)(SQLITE_DeferFKs|SQLITE_CorruptRdOnly);
 
   /* If one has been configured, invoke the rollback-hook callback */
   if( db->xRollbackCallback && (inTrans || !db->autoCommit) ){
@@ -1819,7 +1821,6 @@ int sqlite3CreateFunc(
   FuncDestructor *pDestructor
 ){
   FuncDef *p;
-  int nName;
   int extraFlags;
 
   assert( sqlite3_mutex_held(db->mutex) );
@@ -1829,7 +1830,7 @@ int sqlite3CreateFunc(
    || ((xFinal==0)!=(xStep==0))       /* Both or neither of xFinal and xStep */
    || ((xValue==0)!=(xInverse==0))    /* Both or neither of xValue, xInverse */
    || (nArg<-1 || nArg>SQLITE_MAX_FUNCTION_ARG)
-   || (255<(nName = sqlite3Strlen30( zFunctionName)))
+   || (255<sqlite3Strlen30(zFunctionName))
   ){
     return SQLITE_MISUSE_BKPT;
   }
@@ -2303,6 +2304,34 @@ void *sqlite3_preupdate_hook(
 }
 #endif /* SQLITE_ENABLE_PREUPDATE_HOOK */
 
+/*
+** Register a function to be invoked prior to each autovacuum that
+** determines the number of pages to vacuum.
+*/
+int sqlite3_autovacuum_pages(
+  sqlite3 *db,                 /* Attach the hook to this database */
+  unsigned int (*xCallback)(void*,const char*,u32,u32,u32), 
+  void *pArg,                  /* Argument to the function */
+  void (*xDestructor)(void*)   /* Destructor for pArg */
+){
+#ifdef SQLITE_ENABLE_API_ARMOR
+  if( !sqlite3SafetyCheckOk(db) ){
+    if( xDestructor ) xDestructor(pArg);
+    return SQLITE_MISUSE_BKPT;
+  }
+#endif
+  sqlite3_mutex_enter(db->mutex);
+  if( db->xAutovacDestr ){
+    db->xAutovacDestr(db->pAutovacPagesArg);
+  }
+  db->xAutovacPages = xCallback;
+  db->pAutovacPagesArg = pArg;
+  db->xAutovacDestr = xDestructor;
+  sqlite3_mutex_leave(db->mutex);
+  return SQLITE_OK;
+}
+
+
 #ifndef SQLITE_OMIT_WAL
 /*
 ** The sqlite3_wal_hook() callback registered by sqlite3_wal_autocheckpoint().
@@ -2565,6 +2594,19 @@ const char *sqlite3_errmsg(sqlite3 *db){
   return z;
 }
 
+/*
+** Return the byte offset of the most recent error
+*/
+int sqlite3_error_offset(sqlite3 *db){
+  int iOffset = -1;
+  if( db && sqlite3SafetyCheckSickOrOk(db) && db->errCode ){
+    sqlite3_mutex_enter(db->mutex);
+    iOffset = db->errByteOffset;
+    sqlite3_mutex_leave(db->mutex);
+  }
+  return iOffset;
+}
+
 #ifndef SQLITE_OMIT_UTF16
 /*
 ** Return UTF-16 encoded English language explanation of the most recent
@@ -2825,6 +2867,8 @@ int sqlite3_limit(sqlite3 *db, int limitId, int newLimit){
   if( newLimit>=0 ){                   /* IMP: R-52476-28732 */
     if( newLimit>aHardLimit[limitId] ){
       newLimit = aHardLimit[limitId];  /* IMP: R-51463-25634 */
+    }else if( newLimit<1 && limitId==SQLITE_LIMIT_LENGTH ){
+      newLimit = 1;
     }
     db->aLimit[limitId] = newLimit;
   }
@@ -3096,7 +3140,7 @@ int sqlite3ParseUri(
 */
 static const char *uriParameter(const char *zFilename, const char *zParam){
   zFilename += sqlite3Strlen30(zFilename) + 1;
-  while( zFilename[0] ){
+  while( ALWAYS(zFilename!=0) && zFilename[0] ){
     int x = strcmp(zFilename, zParam);
     zFilename += sqlite3Strlen30(zFilename) + 1;
     if( x==0 ) return zFilename;
@@ -3156,10 +3200,11 @@ static int openDatabase(
   ** dealt with in the previous code block.  Besides these, the only
   ** valid input flags for sqlite3_open_v2() are SQLITE_OPEN_READONLY,
   ** SQLITE_OPEN_READWRITE, SQLITE_OPEN_CREATE, SQLITE_OPEN_SHAREDCACHE,
-  ** SQLITE_OPEN_PRIVATECACHE, and some reserved bits.  Silently mask
-  ** off all other flags.
+  ** SQLITE_OPEN_PRIVATECACHE, SQLITE_OPEN_EXRESCODE, and some reserved
+  ** bits.  Silently mask off all other flags.
   */
   flags &=  ~( SQLITE_OPEN_DELETEONCLOSE |
+               SQLITE_OPEN_EXCLUSIVE |
                SQLITE_OPEN_MAIN_DB |
                SQLITE_OPEN_TEMP_DB | 
                SQLITE_OPEN_TRANSIENT_DB | 
@@ -3191,13 +3236,13 @@ static int openDatabase(
     }
   }
   sqlite3_mutex_enter(db->mutex);
-  db->errMask = 0xff;
+  db->errMask = (flags & SQLITE_OPEN_EXRESCODE)!=0 ? 0xffffffff : 0xff;
   db->nDb = 2;
   db->eOpenState = SQLITE_STATE_BUSY;
   db->aDb = db->aDbStatic;
   db->lookaside.bDisable = 1;
   db->lookaside.sz = 0;
-
+  sqlite3FastPrngInit(&db->sPrng);
   assert( sizeof(db->aLimit)==sizeof(aHardLimit) );
   memcpy(db->aLimit, aHardLimit, sizeof(db->aLimit));
   db->aLimit[SQLITE_LIMIT_WORKER_THREADS] = SQLITE_DEFAULT_WORKER_THREADS;
@@ -3205,6 +3250,7 @@ static int openDatabase(
   db->nextAutovac = -1;
   db->szMmap = sqlite3GlobalConfig.szMmap;
   db->nextPagesize = 0;
+  db->init.azInit = sqlite3StdType; /* Any array of string ptrs will do */
 #ifdef SQLITE_ENABLE_SORTER_MMAP
   /* Beginning with version 3.37.0, using the VFS xFetch() API to memory-map 
   ** the temporary files used to do external sorts (see code in vdbesort.c)
@@ -3422,8 +3468,8 @@ opendb_out:
     sqlite3_mutex_leave(db->mutex);
   }
   rc = sqlite3_errcode(db);
-  assert( db!=0 || rc==SQLITE_NOMEM );
-  if( rc==SQLITE_NOMEM ){
+  assert( db!=0 || (rc&0xff)==SQLITE_NOMEM );
+  if( (rc&0xff)==SQLITE_NOMEM ){
     sqlite3_close(db);
     db = 0;
   }else if( rc!=SQLITE_OK ){
@@ -3438,7 +3484,7 @@ opendb_out:
   }
 #endif
   sqlite3_free_filename(zOpen);
-  return rc & 0xff;
+  return rc;
 }
 
 
@@ -4226,12 +4272,16 @@ int sqlite3_test_control(int op, ...){
     */
     case SQLITE_TESTCTRL_IMPOSTER: {
       sqlite3 *db = va_arg(ap, sqlite3*);
+      int iDb;
       sqlite3_mutex_enter(db->mutex);
-      db->init.iDb = sqlite3FindDbName(db, va_arg(ap,const char*));
-      db->init.busy = db->init.imposterTable = va_arg(ap,int);
-      db->init.newTnum = va_arg(ap,int);
-      if( db->init.busy==0 && db->init.newTnum>0 ){
-        sqlite3ResetAllSchemasOfConnection(db);
+      iDb = sqlite3FindDbName(db, va_arg(ap,const char*));
+      if( iDb>=0 ){
+        db->init.iDb = iDb;
+        db->init.busy = db->init.imposterTable = va_arg(ap,int);
+        db->init.newTnum = va_arg(ap,int);
+        if( db->init.busy==0 && db->init.newTnum>0 ){
+          sqlite3ResetAllSchemasOfConnection(db);
+        }
       }
       sqlite3_mutex_leave(db->mutex);
       break;
@@ -4306,6 +4356,26 @@ int sqlite3_test_control(int op, ...){
        }
        break;
     }
+
+    /* sqlite3_test_control(SQLITE_TESTCTRL_LOGEST,
+    **      double fIn,     // Input value
+    **      int *pLogEst,   // sqlite3LogEstFromDouble(fIn)
+    **      u64 *pInt,      // sqlite3LogEstToInt(*pLogEst)
+    **      int *pLogEst2   // sqlite3LogEst(*pInt)
+    ** );
+    **
+    ** Test access for the LogEst conversion routines.
+    */
+    case SQLITE_TESTCTRL_LOGEST: {
+      double rIn = va_arg(ap, double);
+      LogEst rLogEst = sqlite3LogEstFromDouble(rIn);
+      u64 iInt = sqlite3LogEstToInt(rLogEst);
+      va_arg(ap, int*)[0] = rLogEst;
+      va_arg(ap, u64*)[0] = iInt;
+      va_arg(ap, int*)[0] = sqlite3LogEst(iInt);
+      break;
+    }
+ 
 
 #if defined(SQLITE_DEBUG) && !defined(SQLITE_OMIT_WSD)
     /* sqlite3_test_control(SQLITE_TESTCTRL_TUNE, id, *piValue)
@@ -4443,7 +4513,7 @@ const char *sqlite3_uri_key(const char *zFilename, int N){
   if( zFilename==0 || N<0 ) return 0;
   zFilename = databaseName(zFilename);
   zFilename += sqlite3Strlen30(zFilename) + 1;
-  while( zFilename[0] && (N--)>0 ){
+  while( ALWAYS(zFilename) && zFilename[0] && (N--)>0 ){
     zFilename += sqlite3Strlen30(zFilename) + 1;
     zFilename += sqlite3Strlen30(zFilename) + 1;
   }
@@ -4486,12 +4556,14 @@ sqlite3_int64 sqlite3_uri_int64(
 ** corruption.
 */
 const char *sqlite3_filename_database(const char *zFilename){
+  if( zFilename==0 ) return 0;
   return databaseName(zFilename);
 }
 const char *sqlite3_filename_journal(const char *zFilename){
+  if( zFilename==0 ) return 0;
   zFilename = databaseName(zFilename);
   zFilename += sqlite3Strlen30(zFilename) + 1;
-  while( zFilename[0] ){
+  while( ALWAYS(zFilename) && zFilename[0] ){
     zFilename += sqlite3Strlen30(zFilename) + 1;
     zFilename += sqlite3Strlen30(zFilename) + 1;
   }
@@ -4502,7 +4574,7 @@ const char *sqlite3_filename_wal(const char *zFilename){
   return 0;
 #else
   zFilename = sqlite3_filename_journal(zFilename);
-  zFilename += sqlite3Strlen30(zFilename) + 1;
+  if( zFilename ) zFilename += sqlite3Strlen30(zFilename) + 1;
   return zFilename;
 #endif
 }
@@ -4679,6 +4751,35 @@ void sqlite3_snapshot_free(sqlite3_snapshot *pSnapshot){
   sqlite3_free(pSnapshot);
 }
 #endif /* SQLITE_ENABLE_SNAPSHOT */
+
+SQLITE_EXPERIMENTAL int sqlite3_wal_info(
+  sqlite3 *db, const char *zDb, 
+  unsigned int *pnPrior, unsigned int *pnFrame
+){
+  int rc = SQLITE_OK;
+
+#ifndef SQLITE_OMIT_WAL
+  Btree *pBt;
+  int iDb;
+
+#ifdef SQLITE_ENABLE_API_ARMOR
+  if( !sqlite3SafetyCheckOk(db) ){
+    return SQLITE_MISUSE_BKPT;
+  }
+#endif
+
+  sqlite3_mutex_enter(db->mutex);
+  iDb = sqlite3FindDbName(db, zDb);
+  if( iDb<0 ){
+    return SQLITE_ERROR;
+  }
+  pBt = db->aDb[iDb].pBt;
+  rc = sqlite3PagerWalInfo(sqlite3BtreePager(pBt), pnPrior, pnFrame);
+  sqlite3_mutex_leave(db->mutex);
+#endif   /* SQLITE_OMIT_WAL */
+
+  return rc;
+}
 
 #ifndef SQLITE_OMIT_COMPILEOPTION_DIAGS
 /*
