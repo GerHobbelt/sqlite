@@ -510,6 +510,7 @@ static Expr *exprTableColumn(
 ){
   Expr *pExpr = sqlite3Expr(db, TK_COLUMN, 0);
   if( pExpr ){
+    assert( ExprUseYTab(pExpr) );
     pExpr->y.pTab = pTab;
     pExpr->iTable = iCursor;
     pExpr->iColumn = iCol;
@@ -650,7 +651,7 @@ static void fkScanChildren(
   ** clause. For each row found, increment either the deferred or immediate
   ** foreign key constraint counter. */
   if( pParse->nErr==0 ){
-    pWInfo = sqlite3WhereBegin(pParse, pSrc, pWhere, 0, 0, 0, 0);
+    pWInfo = sqlite3WhereBegin(pParse, pSrc, pWhere, 0, 0, 0, 0, 0);
     sqlite3VdbeAddOp2(v, OP_FkCounter, pFKey->isDeferred, nIncr);
     if( pWInfo ){
       sqlite3WhereEnd(pWInfo);
@@ -702,6 +703,25 @@ static void fkTriggerDelete(sqlite3 *dbMem, Trigger *p){
 }
 
 /*
+** Clear the apTrigger[] cache of CASCADE triggers for all foreign keys
+** in a particular database.  This needs to happen when the schema
+** changes.
+*/
+void sqlite3FkClearTriggerCache(sqlite3 *db, int iDb){
+  HashElem *k;
+  Hash *pHash = &db->aDb[iDb].pSchema->tblHash;
+  for(k=sqliteHashFirst(pHash); k; k=sqliteHashNext(k)){
+    Table *pTab = sqliteHashData(k);
+    FKey *pFKey;
+    if( !IsOrdinaryTable(pTab) ) continue;
+    for(pFKey=pTab->u.tab.pFKey; pFKey; pFKey=pFKey->pNextFrom){
+      fkTriggerDelete(db, pFKey->apTrigger[0]); pFKey->apTrigger[0] = 0;
+      fkTriggerDelete(db, pFKey->apTrigger[1]); pFKey->apTrigger[1] = 0;
+    }
+  }
+}
+
+/*
 ** This function is called to generate code that runs when table pTab is
 ** being dropped from the database. The SrcList passed as the second argument
 ** to this function contains a single entry guaranteed to resolve to
@@ -720,13 +740,12 @@ static void fkTriggerDelete(sqlite3 *dbMem, Trigger *p){
 */
 void sqlite3FkDropTable(Parse *pParse, SrcList *pName, Table *pTab){
   sqlite3 *db = pParse->db;
-  if( (db->flags&SQLITE_ForeignKeys) && !IsVirtual(pTab) ){
+  if( (db->flags&SQLITE_ForeignKeys) && IsOrdinaryTable(pTab) ){
     int iSkip = 0;
     Vdbe *v = sqlite3GetVdbe(pParse);
 
     assert( v );                  /* VDBE has already been allocated */
-    assert( !IsView(pTab) );      /* Not a view */
-    assert( !IsVirtual(pTab) );
+    assert( IsOrdinaryTable(pTab) );
     if( sqlite3FkReferences(pTab)==0 ){
       /* Search for a deferred foreign key constraint for which this table
       ** is the child table. If one cannot be found, return without 
@@ -890,13 +909,13 @@ void sqlite3FkCheck(
 
   /* If foreign-keys are disabled, this function is a no-op. */
   if( (db->flags&SQLITE_ForeignKeys)==0 ) return;
+  if( !IsOrdinaryTable(pTab) ) return;
 
   iDb = sqlite3SchemaToIndex(db, pTab->pSchema);
   zDb = db->aDb[iDb].zDbSName;
 
   /* Loop through all the foreign key constraints for which pTab is the
   ** child table (the table that the foreign key definition is part of).  */
-  assert( !IsVirtual(pTab) );
   for(pFKey=pTab->u.tab.pFKey; pFKey; pFKey=pFKey->pNextFrom){
     Table *pTo;                   /* Parent table of foreign key pFKey */
     Index *pIdx = 0;              /* Index on key columns in pTo */
@@ -1079,10 +1098,9 @@ u32 sqlite3FkOldmask(
   Table *pTab                     /* Table being modified */
 ){
   u32 mask = 0;
-  if( pParse->db->flags&SQLITE_ForeignKeys ){
+  if( pParse->db->flags&SQLITE_ForeignKeys && IsOrdinaryTable(pTab) ){
     FKey *p;
     int i;
-    assert( !IsVirtual(pTab) );
     for(p=pTab->u.tab.pFKey; p; p=p->pNextFrom){
       for(i=0; i<p->nCol; i++) mask |= COLUMN_MASK(p->aCol[i].iFrom);
     }
@@ -1133,7 +1151,7 @@ int sqlite3FkRequired(
 ){
   int eRet = 1;                   /* Value to return if bHaveFK is true */
   int bHaveFK = 0;                /* If FK processing is required */
-  if( pParse->db->flags&SQLITE_ForeignKeys && !IsVirtual(pTab) ){
+  if( pParse->db->flags&SQLITE_ForeignKeys && IsOrdinaryTable(pTab) ){
     if( !aChange ){
       /* A DELETE operation. Foreign key processing is required if the 
       ** table in question is either the child or parent table for any 
@@ -1421,7 +1439,7 @@ void sqlite3FkDelete(sqlite3 *db, Table *pTab){
   FKey *pFKey;                    /* Iterator variable */
   FKey *pNext;                    /* Copy of pFKey->pNextFrom */
 
-  assert( !IsVirtual(pTab) );
+  assert( IsOrdinaryTable(pTab) );
   for(pFKey=pTab->u.tab.pFKey; pFKey; pFKey=pNext){
     assert( db==0 || sqlite3SchemaMutexHeld(db, 0, pTab->pSchema) );
 

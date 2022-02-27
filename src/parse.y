@@ -105,6 +105,13 @@
 */
 struct TrigEvent { int a; IdList * b; };
 
+/*
+** Generate a syntax error
+*/
+static void parserSyntaxError(Parse *pParse, Token *p){
+  sqlite3ErrorMsg(pParse, "near \"%T\": syntax error", p);
+}
+
 struct FrameBound     { int eType; Expr *pExpr; };
 
 /*
@@ -164,7 +171,16 @@ trans_opt ::= TRANSACTION nm.
 transtype(A) ::= .             {A = TK_DEFERRED;}
 transtype(A) ::= DEFERRED(X).  {A = @X; /*A-overwrites-X*/}
 transtype(A) ::= IMMEDIATE(X). {A = @X; /*A-overwrites-X*/}
-transtype(A) ::= EXCLUSIVE(X). {A = @X; /*A-overwrites-X*/}
+transtype(A) ::= ID(X). {
+   Token *p = &X;
+   if( p->n==9 && sqlite3_strnicmp(p->z,"exclusive",9)==0 ){
+     A = TK_EXCLUSIVE;
+   }else if( p->n==10 && sqlite3_strnicmp(p->z,"concurrent",10)==0 ){
+     A = TK_CONCURRENT;  /*A-overwrites-X*/
+   }else{
+     parserSyntaxError(pParse, p);
+   }
+}
 cmd ::= COMMIT|END(X) trans_opt.   {sqlite3EndTransaction(pParse,@X);}
 cmd ::= ROLLBACK(X) trans_opt.     {sqlite3EndTransaction(pParse,@X);}
 
@@ -286,7 +302,7 @@ columnname(A) ::= nm(A) typetoken(Y). {sqlite3AddColumn(pParse,A,Y);}
 %left BITAND BITOR LSHIFT RSHIFT.
 %left PLUS MINUS.
 %left STAR SLASH REM.
-%left CONCAT.
+%left CONCAT PTR.
 %left COLLATE.
 %right BITNOT.
 %nonassoc ON.
@@ -295,7 +311,6 @@ columnname(A) ::= nm(A) typetoken(Y). {sqlite3AddColumn(pParse,A,Y);}
 // keywords.  Any non-standard keyword can also be an identifier.
 //
 %token_class id  ID|INDEXED.
-
 
 // And "ids" is an identifer-or-string.
 //
@@ -1039,9 +1054,9 @@ idlist(A) ::= nm(Y).
       ExprClearVVAProperties(p);
       p->iAgg = -1;
       p->pLeft = p->pRight = 0;
-      p->x.pList = 0;
       p->pAggInfo = 0;
-      p->y.pTab = 0;
+      memset(&p->x, 0, sizeof(p->x));
+      memset(&p->y, 0, sizeof(p->y));
       p->op2 = 0;
       p->iTable = 0;
       p->iColumn = 0;
@@ -1104,7 +1119,7 @@ expr(A) ::= VARIABLE(X).     {
     Token t = X; /*A-overwrites-X*/
     assert( t.n>=2 );
     if( pParse->nested==0 ){
-      sqlite3ErrorMsg(pParse, "near \"%T\": syntax error", &t);
+      parserSyntaxError(pParse, &t);
       A = 0;
     }else{
       A = sqlite3PExpr(pParse, TK_REGISTER, 0, 0);
@@ -1233,6 +1248,12 @@ expr(A) ::= BITNOT(B) expr(X).
 expr(A) ::= PLUS|MINUS(B) expr(X). [BITNOT] {
   A = sqlite3PExpr(pParse, @B==TK_PLUS ? TK_UPLUS : TK_UMINUS, X, 0);
   /*A-overwrites-B*/
+}
+
+expr(A) ::= expr(B) PTR(C) expr(D). {
+  ExprList *pList = sqlite3ExprListAppend(pParse, 0, B);
+  pList = sqlite3ExprListAppend(pParse, pList, D);
+  A = sqlite3ExprFunction(pParse, pList, &C, 0);
 }
 
 %type between_op {int}
@@ -1638,7 +1659,8 @@ cmd ::= ANALYZE nm(X) dbnm(Y).  {sqlite3Analyze(pParse, &X, &Y);}
 %endif
 
 //////////////////////// ALTER TABLE table ... ////////////////////////////////
-%ifndef SQLITE_OMIT_ALTERTABLE
+%ifndef SQLITE_OMIT_ALTERTABLE 
+%ifndef SQLITE_OMIT_VIRTUALTABLE
 cmd ::= ALTER TABLE fullname(X) RENAME TO nm(Z). {
   sqlite3AlterRenameTable(pParse,X,&Z);
 }
@@ -1662,7 +1684,8 @@ cmd ::= ALTER TABLE fullname(X) RENAME kwcolumn_opt nm(Y) TO nm(Z). {
 kwcolumn_opt ::= .
 kwcolumn_opt ::= COLUMNKW.
 
-%endif  SQLITE_OMIT_ALTERTABLE
+%endif SQLITE_OMIT_VIRTUALTABLE
+%endif SQLITE_OMIT_ALTERTABLE
 
 //////////////////////// CREATE VIRTUAL TABLE ... /////////////////////////////
 %ifndef SQLITE_OMIT_VIRTUALTABLE
@@ -1869,6 +1892,7 @@ filter_clause(A) ::= FILTER LP WHERE expr(X) RP.  { A = X; }
   UPLUS           /* Unary plus */
   TRUTH           /* IS TRUE or IS FALSE or IS NOT TRUE or IS NOT FALSE */
   REGISTER        /* Reference to a VDBE register */
+  CONCURRENT      /* BEGIN CONCURRENT */
   VECTOR          /* Vector */
   SELECT_COLUMN   /* Choose a single column from a multi-column SELECT */
   IF_NULL_ROW     /* the if-null-row operator */

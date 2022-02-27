@@ -251,7 +251,7 @@ static void worker_delete_all_content(WorkerInfo *p, int inTrans){
 ** Create rows mn through mx in table iTab for the given worker
 */
 static void worker_add_content(WorkerInfo *p, int mn, int mx, int iTab){
-  char *zTabDef;
+  char *zTabDef = NULL;
   switch( iTab ){
     case 1:  zTabDef = "t1(tid,sp,a,b,c)";  break;
     case 2:  zTabDef = "t2(tid,sp,d,e,f)";  break;
@@ -364,7 +364,7 @@ static void *worker_thread(void *pArg){
 #define main(cnt, arr)      sqlite_threadtest4_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   int nWorker = 0;         /* Number of worker threads */
   int i;                   /* Loop counter */
   WorkerInfo *aInfo;       /* Information for each worker */

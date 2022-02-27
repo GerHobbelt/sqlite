@@ -304,7 +304,7 @@ static void ofstWalkPage(GState *p, int pgno){
 #define main(cnt, arr)      sqlite_offsets_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   GState g;
   memset(&g, 0, sizeof(g));
   if( argc>2 && strcmp(argv[1],"--trace")==0 ){

@@ -45,7 +45,7 @@ static int allZero(unsigned char *aLine){
 #define main(cnt, arr)      sqlite_dbtotxt_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   int pgsz = 0;               /* page size */
   long szFile;                /* Size of the input file in bytes */
   FILE *in;                   /* Input file */

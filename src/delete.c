@@ -44,6 +44,16 @@ Table *sqlite3SrcListLookup(Parse *pParse, SrcList *pSrc){
   return pTab;
 }
 
+/* Generate byte-code that will report the number of rows modified 
+** by a DELETE, INSERT, or UPDATE statement.
+*/
+void sqlite3CodeChangeCount(Vdbe *v, int regCounter, const char *zColName){
+  sqlite3VdbeAddOp0(v, OP_FkCheck);
+  sqlite3VdbeAddOp2(v, OP_ResultRow, regCounter, 1);
+  sqlite3VdbeSetNumCols(v, 1);
+  sqlite3VdbeSetColName(v, 0, COLNAME_NAME, zColName, SQLITE_STATIC);
+}
+
 /* Return true if table pTab is read-only.
 **
 ** A table is read-only if any of the following are true:
@@ -210,6 +220,7 @@ Expr *sqlite3LimitWhere(
   pSelectSrc = sqlite3SrcListDup(db, pSrc, 0);
   pSrc->a[0].pTab = pTab;
   if( pSrc->a[0].fg.isIndexedBy ){
+    assert( pSrc->a[0].fg.isCte==0 );
     pSrc->a[0].u2.pIBIndex = 0;
     pSrc->a[0].fg.isIndexedBy = 0;
     sqlite3DbFree(db, pSrc->a[0].u1.zIndexedBy);
@@ -282,9 +293,11 @@ void sqlite3DeleteFrom(
 
   memset(&sContext, 0, sizeof(sContext));
   db = pParse->db;
-  if( pParse->nErr || db->mallocFailed ){
+  assert( db->pParse==pParse );
+  if( pParse->nErr ){
     goto delete_from_cleanup;
   }
+  assert( db->mallocFailed==0 );
   assert( pTabList->nSrc==1 );
 
 
@@ -465,7 +478,7 @@ void sqlite3DeleteFrom(
     **  ONEPASS_SINGLE: One-pass approach - at most one row deleted.
     **  ONEPASS_MULTI:  One-pass approach - any number of rows may be deleted.
     */
-    pWInfo = sqlite3WhereBegin(pParse, pTabList, pWhere, 0, 0, wcf, iTabCur+1);
+    pWInfo = sqlite3WhereBegin(pParse, pTabList, pWhere, 0, 0,0,wcf,iTabCur+1);
     if( pWInfo==0 ) goto delete_from_cleanup;
     eOnePass = sqlite3WhereOkOnePass(pWInfo, aiCurOnePass);
     assert( IsVirtual(pTab)==0 || eOnePass!=ONEPASS_MULTI );
@@ -618,9 +631,7 @@ void sqlite3DeleteFrom(
   ** invoke the callback function.
   */
   if( memCnt ){
-    sqlite3VdbeAddOp2(v, OP_ChngCntRow, memCnt, 1);
-    sqlite3VdbeSetNumCols(v, 1);
-    sqlite3VdbeSetColName(v, 0, COLNAME_NAME, "rows deleted", SQLITE_STATIC);
+    sqlite3CodeChangeCount(v, memCnt, "rows deleted");
   }
 
 delete_from_cleanup:

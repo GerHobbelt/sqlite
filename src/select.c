@@ -391,10 +391,13 @@ void sqlite3SetJoinExpr(Expr *p, int iTable){
     assert( !ExprHasProperty(p, EP_TokenOnly|EP_Reduced) );
     ExprSetVVAProperty(p, EP_NoReduce);
     p->iRightJoinTable = iTable;
-    if( p->op==TK_FUNCTION && p->x.pList ){
-      int i;
-      for(i=0; i<p->x.pList->nExpr; i++){
-        sqlite3SetJoinExpr(p->x.pList->a[i].pExpr, iTable);
+    if( p->op==TK_FUNCTION ){
+      assert( ExprUseXList(p) );
+      if( p->x.pList ){
+        int i;
+        for(i=0; i<p->x.pList->nExpr; i++){
+          sqlite3SetJoinExpr(p->x.pList->a[i].pExpr, iTable);
+        }
       }
     }
     sqlite3SetJoinExpr(p->pLeft, iTable);
@@ -417,10 +420,13 @@ static void unsetJoinExpr(Expr *p, int iTable){
     if( p->op==TK_COLUMN && p->iTable==iTable ){
       ExprClearProperty(p, EP_CanBeNull);
     }
-    if( p->op==TK_FUNCTION && p->x.pList ){
-      int i;
-      for(i=0; i<p->x.pList->nExpr; i++){
-        unsetJoinExpr(p->x.pList->a[i].pExpr, iTable);
+    if( p->op==TK_FUNCTION ){
+      assert( ExprUseXList(p) );
+      if( p->x.pList ){
+        int i;
+        for(i=0; i<p->x.pList->nExpr; i++){
+          unsetJoinExpr(p->x.pList->a[i].pExpr, iTable);
+        }
       }
     }
     unsetJoinExpr(p->pLeft, iTable);
@@ -935,9 +941,13 @@ static void selectExprDefer(
     struct ExprList_item *pItem = &pEList->a[i];
     if( pItem->u.x.iOrderByCol==0 ){
       Expr *pExpr = pItem->pExpr;
-      Table *pTab = pExpr->y.pTab;
-      if( pExpr->op==TK_COLUMN && pExpr->iColumn>=0 && pTab && !IsVirtual(pTab)
-       && (pTab->aCol[pExpr->iColumn].colFlags & COLFLAG_SORTERREF)
+      Table *pTab;
+      if( pExpr->op==TK_COLUMN
+       && pExpr->iColumn>=0
+       && ALWAYS( ExprUseYTab(pExpr) )
+       && (pTab = pExpr->y.pTab)!=0
+       && IsOrdinaryTable(pTab)
+       && (pTab->aCol[pExpr->iColumn].colFlags & COLFLAG_SORTERREF)!=0
       ){
         int j;
         for(j=0; j<nDefer; j++){
@@ -958,6 +968,7 @@ static void selectExprDefer(
               Expr *pNew = sqlite3PExpr(pParse, TK_COLUMN, 0, 0);
               if( pNew ){
                 pNew->iTable = pExpr->iTable;
+                assert( ExprUseYTab(pNew) );
                 pNew->y.pTab = pExpr->y.pTab;
                 pNew->iColumn = pPk ? pPk->aiColumn[k] : -1;
                 pExtra = sqlite3ExprListAppend(pParse, pExtra, pNew);
@@ -1393,7 +1404,7 @@ KeyInfo *sqlite3KeyInfoAlloc(sqlite3 *db, int N, int X){
     p->nRef = 1;
     memset(&p[1], 0, nExtra);
   }else{
-    sqlite3OomFault(db);
+    return (KeyInfo*)sqlite3OomFault(db);
   }
   return p;
 }
@@ -1564,6 +1575,9 @@ static void generateSortTail(
 
   iTab = pSort->iECursor;
   if( eDest==SRT_Output || eDest==SRT_Coroutine || eDest==SRT_Mem ){
+    if( eDest==SRT_Mem && p->iOffset ){
+      sqlite3VdbeAddOp2(v, OP_Null, 0, pDest->iSdst);
+    }
     regRowid = 0;
     regRow = pDest->iSdst;
   }else{
@@ -1806,7 +1820,7 @@ static const char *columnTypeImpl(
         break;
       }
 
-      assert( pTab && pExpr->y.pTab==pTab );
+      assert( pTab && ExprUseYTab(pExpr) && pExpr->y.pTab==pTab );
       if( pS ){
         /* The "table" is actually a sub-select or a view in the FROM clause
         ** of the SELECT statement. Return the declaration type and origin
@@ -1866,9 +1880,11 @@ static const char *columnTypeImpl(
       ** statement.
       */
       NameContext sNC;
-      Select *pS = pExpr->x.pSelect;
-      Expr *p = pS->pEList->a[0].pExpr;
-      assert( ExprHasProperty(pExpr, EP_xIsSelect) );
+      Select *pS;
+      Expr *p;
+      assert( ExprUseXSelect(pExpr) );
+      pS = pExpr->x.pSelect;
+      p = pS->pEList->a[0].pExpr;
       sNC.pSrcList = pS->pSrc;
       sNC.pNext = pNC;
       sNC.pParse = pNC->pParse;
@@ -1997,7 +2013,8 @@ void sqlite3GenerateColumnNames(
 
     assert( p!=0 );
     assert( p->op!=TK_AGG_COLUMN );  /* Agg processing has not run yet */
-    assert( p->op!=TK_COLUMN || p->y.pTab!=0 ); /* Covering idx not yet coded */
+    assert( p->op!=TK_COLUMN
+        || (ExprUseYTab(p) && p->y.pTab!=0) ); /* Covering idx not yet coded */
     if( pEList->a[i].zEName && pEList->a[i].eEName==ENAME_NAME ){
       /* An AS clause always takes first priority */
       char *zName = pEList->a[i].zEName;
@@ -2093,7 +2110,10 @@ int sqlite3ColumnsFromExprList(
         pColExpr = pColExpr->pRight;
         assert( pColExpr!=0 );
       }
-      if( pColExpr->op==TK_COLUMN && (pTab = pColExpr->y.pTab)!=0 ){
+      if( pColExpr->op==TK_COLUMN
+       && ALWAYS( ExprUseYTab(pColExpr) )
+       && (pTab = pColExpr->y.pTab)!=0
+      ){
         /* For columns use the column name name */
         int iCol = pColExpr->iColumn;
         if( iCol<0 ) iCol = pTab->iPKey;
@@ -2123,7 +2143,7 @@ int sqlite3ColumnsFromExprList(
         if( zName[j]==':' ) nName = j;
       }
       zName = sqlite3MPrintf(db, "%.*z:%u", nName, zName, ++cnt);
-      if( cnt>3 ) sqlite3_randomness(sizeof(cnt), &cnt);
+      if( cnt>3 ) sqlite3FastRandomness(&db->sPrng, sizeof(cnt), &cnt);
     }
     pCol->zCnName = zName;
     pCol->hName = sqlite3StrIHash(zName);
@@ -2179,7 +2199,7 @@ void sqlite3SelectAddColumnTypeAndCollation(
   a = pSelect->pEList->a;
   for(i=0, pCol=pTab->aCol; i<pTab->nCol; i++, pCol++){
     const char *zType;
-    int n, m;
+    i64 n, m;
     pTab->tabFlags |= (pCol->colFlags & COLFLAG_NOINSERT);
     p = a[i].pExpr;
     zType = columnType(&sNC, p, 0, 0, 0);
@@ -2192,6 +2212,9 @@ void sqlite3SelectAddColumnTypeAndCollation(
       if( pCol->zCnName ){
         memcpy(&pCol->zCnName[n+1], zType, m+1);
         pCol->colFlags |= COLFLAG_HASTYPE;
+      }else{
+        testcase( pCol->colFlags & COLFLAG_HASTYPE );
+        pCol->colFlags &= ~(COLFLAG_HASTYPE|COLFLAG_HASCOLL);
       }
     }
     if( pCol->affinity<=SQLITE_AFF_NONE ) pCol->affinity = aff;
@@ -2362,7 +2385,7 @@ static CollSeq *multiSelectCollSeq(Parse *pParse, Select *p, int iCol){
 */
 static KeyInfo *multiSelectOrderByKeyInfo(Parse *pParse, Select *p, int nExtra){
   ExprList *pOrderBy = p->pOrderBy;
-  int nOrderBy = p->pOrderBy->nExpr;
+  int nOrderBy = ALWAYS(pOrderBy!=0) ? pOrderBy->nExpr : 0;
   sqlite3 *db = pParse->db;
   KeyInfo *pRet = sqlite3KeyInfoAlloc(db, nOrderBy+nExtra, 1);
   if( pRet ){
@@ -2434,7 +2457,7 @@ static void generateWithRecursiveQuery(
   SrcList *pSrc = p->pSrc;      /* The FROM clause of the recursive query */
   int nCol = p->pEList->nExpr;  /* Number of columns in the recursive table */
   Vdbe *v = pParse->pVdbe;      /* The prepared statement under construction */
-  Select *pSetup = p->pPrior;   /* The setup query */
+  Select *pSetup;               /* The setup query */
   Select *pFirstRec;            /* Left-most recursive term */
   int addrTop;                  /* Top of the loop */
   int addrCont, addrBreak;      /* CONTINUE and BREAK addresses */
@@ -2518,7 +2541,6 @@ static void generateWithRecursiveQuery(
   ** iDistinct table.  pFirstRec is left pointing to the left-most
   ** recursive term of the CTE.
   */
-  pFirstRec = p;
   for(pFirstRec=p; ALWAYS(pFirstRec!=0); pFirstRec=pFirstRec->pPrior){
     if( pFirstRec->selFlags & SF_Aggregate ){
       sqlite3ErrorMsg(pParse, "recursive aggregate queries not supported");
@@ -2984,6 +3006,7 @@ static int multiSelect(
     int nCol;                     /* Number of columns in result set */
 
     assert( p->pNext==0 );
+    assert( p->pEList!=0 );
     nCol = p->pEList->nExpr;
     pKeyInfo = sqlite3KeyInfoAlloc(db, nCol, 1);
     if( !pKeyInfo ){
@@ -3276,6 +3299,8 @@ static int multiSelectOrderBy(
 ){
   int i, j;             /* Loop counters */
   Select *pPrior;       /* Another SELECT immediately to our left */
+  Select *pSplit;       /* Left-most SELECT in the right-hand group */
+  int nSelect;          /* Number of SELECT statements in the compound */
   Vdbe *v;              /* Generate code to this VDBE */
   SelectDest destA;     /* Destination for coroutine A */
   SelectDest destB;     /* Destination for coroutine B */
@@ -3321,8 +3346,7 @@ static int multiSelectOrderBy(
   /* Patch up the ORDER BY clause
   */
   op = p->op;  
-  pPrior = p->pPrior;
-  assert( pPrior->pOrderBy==0 );
+  assert( p->pPrior->pOrderBy==0 );
   pOrderBy = p->pOrderBy;
   assert( pOrderBy );
   nOrderBy = pOrderBy->nExpr;
@@ -3335,6 +3359,7 @@ static int multiSelectOrderBy(
     for(i=1; db->mallocFailed==0 && i<=p->pEList->nExpr; i++){
       struct ExprList_item *pItem;
       for(j=0, pItem=pOrderBy->a; j<nOrderBy; j++, pItem++){
+        assert( pItem!=0 );
         assert( pItem->u.x.iOrderByCol>0 );
         if( pItem->u.x.iOrderByCol==i ) break;
       }
@@ -3361,6 +3386,7 @@ static int multiSelectOrderBy(
     struct ExprList_item *pItem;
     aPermute[0] = nOrderBy;
     for(i=1, pItem=pOrderBy->a; i<=nOrderBy; i++, pItem++){
+      assert( pItem!=0 );
       assert( pItem->u.x.iOrderByCol>0 );
       assert( pItem->u.x.iOrderByCol<=p->pEList->nExpr );
       aPermute[i] = pItem->u.x.iOrderByCol - 1;
@@ -3369,11 +3395,6 @@ static int multiSelectOrderBy(
   }else{
     pKeyMerge = 0;
   }
-
-  /* Reattach the ORDER BY clause to the query.
-  */
-  p->pOrderBy = pOrderBy;
-  pPrior->pOrderBy = sqlite3ExprListDup(pParse->db, pOrderBy, 0);
 
   /* Allocate a range of temporary registers and the KeyInfo needed
   ** for the logic that removes duplicate result rows when the
@@ -3399,12 +3420,30 @@ static int multiSelectOrderBy(
  
   /* Separate the left and the right query from one another
   */
-  p->pPrior = 0;
-  pPrior->pNext = 0;
-  sqlite3ResolveOrderGroupBy(pParse, p, p->pOrderBy, "ORDER");
-  if( pPrior->pPrior==0 ){
-    sqlite3ResolveOrderGroupBy(pParse, pPrior, pPrior->pOrderBy, "ORDER");
+  nSelect = 1;
+  if( (op==TK_ALL || op==TK_UNION)
+   && OptimizationEnabled(db, SQLITE_BalancedMerge)
+  ){
+    for(pSplit=p; pSplit->pPrior!=0 && pSplit->op==op; pSplit=pSplit->pPrior){
+      nSelect++;
+      assert( pSplit->pPrior->pNext==pSplit );
+    }
   }
+  if( nSelect<=3 ){
+    pSplit = p;
+  }else{
+    pSplit = p;
+    for(i=2; i<nSelect; i+=2){ pSplit = pSplit->pPrior; }
+  }
+  pPrior = pSplit->pPrior;
+  assert( pPrior!=0 );
+  pSplit->pPrior = 0;
+  pPrior->pNext = 0;
+  assert( p->pOrderBy == pOrderBy );
+  assert( pOrderBy!=0 || db->mallocFailed );
+  pPrior->pOrderBy = sqlite3ExprListDup(pParse->db, pOrderBy, 0);
+  sqlite3ResolveOrderGroupBy(pParse, p, p->pOrderBy, "ORDER");
+  sqlite3ResolveOrderGroupBy(pParse, pPrior, pPrior->pOrderBy, "ORDER");
 
   /* Compute the limit registers */
   computeLimitRegisters(pParse, p, labelEnd);
@@ -3555,12 +3594,11 @@ static int multiSelectOrderBy(
 
   /* Reassembly the compound query so that it will be freed correctly
   ** by the calling function */
-  if( p->pPrior ){
-    sqlite3SelectDelete(db, p->pPrior);
+  if( pSplit->pPrior ){
+    sqlite3SelectDelete(db, pSplit->pPrior);
   }
-  p->pPrior = pPrior;
-  pPrior->pNext = p;
-
+  pSplit->pPrior = pPrior;
+  pPrior->pNext = pSplit;
   sqlite3ExprListDelete(db, pPrior->pOrderBy);
   pPrior->pOrderBy = 0;
 
@@ -3673,7 +3711,7 @@ static Expr *substExpr(
     }
     pExpr->pLeft = substExpr(pSubst, pExpr->pLeft);
     pExpr->pRight = substExpr(pSubst, pExpr->pRight);
-    if( ExprHasProperty(pExpr, EP_xIsSelect) ){
+    if( ExprUseXSelect(pExpr) ){
       substSelect(pSubst, pExpr->x.pSelect, 1);
     }else{
       substExprList(pSubst, pExpr->x.pList);
@@ -4160,7 +4198,7 @@ static int flattenSubquery(
 
     if( pSrc->nSrc>1 ){
       if( pParse->nSelect>500 ) return 0;
-      aCsrMap = sqlite3DbMallocZero(db, (pParse->nTab+1)*sizeof(int));
+      aCsrMap = sqlite3DbMallocZero(db, ((i64)pParse->nTab+1)*sizeof(int));
       if( aCsrMap ) aCsrMap[0] = pParse->nTab;
     }
   }
@@ -4884,7 +4922,7 @@ static int pushDownWhereTerms(
 */
 static u8 minMaxQuery(sqlite3 *db, Expr *pFunc, ExprList **ppMinMax){
   int eRet = WHERE_ORDERBY_NORMAL;      /* Return value */
-  ExprList *pEList = pFunc->x.pList;    /* Arguments to agg function */
+  ExprList *pEList;                     /* Arguments to agg function */
   const char *zFunc;                    /* Name of aggregate function pFunc */
   ExprList *pOrderBy;
   u8 sortFlags = 0;
@@ -4892,6 +4930,8 @@ static u8 minMaxQuery(sqlite3 *db, Expr *pFunc, ExprList **ppMinMax){
   assert( *ppMinMax==0 );
   assert( pFunc->op==TK_AGG_FUNCTION );
   assert( !IsWindowFunc(pFunc) );
+  assert( ExprUseXList(pFunc) );
+  pEList = pFunc->x.pList;
   if( pEList==0 
    || pEList->nExpr!=1
    || ExprHasProperty(pFunc, EP_WinFunc)
@@ -4899,6 +4939,7 @@ static u8 minMaxQuery(sqlite3 *db, Expr *pFunc, ExprList **ppMinMax){
   ){
     return eRet;
   }
+  assert( !ExprHasProperty(pFunc, EP_IntValue) );
   zFunc = pFunc->u.zToken;
   if( sqlite3StrICmp(zFunc, "min")==0 ){
     eRet = WHERE_ORDERBY_MIN;
@@ -4926,7 +4967,13 @@ static u8 minMaxQuery(sqlite3 *db, Expr *pFunc, ExprList **ppMinMax){
 **
 ** where table is a database table, not a sub-select or view. If the query
 ** does match this pattern, then a pointer to the Table object representing
-** <tbl> is returned. Otherwise, 0 is returned.
+** <tbl> is returned. Otherwise, NULL is returned.
+**
+** This routine checks to see if it is safe to use the count optimization.
+** A correct answer is still obtained (though perhaps more slowly) if
+** this routine returns NULL when it could have returned a table pointer.
+** But returning the pointer when NULL should have been returned can
+** result in incorrect answers and/or crashes.  So, when in doubt, return NULL.
 */
 static Table *isSimpleCount(Select *p, AggInfo *pAggInfo){
   Table *pTab;
@@ -4934,19 +4981,26 @@ static Table *isSimpleCount(Select *p, AggInfo *pAggInfo){
 
   assert( !p->pGroupBy );
 
-  if( p->pWhere || p->pEList->nExpr!=1 
-   || p->pSrc->nSrc!=1 || p->pSrc->a[0].pSelect
+  if( p->pWhere 
+   || p->pEList->nExpr!=1 
+   || p->pSrc->nSrc!=1
+   || p->pSrc->a[0].pSelect
+   || pAggInfo->nFunc!=1
   ){
     return 0;
   }
   pTab = p->pSrc->a[0].pTab;
+  assert( pTab!=0 );
+  assert( !IsView(pTab) );
+  if( !IsOrdinaryTable(pTab) ) return 0;
   pExpr = p->pEList->a[0].pExpr;
-  assert( pTab && !IsView(pTab) && pExpr );
-
-  if( IsVirtual(pTab) ) return 0;
+  assert( pExpr!=0 );
   if( pExpr->op!=TK_AGG_FUNCTION ) return 0;
-  if( NEVER(pAggInfo->nFunc==0) ) return 0;
+  if( pExpr->pAggInfo!=pAggInfo ) return 0;
   if( (pAggInfo->aFunc[0].pFunc->funcFlags&SQLITE_FUNC_COUNT)==0 ) return 0;
+  assert( pAggInfo->aFunc[0].pFExpr==pExpr );
+  testcase( ExprHasProperty(pExpr, EP_Distinct) );
+  testcase( ExprHasProperty(pExpr, EP_WinFunc) );
   if( ExprHasProperty(pExpr, EP_Distinct|EP_WinFunc) ) return 0;
 
   return pTab;
@@ -4975,6 +5029,7 @@ int sqlite3IndexedByLookup(Parse *pParse, SrcItem *pFrom){
     pParse->checkSchema = 1;
     return SQLITE_ERROR;
   }
+  assert( pFrom->fg.isCte==0 );
   pFrom->u2.pIBIndex = pIdx;
   return SQLITE_OK;
 }
@@ -5232,6 +5287,10 @@ static int resolveFromTermToCte(
     if( db->mallocFailed ) return 2;
     pFrom->pSelect->selFlags |= SF_CopyCte;
     assert( pFrom->pSelect );
+    if( pFrom->fg.isIndexedBy ){
+      sqlite3ErrorMsg(pParse, "no such index: \"%s\"", pFrom->u1.zIndexedBy);
+      return 2;
+    }
     pFrom->fg.isCte = 1;
     pFrom->u2.pCteUse = pCteUse;
     pCteUse->nUse++;
@@ -5499,9 +5558,9 @@ static int selectExpander(Walker *pWalker, Select *p){
               pTab->zName);
           }
           pFrom->pSelect = sqlite3SelectDup(db, pTab->u.view.pSelect, 0);
-        }else
+        }
 #ifndef SQLITE_OMIT_VIRTUALTABLE
-        if( ALWAYS(IsVirtual(pTab))
+        else if( ALWAYS(IsVirtual(pTab))
          && pFrom->fg.fromDDL
          && ALWAYS(pTab->u.vtab.p!=0)
          && pTab->u.vtab.p->eVtabRisk > ((db->flags & SQLITE_TrustedSchema)!=0)
@@ -5529,7 +5588,8 @@ static int selectExpander(Walker *pWalker, Select *p){
 
   /* Process NATURAL keywords, and ON and USING clauses of joins.
   */
-  if( pParse->nErr || db->mallocFailed || sqliteProcessJoin(pParse, p) ){
+  assert( db->mallocFailed==0 || pParse->nErr!=0 );
+  if( pParse->nErr || sqliteProcessJoin(pParse, p) ){
     return WRC_Abort;
   }
 
@@ -5826,12 +5886,13 @@ void sqlite3SelectPrep(
   NameContext *pOuterNC  /* Name context for container */
 ){
   assert( p!=0 || pParse->db->mallocFailed );
+  assert( pParse->db->pParse==pParse );
   if( pParse->db->mallocFailed ) return;
   if( p->selFlags & SF_HasTypeInfo ) return;
   sqlite3SelectExpand(pParse, p);
-  if( pParse->nErr || pParse->db->mallocFailed ) return;
+  if( pParse->nErr ) return;
   sqlite3ResolveSelectNames(pParse, p, pOuterNC);
-  if( pParse->nErr || pParse->db->mallocFailed ) return;
+  if( pParse->nErr ) return;
   sqlite3SelectAddTypeInfo(pParse, p);
 }
 
@@ -5848,8 +5909,10 @@ static void resetAccumulator(Parse *pParse, AggInfo *pAggInfo){
   int i;
   struct AggInfo_func *pFunc;
   int nReg = pAggInfo->nFunc + pAggInfo->nColumn;
+  assert( pParse->db->pParse==pParse );
+  assert( pParse->db->mallocFailed==0 || pParse->nErr!=0 );
   if( nReg==0 ) return;
-  if( pParse->nErr || pParse->db->mallocFailed ) return;
+  if( pParse->nErr ) return;
 #ifdef SQLITE_DEBUG
   /* Verify that all AggInfo registers are within the range specified by
   ** AggInfo.mnReg..AggInfo.mxReg */
@@ -5867,7 +5930,7 @@ static void resetAccumulator(Parse *pParse, AggInfo *pAggInfo){
   for(pFunc=pAggInfo->aFunc, i=0; i<pAggInfo->nFunc; i++, pFunc++){
     if( pFunc->iDistinct>=0 ){
       Expr *pE = pFunc->pFExpr;
-      assert( !ExprHasProperty(pE, EP_xIsSelect) );
+      assert( ExprUseXList(pE) );
       if( pE->x.pList==0 || pE->x.pList->nExpr!=1 ){
         sqlite3ErrorMsg(pParse, "DISTINCT aggregates must have exactly one "
            "argument");
@@ -5892,8 +5955,9 @@ static void finalizeAggFunctions(Parse *pParse, AggInfo *pAggInfo){
   int i;
   struct AggInfo_func *pF;
   for(i=0, pF=pAggInfo->aFunc; i<pAggInfo->nFunc; i++, pF++){
-    ExprList *pList = pF->pFExpr->x.pList;
-    assert( !ExprHasProperty(pF->pFExpr, EP_xIsSelect) );
+    ExprList *pList;
+    assert( ExprUseXList(pF->pFExpr) );
+    pList = pF->pFExpr->x.pList;
     sqlite3VdbeAddOp2(v, OP_AggFinal, pF->iMem, pList ? pList->nExpr : 0);
     sqlite3VdbeAppendP4(v, pF->pFunc, P4_FUNCDEF);
   }
@@ -5927,9 +5991,10 @@ static void updateAccumulator(
     int nArg;
     int addrNext = 0;
     int regAgg;
-    ExprList *pList = pF->pFExpr->x.pList;
-    assert( !ExprHasProperty(pF->pFExpr, EP_xIsSelect) );
+    ExprList *pList;
+    assert( ExprUseXList(pF->pFExpr) );
     assert( !IsWindowFunc(pF->pFExpr) );
+    pList = pF->pFExpr->x.pList;
     if( ExprHasProperty(pF->pFExpr, EP_WinFunc) ){
       Expr *pFilter = pF->pFExpr->y.pWin->pFilter;
       if( pAggInfo->nAccumulator 
@@ -6175,7 +6240,9 @@ static int countOfViewOptimization(Parse *pParse, Select *p){
   if( p->pGroupBy ) return 0;
   pExpr = p->pEList->a[0].pExpr;
   if( pExpr->op!=TK_AGG_FUNCTION ) return 0;        /* Result is an aggregate */
+  assert( ExprUseUToken(pExpr) );
   if( sqlite3_stricmp(pExpr->u.zToken,"count") ) return 0;  /* Is count() */
+  assert( ExprUseXList(pExpr) );
   if( pExpr->x.pList!=0 ) return 0;                 /* Must be count(*) */
   if( p->pSrc->nSrc!=1 ) return 0;                  /* One table in FROM  */
   pSub = p->pSrc->a[0].pSelect;
@@ -6268,10 +6335,12 @@ int sqlite3Select(
   u8 minMaxFlag;                 /* Flag for min/max queries */
 
   db = pParse->db;
+  assert( pParse==db->pParse );
   v = sqlite3GetVdbe(pParse);
-  if( p==0 || db->mallocFailed || pParse->nErr ){
+  if( p==0 || pParse->nErr ){
     return 1;
   }
+  assert( db->mallocFailed==0 );
   if( sqlite3AuthCheck(pParse, SQLITE_SELECT, 0, 0, 0) ) return 1;
 #if SELECTTRACE_ENABLED
   SELECTTRACE(1,pParse,p, ("begin processing:\n", pParse->addrExplain));
@@ -6306,9 +6375,10 @@ int sqlite3Select(
     p->selFlags |= SF_NoopOrderBy;
   }
   sqlite3SelectPrep(pParse, p, 0);
-  if( pParse->nErr || db->mallocFailed ){
+  if( pParse->nErr ){
     goto select_end;
   }
+  assert( db->mallocFailed==0 );
   assert( p->pEList!=0 );
 #if SELECTTRACE_ENABLED
   if( sqlite3SelectTrace & 0x104 ){
@@ -6352,7 +6422,7 @@ int sqlite3Select(
 
 #ifndef SQLITE_OMIT_WINDOWFUNC
   if( sqlite3WindowRewrite(pParse, p) ){
-    assert( db->mallocFailed || pParse->nErr>0 );
+    assert( pParse->nErr );
     goto select_end;
   }
 #if SELECTTRACE_ENABLED
@@ -6828,7 +6898,7 @@ int sqlite3Select(
     /* Begin the database scan. */
     SELECTTRACE(1,pParse,p,("WhereBegin\n"));
     pWInfo = sqlite3WhereBegin(pParse, pTabList, pWhere, sSort.pOrderBy,
-                               p->pEList, wctrlFlags, p->nSelectRow);
+                               p->pEList, p, wctrlFlags, p->nSelectRow);
     if( pWInfo==0 ) goto select_end;
     if( sqlite3WhereOutputRowCount(pWInfo) < p->nSelectRow ){
       p->nSelectRow = sqlite3WhereOutputRowCount(pWInfo);
@@ -6990,7 +7060,7 @@ int sqlite3Select(
     }
     for(i=0; i<pAggInfo->nFunc; i++){
       Expr *pExpr = pAggInfo->aFunc[i].pFExpr;
-      assert( !ExprHasProperty(pExpr, EP_xIsSelect) );
+      assert( ExprUseXList(pExpr) );
       sNC.ncFlags |= NC_InAggFunc;
       sqlite3ExprAnalyzeAggList(&sNC, pExpr->x.pList);
 #ifndef SQLITE_OMIT_WINDOWFUNC
@@ -7045,7 +7115,9 @@ int sqlite3Select(
 
       if( pAggInfo->nFunc==1 
        && pAggInfo->aFunc[0].iDistinct>=0
-       && pAggInfo->aFunc[0].pFExpr->x.pList
+       && ALWAYS(pAggInfo->aFunc[0].pFExpr!=0)
+       && ALWAYS(ExprUseXList(pAggInfo->aFunc[0].pFExpr))
+       && pAggInfo->aFunc[0].pFExpr->x.pList!=0
       ){
         Expr *pExpr = pAggInfo->aFunc[0].pFExpr->x.pList->a[0].pExpr;
         pExpr = sqlite3ExprDup(db, pExpr, 0);
@@ -7090,7 +7162,7 @@ int sqlite3Select(
       sqlite3VdbeAddOp2(v, OP_Gosub, regReset, addrReset);
       SELECTTRACE(1,pParse,p,("WhereBegin\n"));
       pWInfo = sqlite3WhereBegin(pParse, pTabList, pWhere, pGroupBy, pDistinct,
-          WHERE_GROUPBY | (orderByGrp ? WHERE_SORTBYGROUP : 0) | distFlag, 0
+          0, (WHERE_GROUPBY|(orderByGrp ? WHERE_SORTBYGROUP : 0)|distFlag), 0
       );
       if( pWInfo==0 ){
         sqlite3ExprListDelete(db, pDistinct);
@@ -7366,6 +7438,7 @@ int sqlite3Select(
             sqlite3VdbeAddOp2(v, OP_Integer, 0, regAcc);
           }
         }else if( pAggInfo->nFunc==1 && pAggInfo->aFunc[0].iDistinct>=0 ){
+          assert( ExprUseXList(pAggInfo->aFunc[0].pFExpr) );
           pDistinct = pAggInfo->aFunc[0].pFExpr->x.pList;
           distFlag = pDistinct ? (WHERE_WANT_DISTINCT|WHERE_AGG_DISTINCT) : 0;
         }
@@ -7387,7 +7460,7 @@ int sqlite3Select(
 
         SELECTTRACE(1,pParse,p,("WhereBegin\n"));
         pWInfo = sqlite3WhereBegin(pParse, pTabList, pWhere, pMinMaxOrderBy,
-                                   pDistinct, minMaxFlag|distFlag, 0);
+                                   pDistinct, 0, minMaxFlag|distFlag, 0);
         if( pWInfo==0 ){
           goto select_end;
         }
@@ -7444,7 +7517,7 @@ int sqlite3Select(
   */
 select_end:
   assert( db->mallocFailed==0 || db->mallocFailed==1 );
-  pParse->nErr += db->mallocFailed;
+  assert( db->mallocFailed==0 || pParse->nErr!=0 );
   sqlite3ExprListDelete(db, pMinMaxOrderBy);
 #ifdef SQLITE_DEBUG
   if( pAggInfo && !db->mallocFailed ){

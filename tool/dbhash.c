@@ -384,7 +384,7 @@ static void showHelp(void){
 #define main(cnt, arr)      sqlite_dbhash_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   const char *zDb = 0;         /* Name of the database currently being hashed */
   int i;                       /* Loop counter */
   int rc;                      /* Subroutine return code */

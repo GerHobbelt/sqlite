@@ -46,6 +46,16 @@
 #include "sqliteInt.h"
 #if SQLITE_OS_UNIX              /* This file is used on unix only */
 
+/* Turn this feature on in all builds for now */
+#define SQLITE_MUTEXFREE_SHMLOCK 1
+#define SQLITE_MFS_EXCLUSIVE     255
+#ifndef SQLITE_MFS_NSHARD
+# define SQLITE_MFS_NSHARD       8
+#endif
+#if SQLITE_MFS_NSHARD<1
+# error "SQLITE_MFS_NSHARD must be greater than 0"
+#endif
+
 /*
 ** There are various methods for file locking used for concurrency
 ** control:
@@ -1177,6 +1187,10 @@ struct unixInodeInfo {
   sem_t *pSem;                    /* Named POSIX semaphore */
   char aSemName[MAX_PATHNAME+2];  /* Name of that semaphore */
 #endif
+#ifdef SQLITE_SHARED_MAPPING
+  sqlite3_int64 nSharedMapping;   /* Size of mapped region in bytes */
+  void *pSharedMapping;           /* Memory mapped region */
+#endif
 };
 
 /*
@@ -1329,6 +1343,13 @@ static void releaseInodeInfo(unixFile *pFile){
     pInode->nRef--;
     if( pInode->nRef==0 ){
       assert( pInode->pShmNode==0 );
+#ifdef SQLITE_SHARED_MAPPING
+      if( pInode->pSharedMapping ){
+        osMunmap(pInode->pSharedMapping, pInode->nSharedMapping);
+        pInode->pSharedMapping = 0;
+        pInode->nSharedMapping = 0;
+      }
+#endif
       sqlite3_mutex_enter(pInode->pLockMutex);
       closePendingFds(pFile);
       sqlite3_mutex_leave(pInode->pLockMutex);
@@ -2192,6 +2213,14 @@ static int nolockUnlock(sqlite3_file *NotUsed, int NotUsed2){
 ** Close the file.
 */
 static int nolockClose(sqlite3_file *id) {
+#ifdef SQLITE_SHARED_MAPPING
+  unixFile *pFd = (unixFile*)id;
+  if( pFd->pInode ){
+    unixEnterMutex();
+    releaseInodeInfo(pFd);
+    unixLeaveMutex();
+  }
+#endif
   return closeUnixFile(id);
 }
 
@@ -3951,7 +3980,9 @@ static void unixModeBit(unixFile *pFile, unsigned char mask, int *pArg){
 
 /* Forward declaration */
 static int unixGetTempname(int nBuf, char *zBuf);
-static int unixFcntlExternalReader(unixFile*, int*);
+#ifndef SQLITE_OMIT_WAL
+ static int unixFcntlExternalReader(unixFile*, int*);
+#endif
 
 /*
 ** Information and control of an open file handle.
@@ -4043,6 +4074,9 @@ static int unixFileControl(sqlite3_file *id, int op, void *pArg){
       *(i64*)pArg = pFile->mmapSizeMax;
       if( newLimit>=0 && newLimit!=pFile->mmapSizeMax && pFile->nFetchOut==0 ){
         pFile->mmapSizeMax = newLimit;
+#ifdef SQLITE_SHARED_MAPPING
+        if( pFile->pInode==0 )
+#endif
         if( pFile->mmapSize>0 ){
           unixUnmapfile(pFile);
           rc = unixMapfile(pFile, -1);
@@ -4070,7 +4104,12 @@ static int unixFileControl(sqlite3_file *id, int op, void *pArg){
 #endif /* SQLITE_ENABLE_LOCKING_STYLE && defined(__APPLE__) */
 
     case SQLITE_FCNTL_EXTERNAL_READER: {
+#ifndef SQLITE_OMIT_WAL
       return unixFcntlExternalReader((unixFile*)id, (int*)pArg);
+#else
+      *(int*)pArg = 0;
+      return SQLITE_OK;
+#endif
     }
   }
   return SQLITE_NOTFOUND;
@@ -4292,6 +4331,24 @@ struct unixShmNode {
   u8 sharedMask;             /* Mask of shared locks held */
   u8 nextShmId;              /* Next available unixShm.id value */
 #endif
+
+#ifdef SQLITE_MUTEXFREE_SHMLOCK
+  /* In unix-excl mode, if SQLITE_MUTEXFREE_SHMLOCK is defined, all locks
+  ** are stored in the following 64-bit value. There are in total 8 
+  ** shm-locking slots, each of which are assigned 8-bits from the 64-bit
+  ** value. The least-significant 8 bits correspond to shm-locking slot
+  ** 0, and so on.
+  **
+  ** If the 8-bits corresponding to a shm-locking locking slot are set to
+  ** 0xFF, then a write-lock is held on the slot. Or, if they are set to
+  ** a non-zero value smaller than 0xFF, then they represent the total 
+  ** number of read-locks held on the slot. There is no way to distinguish
+  ** between a write-lock and 255 read-locks.  */
+  struct LockingSlot {
+    u32 nLock;
+    u64 aPadding[7];
+  } aMFSlot[3 + SQLITE_MFS_NSHARD*5];
+#endif
 };
 
 #ifdef SQLITE_ENABLE_SETLK_TIMEOUT
@@ -4301,6 +4358,21 @@ struct unixShmNode {
 # define ENTER_SHMNODE_MUTEX(p) sqlite3_mutex_enter(p->pShmMutex)
 # define LEAVE_SHMNODE_MUTEX(p) sqlite3_mutex_leave(p->pShmMutex)
 #endif
+
+
+/*
+** Atomic CAS primitive used in multi-process mode. Equivalent to:
+** 
+**   int unixCompareAndSwap(u32 *ptr, u32 oldval, u32 newval){
+**     if( *ptr==oldval ){
+**       *ptr = newval;
+**       return 1;
+**     }
+**     return 0;
+**   }
+*/
+#define unixCompareAndSwap(ptr,oldval,newval) \
+    __sync_bool_compare_and_swap(ptr,oldval,newval)
 
 
 /*
@@ -4323,6 +4395,9 @@ struct unixShm {
   u8 id;                     /* Id of this connection within its unixShmNode */
   u16 sharedMask;            /* Mask of shared locks held */
   u16 exclMask;              /* Mask of exclusive locks held */
+#ifdef SQLITE_MUTEXFREE_SHMLOCK
+  u8 aMFCurrent[8];          /* Current slot used for each shared lock */
+#endif
 };
 
 /*
@@ -4882,6 +4957,87 @@ shmpage_out:
   return rc;
 }
 
+#ifdef SQLITE_MUTEXFREE_SHMLOCK
+static int unixMutexFreeShmlock(
+  unixFile *pFd,             /* Database file holding the shared memory */
+  int ofst,                  /* First lock to acquire or release */
+  int n,                     /* Number of locks to acquire or release */
+  int flags                  /* What to do with the lock */
+){
+  struct LockMapEntry {
+    int iFirst;
+    int nSlot;
+  } aMap[9] = {
+    { 0, 1 },
+    { 1, 1 },
+    { 2, 1 },
+    { 3+0*SQLITE_MFS_NSHARD, SQLITE_MFS_NSHARD },
+    { 3+1*SQLITE_MFS_NSHARD, SQLITE_MFS_NSHARD },
+    { 3+2*SQLITE_MFS_NSHARD, SQLITE_MFS_NSHARD },
+    { 3+3*SQLITE_MFS_NSHARD, SQLITE_MFS_NSHARD },
+    { 3+4*SQLITE_MFS_NSHARD, SQLITE_MFS_NSHARD },
+    { 3+5*SQLITE_MFS_NSHARD, 0 },
+  };
+
+  unixShm *p = pFd->pShm;               /* The shared memory being locked */
+  unixShmNode *pShmNode = p->pShmNode;  /* The underlying file iNode */
+
+  if( flags & SQLITE_SHM_SHARED ){
+    /* SHARED locks */
+    u32 iOld, iNew, *ptr;
+    int iIncr = -1;
+    if( (flags & SQLITE_SHM_UNLOCK)==0 ){
+      p->aMFCurrent[ofst] = (p->aMFCurrent[ofst] + 1) % aMap[ofst].nSlot;
+      iIncr = 1;
+    }
+    ptr = &pShmNode->aMFSlot[aMap[ofst].iFirst + p->aMFCurrent[ofst]].nLock;
+    do {
+      iOld = *ptr;
+      iNew = iOld + iIncr;
+      if( iNew>SQLITE_MFS_EXCLUSIVE ){
+        return SQLITE_BUSY;
+      }
+    }while( 0==unixCompareAndSwap(ptr, iOld, iNew) );
+  }else{
+    /* EXCLUSIVE locks */
+    u16 mask = (1<<(ofst+n)) - (1<<ofst);
+    if( (flags & SQLITE_SHM_LOCK) || (mask & p->exclMask) ){
+      int iFirst = aMap[ofst].iFirst;
+      int iLast = aMap[ofst+n].iFirst;
+      int i;
+      for(i=iFirst; i<iLast; i++){
+        u32 *ptr = &pShmNode->aMFSlot[i].nLock;
+        if( flags & SQLITE_SHM_UNLOCK ){
+          assert( (*ptr)==SQLITE_MFS_EXCLUSIVE );
+          *ptr = 0;
+        }else{
+          u32 iOld;
+          do {
+            iOld = *ptr;
+            if( iOld>0 ){
+              while( i>iFirst ){
+                i--;
+                pShmNode->aMFSlot[i].nLock = 0;
+              }
+              return SQLITE_BUSY;
+            }
+          }while( 0==unixCompareAndSwap(ptr, iOld, SQLITE_MFS_EXCLUSIVE) );
+        }
+      }
+      if( flags & SQLITE_SHM_UNLOCK ){
+        p->exclMask &= ~mask;
+      }else{
+        p->exclMask |= mask;
+      }
+    }
+  }
+
+  return SQLITE_OK;
+}
+#else
+# define unixMutexFreeShmlock(a,b,c,d) SQLITE_OK
+#endif
+
 /*
 ** Check that the pShmNode->aLock[] array comports with the locking bitmasks
 ** held by each client. Return true if it does, or false otherwise. This
@@ -4954,6 +5110,11 @@ static int unixShmLock(
   assert( n==1 || (flags & SQLITE_SHM_EXCLUSIVE)!=0 );
   assert( pShmNode->hShm>=0 || pDbFd->pInode->bProcessLock==1 );
   assert( pShmNode->hShm<0 || pDbFd->pInode->bProcessLock==0 );
+
+  if( pDbFd->pInode->bProcessLock ){
+    return unixMutexFreeShmlock(pDbFd, ofst, n, flags);
+  }
+
 
   /* Check that, if this to be a blocking lock, no locks that occur later
   ** in the following list than the lock being obtained are already held:
@@ -5111,12 +5272,16 @@ static void unixShmBarrier(
   sqlite3_file *fd                /* Database file holding the shared memory */
 ){
   UNUSED_PARAMETER(fd);
+#ifdef SQLITE_MUTEXFREE_SHMLOCK
+  __sync_synchronize();
+#else
   sqlite3MemoryBarrier();         /* compiler-defined memory barrier */
   assert( fd->pMethods->xLock==nolockLock 
        || unixFileMutexNotheld((unixFile*)fd) 
   );
   unixEnterMutex();               /* Also mutex, for redundancy */
   unixLeaveMutex();
+#endif
 }
 
 /*
@@ -5185,6 +5350,9 @@ static int unixShmUnmap(
 */
 static void unixUnmapfile(unixFile *pFd){
   assert( pFd->nFetchOut==0 );
+#ifdef SQLITE_SHARED_MAPPING
+  if( pFd->pInode ) return;
+#endif
   if( pFd->pMapRegion ){
     osMunmap(pFd->pMapRegion, pFd->mmapSizeActual);
     pFd->pMapRegion = 0;
@@ -5315,6 +5483,28 @@ static int unixMapfile(unixFile *pFd, i64 nMap){
   if( nMap>pFd->mmapSizeMax ){
     nMap = pFd->mmapSizeMax;
   }
+
+#ifdef SQLITE_SHARED_MAPPING
+  if( pFd->pInode ){
+    unixInodeInfo *pInode = pFd->pInode;
+    if( pFd->pMapRegion ) return SQLITE_OK;
+    unixEnterMutex();
+    if( pInode->pSharedMapping==0 ){
+      u8 *pNew = osMmap(0, nMap, PROT_READ, MAP_SHARED, pFd->h, 0);
+      if( pNew==MAP_FAILED ){
+        unixLogError(SQLITE_OK, "mmap", pFd->zPath);
+        pFd->mmapSizeMax = 0;
+      }else{
+        pInode->pSharedMapping = pNew;
+        pInode->nSharedMapping = nMap;
+      }
+    }
+    pFd->pMapRegion = pInode->pSharedMapping;
+    pFd->mmapSizeActual = pFd->mmapSize = pInode->nSharedMapping;
+    unixLeaveMutex();
+    return SQLITE_OK;
+  }
+#endif
 
   assert( nMap>0 || (pFd->mmapSize==0 && pFd->pMapRegion==0) );
   if( nMap!=pFd->mmapSize ){
@@ -5754,6 +5944,9 @@ static int fillInUnixFile(
 #if defined(__APPLE__) && SQLITE_ENABLE_LOCKING_STYLE
     || pLockingStyle == &nfsIoMethods
 #endif
+#ifdef SQLITE_SHARED_MAPPING
+    || pLockingStyle == &nolockIoMethods
+#endif
   ){
     unixEnterMutex();
     rc = findInodeInfo(pNew, &pNew->pInode);
@@ -5871,24 +6064,34 @@ static int fillInUnixFile(
 }
 
 /*
+** Directories to consider for temp files.
+*/
+static const char *azTempDirs[] = {
+  0,
+  0,
+  "/var/tmp",
+  "/usr/tmp",
+  "/tmp",
+  "."
+};
+
+/*
+** Initialize first two members of azTempDirs[] array.
+*/
+static void unixTempFileInit(void){
+  azTempDirs[0] = getenv("SQLITE_TMPDIR");
+  azTempDirs[1] = getenv("TMPDIR");
+}
+
+/*
 ** Return the name of a directory in which to put temporary files.
 ** If no suitable temporary file directory can be found, return NULL.
 */
 static const char *unixTempFileDir(void){
-  static const char *azDirs[] = {
-     0,
-     0,
-     "/var/tmp",
-     "/usr/tmp",
-     "/tmp",
-     "."
-  };
   unsigned int i = 0;
   struct stat buf;
   const char *zDir = sqlite3_temp_directory;
 
-  if( !azDirs[0] ) azDirs[0] = getenv("SQLITE_TMPDIR");
-  if( !azDirs[1] ) azDirs[1] = getenv("TMPDIR");
   while(1){
     if( zDir!=0
      && osStat(zDir, &buf)==0
@@ -5897,8 +6100,8 @@ static const char *unixTempFileDir(void){
     ){
       return zDir;
     }
-    if( i>=sizeof(azDirs)/sizeof(azDirs[0]) ) break;
-    zDir = azDirs[i++];
+    if( i>=sizeof(azTempDirs)/sizeof(azTempDirs[0]) ) break;
+    zDir = azTempDirs[i++];
   }
   return 0;
 }
@@ -6204,6 +6407,11 @@ static int unixOpen(
   }
   memset(p, 0, sizeof(unixFile));
 
+#ifdef SQLITE_ASSERT_NO_FILES
+  /* Applications that never read or write a persistent disk files */
+  assert( zName==0 );
+#endif
+
   if( eType==SQLITE_OPEN_MAIN_DB ){
     UnixUnusedFd *pUnused;
     pUnused = findReusableFd(zName, flags);
@@ -6264,8 +6472,6 @@ static int unixOpen(
         /* If unable to create a journal because the directory is not
         ** writable, change the error code to indicate that. */
         rc = SQLITE_READONLY_DIRECTORY;
-      }else if( errno==EEXIST ){
-        rc = SQLITE_CANTOPEN_EXISTS;
       }else if( errno!=EISDIR && isReadWrite ){
         /* Failed to open the file for read/write access. Try read-only. */
         flags &= ~(SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE);
@@ -8166,6 +8372,9 @@ int sqlite3_os_init(void){
   */
   assert( UNIX_SHM_DMS==128   );  /* Byte offset of the deadman-switch */
 #endif
+
+  /* Initialize temp file dir array. */
+  unixTempFileInit();
 
   return SQLITE_OK; 
 }

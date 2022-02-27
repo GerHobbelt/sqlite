@@ -311,7 +311,7 @@ static unsigned int randInt(void){
 /*
 ** Do database initialization.
 */
-static int initMain(int argc, const char **argv){
+static int initMain(int argc, const char** argv){
   const char *zDb;
   int i, rc;
   int nCount = 1000;
@@ -381,7 +381,7 @@ static int initMain(int argc, const char **argv){
 /*
 ** Analyze an existing database file.  Report its content.
 */
-static int statMain(int argc, const char **argv){
+static int statMain(int argc, const char** argv){
   const char *zDb;
   int i, rc;
   sqlite3 *db;
@@ -495,7 +495,7 @@ static void kvtest_mkdir(const char *zDir){
 /*
 ** Export the kv table to individual files in the filesystem
 */
-static int exportMain(int argc, const char **argv){
+static int exportMain(int argc, const char** argv){
   const char *zDb;
   const char *zDir;
   sqlite3 *db;
@@ -782,7 +782,7 @@ static int display_stats(
 /*
 ** Run a performance test
 */
-static int runMain(int argc, const char **argv){
+static int runMain(int argc, const char** argv){
   int eType;                  /* Is zDb a database or a directory? */
   const char *zDb;            /* Database or directory name */
   int i;                      /* Loop counter */
@@ -1124,7 +1124,7 @@ static int runMain(int argc, const char **argv){
 #define main(cnt, arr)      sqlite_kvtest_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   if( argc<3 ) showHelp();
   if( strcmp(argv[1],"init")==0 ){
     return initMain(argc, argv);

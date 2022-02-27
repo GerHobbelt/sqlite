@@ -107,6 +107,12 @@ set pragma_def {
   IF:   !defined(SQLITE_OMIT_FLAG_PRAGMAS)
   IF:   defined(SQLITE_DEBUG)
 
+  NAME: noop_update
+  TYPE: FLAG
+  ARG:  SQLITE_NoopUpdate
+  IF:   !defined(SQLITE_OMIT_FLAG_PRAGMAS)
+  IF:   defined(SQLITE_ENABLE_NOOP_UPDATE)
+
   NAME: ignore_check_constraints
   TYPE: FLAG
   ARG:  SQLITE_IgnoreChecks
@@ -231,6 +237,12 @@ set pragma_def {
   COLS: cid name type notnull dflt_value pk hidden
   IF:   !defined(SQLITE_OMIT_SCHEMA_PRAGMAS)
 
+  NAME: table_list
+  TYPE: TABLE_LIST
+  FLAG: NeedSchema Result1
+  COLS: schema name type ncol wr strict
+  IF:   !defined(SQLITE_OMIT_SCHEMA_PRAGMAS)
+
   NAME: stats
   FLAG: NeedSchema Result0 SchemaReq
   COLS: tbl idx wdth hght flgs
@@ -257,7 +269,7 @@ set pragma_def {
 
   NAME: database_list
   FLAG: NeedSchema Result0
-  COLS: seq name file
+  COLS: seq name file vfs jmode ro pgsz
   IF:   !defined(SQLITE_OMIT_SCHEMA_PRAGMAS)
 
   NAME: function_list
