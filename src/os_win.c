@@ -4990,7 +4990,7 @@ static int winOpen(
   int flags,                /* Open mode flags */
   int *pOutFlags            /* Status return flags */
 ){
-  HANDLE h;
+  HANDLE h = INVALID_HANDLE_VALUE;
   DWORD lastErrno = 0;
   DWORD dwDesiredAccess;
   DWORD dwShareMode;
@@ -5277,7 +5277,7 @@ static int winOpen(
     pFile->ctrlFlags |= WINFILE_RDONLY;
   }
   if( (flags & SQLITE_OPEN_MAIN_DB)
-   && sqlite3_uri_boolean(zName, "psow", SQLITE_POWERSAFE_OVERWRITE) 
+   && sqlite3_uri_boolean(zName, "psow", SQLITE_POWERSAFE_OVERWRITE)
   ){
     pFile->ctrlFlags |= WINFILE_PSOW;
   }
