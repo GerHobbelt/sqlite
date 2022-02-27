@@ -333,6 +333,8 @@ void sqlite3NestedParse(Parse *pParse, const char *zFormat, ...){
   memset(PARSE_TAIL(pParse), 0, PARSE_TAIL_SZ);
   db->mDbFlags |= DBFLAG_PreferBuiltin;
   sqlite3RunParser(pParse, zSql);
+  sqlite3DbFree(db, pParse->zErrMsg);
+  pParse->zErrMsg = 0;
   db->mDbFlags = savedDbFlags;
   sqlite3DbFree(db, zSql);
   memcpy(PARSE_TAIL(pParse), saveBuf, PARSE_TAIL_SZ);
@@ -1293,7 +1295,8 @@ void sqlite3StartTable(
     pTable = sqlite3FindTable(db, zName, zDb);
     if( pTable ){
       if( !noErr ){
-        sqlite3ErrorMsg(pParse, "table %T already exists", pName);
+        sqlite3ErrorMsg(pParse, "%s %T already exists",
+                        (IsView(pTable)? "view" : "table"), pName);
       }else{
         assert( !db->init.busy || CORRUPT_DB );
         sqlite3CodeVerifySchema(pParse, iDb);
