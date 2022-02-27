@@ -7764,12 +7764,12 @@ DISPATCHABLE_COMMAND( auth 3 2 2 azArg nArg p ){
 COLLECT_HELP_TEXT[
   ".backup ?DB? FILE        Backup DB (default \"main\") to FILE",
   "   Options:",
-  "     --append               Use the appendvfs",
-  "     --async                Write the FILE without journal and fsync()",
-  ".save ?DB? FILE          Write DB (default \"main\") to FILE",
+  "       --append            Use the appendvfs",
+  "       --async             Write to FILE without journal and fsync()",
+  ".save ?OPTIONS? FILE     Write database to FILE (an alias for .backup ...)",
   "   Options:",
-  "     --append               Use the appendvfs",
-  "     --async                Write the FILE without journal and fsync()",
+  "       --append            Use the appendvfs",
+  "       --async             Write to FILE without journal and fsync()",
 ];
 COLLECT_DISPATCH( * )[
   { "backup", writeDb, 4, 2, 5 },
