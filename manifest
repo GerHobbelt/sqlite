@@ -1,5 +1,5 @@
-C CLI\s.import\scan\sauto-rename\snon-unique\scolumn\snames\swhen\sit\screates\sa\snew\stable
-D 2022-02-14T18:55:19.467
+C Improved\srendering\sof\sfloating\spoint\snumbers\swithout\sa\sfractional\spart\sin\n".dump"\soutput\sfrom\sthe\sCLI.\n[forum:/forumpost/550d877659f37cb2|Forum\spost\s550d877659f37cb2].
+D 2022-02-15T13:23:09.386
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -524,7 +524,7 @@ F src/mem2.c c8bfc9446fd0798bddd495eb5d9dbafa7d4b7287d8c22d50a83ac9daa26d8a75
 F src/mem3.c 30301196cace2a085cbedee1326a49f4b26deff0af68774ca82c1f7c06fda4f6
 F src/mem5.c 9bf955937b07f8c32541c8a9991f33ce3173d944
 F src/memdb.c c2dc88f97c410eb68a24468344b65526685e18354ddfd15906750c1eaf9dc2dd
-F src/memjournal.c ff4336a98b05ede2adee7595f22d6f7d1cdc6bf0f0a5c3d77b0acdf017b2e8b2
+F src/memjournal.c 8bd50ae6d9c6d34b3a96cc3b4f567f9935dc358444d872ab48901a8c11ad82a6
 F src/msvc.h 3a15918220367a8876be3fa4f2abe423a861491e84b864fb2b7426bf022a28f8
 F src/mutex.c 5e3409715552348732e97b9194abe92fdfcd934cfb681df4ba0ab87ac6c18d25
 F src/mutex.h a7b2293c48db5f27007c3bdb21d438873637d12658f5a0bf8ad025bb96803c4a
@@ -539,7 +539,7 @@ F src/os_setup.h 0dbaea40a7d36bf311613d31342e0b99e2536586
 F src/os_unix.c f5ad51cfd024116db8531feab9efd831c2621436dca1464e4ff1e8af9bf3252e
 F src/os_win.c 77d39873836f1831a9b0b91894fec45ab0e9ca8e067dc8c549e1d1eca1566fe9
 F src/os_win.h 7b073010f1451abe501be30d12f6bc599824944a
-F src/pager.c 66bc54c37448c562950e28783e49c7697ea79d1e85136d0e4a915d3a7f9feb5b
+F src/pager.c cda9e2d1df7c5fb4d777d09e23e69d78c518550d8873ed08b4a66c41d8cf2543
 F src/pager.h 4bf9b3213a4b2bebbced5eaa8b219cf25d4a82f385d093cd64b7e93e5285f66f
 F src/parse.y 0f02b27cdaa334441463153fff3ceb780fea006ab53ffd6ef566d4468f93e924
 F src/pcache.c 084e638432c610f95aea72b8509f0845d2791293f39d1b82f0c0a7e089c3bb6b
@@ -553,7 +553,7 @@ F src/random.c 097dc8b31b8fba5a9aca1697aeb9fd82078ec91be734c16bffda620ced7ab83c
 F src/resolve.c ea935b87d6fb36c78b70cdc7b28561dc8f33f2ef37048389549c7b5ef9b0ba5e
 F src/rowset.c ba9515a922af32abe1f7d39406b9d35730ed65efab9443dc5702693b60854c92
 F src/select.c 3baa9dd8cf240654773c7974e2bcce398ac9dd24419c36684156963defe43b35
-F src/shell.c.in 1289a2e10f48e75956700f61aac63beff7f05988ac7a4c701800b9f0e9adad4e
+F src/shell.c.in b5b44c2ebfd3942e60dbcc47b94a74337a482a5f1c3766fbfb9f578a605ecf50
 F src/sqlite.h.in 7047c4b60fa550264d6363bb1d983540e7828fb19d2d1e5aa43b52ca13144807
 F src/sqlite3.rc 5121c9e10c3964d5755191c80dd1180c122fc3a8
 F src/sqlite3ext.h a95cb9ed106e3d39e2118e4dcc15a14faec3fa50d0093425083d340d9dfd96e6
@@ -1944,8 +1944,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P a5ec16907ef6ab50e041101d87c5756c71469923872a86c3ab383f188673d7a5 c626cff7f99ec502ebd46f9cdafc3d088697544ef5d6559b6b3ae85679b4f9fa
-R fc0b65531de2bbc57c9c5e7f31f08c34
-U larrybr
-Z 8dea9c58dd0e5cd023b89765b4d0e4ae
+P d74ec88c2f9b9e056988add8322186750229e14a609d1a6969ba393a5b8c5174
+R d44a4dfcecd9d59ae3b06dca8b590f27
+U drh
+Z 28d22f7919d651ae0bfc81a1c20dfd1c
 # Remove this line to create a well-formed Fossil manifest.
