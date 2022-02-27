@@ -43,7 +43,7 @@ void sqlite3OpenTable(
   }else{
     Index *pPk = sqlite3PrimaryKeyIndex(pTab);
     assert( pPk!=0 );
-    assert( pPk->tnum==pTab->tnum );
+    assert( pPk->tnum==pTab->tnum || CORRUPT_DB );
     sqlite3VdbeAddOp3(v, opcode, iCur, pPk->tnum, iDb);
     sqlite3VdbeSetP4KeyInfo(pParse, pPk);
     VdbeComment((v, "%s", pTab->zName));
@@ -282,24 +282,30 @@ void sqlite3ComputeGeneratedColumns(
   ** that appropriate affinity has been applied to the regular columns
   */
   sqlite3TableAffinity(pParse->pVdbe, pTab, iRegStore);
-  if( (pTab->tabFlags & TF_HasStored)!=0
-   && (pOp = sqlite3VdbeGetOp(pParse->pVdbe,-1))->opcode==OP_Affinity
-  ){
-    /* Change the OP_Affinity argument to '@' (NONE) for all stored
-    ** columns.  '@' is the no-op affinity and those columns have not
-    ** yet been computed. */
-    int ii, jj;
-    char *zP4 = pOp->p4.z;
-    assert( zP4!=0 );
-    assert( pOp->p4type==P4_DYNAMIC );
-    for(ii=jj=0; zP4[jj]; ii++){
-      if( pTab->aCol[ii].colFlags & COLFLAG_VIRTUAL ){
-        continue;
+  if( (pTab->tabFlags & TF_HasStored)!=0 ){
+    pOp = sqlite3VdbeGetOp(pParse->pVdbe,-1);
+    if( pOp->opcode==OP_Affinity ){
+      /* Change the OP_Affinity argument to '@' (NONE) for all stored
+      ** columns.  '@' is the no-op affinity and those columns have not
+      ** yet been computed. */
+      int ii, jj;
+      char *zP4 = pOp->p4.z;
+      assert( zP4!=0 );
+      assert( pOp->p4type==P4_DYNAMIC );
+      for(ii=jj=0; zP4[jj]; ii++){
+        if( pTab->aCol[ii].colFlags & COLFLAG_VIRTUAL ){
+          continue;
+        }
+        if( pTab->aCol[ii].colFlags & COLFLAG_STORED ){
+          zP4[jj] = SQLITE_AFF_NONE;
+        }
+        jj++;
       }
-      if( pTab->aCol[ii].colFlags & COLFLAG_STORED ){
-        zP4[jj] = SQLITE_AFF_NONE;
-      }
-      jj++;
+    }else if( pOp->opcode==OP_TypeCheck ){
+      /* If an OP_TypeCheck was generated because the table is STRICT,
+      ** then set the P3 operand to indicate that generated columns should
+      ** not be checked */
+      pOp->p3 = 1;
     }
   }
 
@@ -709,9 +715,11 @@ void sqlite3Insert(
 #endif
 
   db = pParse->db;
-  if( pParse->nErr || db->mallocFailed ){
+  assert( db->pParse==pParse );
+  if( pParse->nErr ){
     goto insert_cleanup;
   }
+  assert( db->mallocFailed==0 );
   dest.iSDParm = 0;  /* Suppress a harmless compiler warning */
 
   /* If the Select object is really just a simple VALUES() list with a
@@ -887,7 +895,9 @@ void sqlite3Insert(
     dest.nSdst = pTab->nCol;
     rc = sqlite3Select(pParse, pSelect, &dest);
     regFromSelect = dest.iSdst;
-    if( rc || db->mallocFailed || pParse->nErr ) goto insert_cleanup;
+    assert( db->pParse==pParse );
+    if( rc || pParse->nErr ) goto insert_cleanup;
+    assert( db->mallocFailed==0 );
     sqlite3VdbeEndCoroutine(v, regYield);
     sqlite3VdbeJumpHere(v, addrTop - 1);                       /* label B: */
     assert( pSelect->pEList );
@@ -1376,9 +1386,7 @@ insert_end:
   ** invoke the callback function.
   */
   if( regRowCount ){
-    sqlite3VdbeAddOp2(v, OP_ChngCntRow, regRowCount, 1);
-    sqlite3VdbeSetNumCols(v, 1);
-    sqlite3VdbeSetColName(v, 0, COLNAME_NAME, "rows inserted", SQLITE_STATIC);
+    sqlite3CodeChangeCount(v, regRowCount, "rows inserted");
   }
 
 insert_cleanup:
@@ -2003,6 +2011,7 @@ void sqlite3GenerateConstraintChecks(
     if( onError==OE_Replace      /* IPK rule is REPLACE */
      && onError!=overrideError   /* Rules for other constraints are different */
      && pTab->pIndex             /* There exist other constraints */
+     && !upsertIpkDelay          /* IPK check already deferred by UPSERT */
     ){
       ipkTop = sqlite3VdbeAddOp0(v, OP_Goto)+1;
       VdbeComment((v, "defer IPK REPLACE until last"));
@@ -2219,7 +2228,8 @@ void sqlite3GenerateConstraintChecks(
     **
     ** This is not possible for ENABLE_PREUPDATE_HOOK builds, as the row
     ** must be explicitly deleted in order to ensure any pre-update hook
-    ** is invoked.  */ 
+    ** is invoked.  */
+    assert( IsOrdinaryTable(pTab) );
 #ifndef SQLITE_ENABLE_PREUPDATE_HOOK
     if( (ix==0 && pIdx->pNext==0)                   /* Condition 3 */
      && pPk==pIdx                                   /* Condition 2 */
@@ -2326,7 +2336,8 @@ void sqlite3GenerateConstraintChecks(
 
         assert( onError==OE_Replace );
         nConflictCk = sqlite3VdbeCurrentAddr(v) - addrConflictCk;
-        assert( nConflictCk>0 );
+        assert( nConflictCk>0 || db->mallocFailed );
+        testcase( nConflictCk<=0 );
         testcase( nConflictCk>1 );
         if( regTrigCnt ){
           sqlite3MultiWrite(pParse);
@@ -2409,6 +2420,7 @@ void sqlite3GenerateConstraintChecks(
   if( ipkTop ){
     sqlite3VdbeGoto(v, ipkTop);
     VdbeComment((v, "Do IPK REPLACE"));
+    assert( ipkBottom>0 );
     sqlite3VdbeJumpHere(v, ipkBottom);
   }
 
@@ -2540,7 +2552,6 @@ void sqlite3CompleteInsertion(
     }
     pik_flags = (useSeekResult ? OPFLAG_USESEEKRESULT : 0);
     if( IsPrimaryKeyIndex(pIdx) && !HasRowid(pTab) ){
-      assert( pParse->nested==0 );
       pik_flags |= OPFLAG_NCHANGE;
       pik_flags |= (update_flags & OPFLAG_SAVEPOSITION);
       if( 1 || update_flags==0 ){
@@ -2615,8 +2626,9 @@ int sqlite3OpenTableAndIndices(
   assert( op==OP_OpenWrite || p5==0 );
   if( IsVirtual(pTab) ){
     /* This routine is a no-op for virtual tables. Leave the output
-    ** variables *piDataCur and *piIdxCur uninitialized so that valgrind
-    ** can detect if they are used by mistake in the caller. */
+    ** variables *piDataCur and *piIdxCur set to illegal cursor numbers
+    ** for improved error detection. */
+    *piDataCur = *piIdxCur = -999;
     return 0;
   }
   iDb = sqlite3SchemaToIndex(pParse->db, pTab->pSchema);
@@ -2903,7 +2915,9 @@ static int xferOptimization(
       Expr *pDestExpr = sqlite3ColumnExpr(pDest, pDestCol);
       Expr *pSrcExpr = sqlite3ColumnExpr(pSrc, pSrcCol);
       assert( pDestExpr==0 || pDestExpr->op==TK_SPAN );
+      assert( pDestExpr==0 || !ExprHasProperty(pDestExpr, EP_IntValue) );
       assert( pSrcExpr==0 || pSrcExpr->op==TK_SPAN );
+      assert( pSrcExpr==0 || !ExprHasProperty(pSrcExpr, EP_IntValue) );
       if( (pDestExpr==0)!=(pSrcExpr==0) 
        || (pDestExpr!=0 && strcmp(pDestExpr->u.zToken,
                                        pSrcExpr->u.zToken)!=0)
@@ -2943,6 +2957,7 @@ static int xferOptimization(
   ** the extra complication to make this rule less restrictive is probably
   ** not worth the effort.  Ticket [6284df89debdfa61db8073e062908af0c9b6118e]
   */
+  assert( IsOrdinaryTable(pDest) );
   if( (db->flags & SQLITE_ForeignKeys)!=0 && pDest->u.tab.pFKey!=0 ){
     return 0;
   }

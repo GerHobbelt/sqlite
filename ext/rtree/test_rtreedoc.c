@@ -105,15 +105,15 @@ static int invokeTclGeomCb(
           if( p->pUser || p->xDelUser ){
             rc = SQLITE_ERROR;
           }else{
-            BoxGeomCtx *pCtx = sqlite3_malloc(sizeof(BoxGeomCtx));
-            if( pCtx==0 ){
+            BoxGeomCtx *pBGCtx = sqlite3_malloc(sizeof(BoxGeomCtx));
+            if( pBGCtx==0 ){
               rc = SQLITE_NOMEM;
             }else{
-              pCtx->interp = interp;
-              pCtx->pScript = Tcl_DuplicateObj(pRes);
-              Tcl_IncrRefCount(pCtx->pScript);
-              Tcl_ListObjReplace(interp, pCtx->pScript, 0, 1, 0, 0);
-              p->pUser = (void*)pCtx;
+              pBGCtx->interp = interp;
+              pBGCtx->pScript = Tcl_DuplicateObj(pRes);
+              Tcl_IncrRefCount(pBGCtx->pScript);
+              Tcl_ListObjReplace(interp, pBGCtx->pScript, 0, 1, 0, 0);
+              p->pUser = (void*)pBGCtx;
               p->xDelUser = testDelUser;
             }
           }
@@ -304,7 +304,7 @@ static int box_query(sqlite3_rtree_query_info *pInfo){
 static void box_query_destroy(void *p){
   BoxQueryCtx *pCtx = (BoxQueryCtx*)p;
   Tcl_DecrRefCount(pCtx->pScript);
-  ckfree(pCtx);
+  ckfree((char*)pCtx);
 }
 
 static int SQLITE_TCLAPI register_box_query(
@@ -324,7 +324,7 @@ static int SQLITE_TCLAPI register_box_query(
   }
   if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
 
-  pCtx = (BoxQueryCtx*)ckalloc(sizeof(BoxQueryCtx*));
+  pCtx = (BoxQueryCtx*)ckalloc(sizeof(BoxQueryCtx));
   pCtx->interp = interp;
   pCtx->pScript = Tcl_DuplicateObj(objv[2]);
   Tcl_IncrRefCount(pCtx->pScript);
@@ -346,4 +346,3 @@ int Sqlitetestrtreedoc_Init(Tcl_Interp *interp){
 #endif /* SQLITE_ENABLE_RTREE */
   return TCL_OK;
 }
-

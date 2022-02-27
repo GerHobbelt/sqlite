@@ -54,9 +54,13 @@ typedef sqlite3_int64 i64;
 typedef unsigned char u8;
 typedef UINT32_TYPE u32;           /* 4-byte unsigned integer */
 typedef UINT16_TYPE u16;           /* 2-byte unsigned integer */
+#undef MIN     // may have already been defined in <zbuild.h>, which is included when we have ZLIB(NG) support enabled.
 #define MIN(a,b) ((a)<(b) ? (a) : (b))
 
 #if defined(SQLITE_COVERAGE_TEST) || defined(SQLITE_MUTATION_TEST)
+# define SQLITE_OMIT_AUXILIARY_SAFETY_CHECKS 1
+#endif
+#if defined(SQLITE_OMIT_AUXILIARY_SAFETY_CHECKS)
 # define ALWAYS(X)      (1)
 # define NEVER(X)       (0)
 #elif !defined(NDEBUG)
@@ -1935,7 +1939,7 @@ static int zipfileBufferGrow(ZipfileBuffer *pBuf, int nByte){
 **   SELECT zipfile(name,mode,mtime,data) ...
 **   SELECT zipfile(name,mode,mtime,data,method) ...
 */
-void zipfileStep(sqlite3_context *pCtx, int nVal, sqlite3_value **apVal){
+static void zipfileStep(sqlite3_context *pCtx, int nVal, sqlite3_value **apVal){
   ZipfileCtx *p;                  /* Aggregate function context */
   ZipfileEntry e;                 /* New entry to add to zip archive */
 
@@ -2110,7 +2114,7 @@ void zipfileStep(sqlite3_context *pCtx, int nVal, sqlite3_value **apVal){
 /*
 ** xFinalize() callback for zipfile aggregate function.
 */
-void zipfileFinal(sqlite3_context *pCtx){
+static void zipfileFinal(sqlite3_context *pCtx){
   ZipfileCtx *p;
   ZipfileEOCD eocd;
   sqlite3_int64 nZip;

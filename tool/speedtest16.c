@@ -101,7 +101,7 @@ static void prepareAndRun(sqlite3 *db, const char *zSql){
   free(utf16);
 }
 
-int main(int argc, char **argv){
+int main(int argc, const char** argv){
   void *utf16;
   sqlite3 *db;
   int rc;

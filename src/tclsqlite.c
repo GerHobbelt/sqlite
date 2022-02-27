@@ -1943,15 +1943,16 @@ static int SQLITE_TCLAPI DbObjCmd(
     "close",                  "collate",               "collation_needed",
     "commit_hook",            "complete",              "config",
     "copy",                   "deserialize",           "enable_load_extension",
-    "errorcode",              "eval",                  "exists",
-    "function",               "incrblob",              "interrupt",
-    "last_insert_rowid",      "nullvalue",             "onecolumn",
-    "preupdate",              "profile",               "progress",
-    "rekey",                  "restore",               "rollback_hook",
-    "serialize",              "status",                "timeout",
-    "total_changes",          "trace",                 "trace_v2",
-    "transaction",            "unlock_notify",         "update_hook",
-    "version",                "wal_hook",              0
+    "errorcode",              "erroroffset",           "eval",
+    "exists",                 "function",              "incrblob",
+    "interrupt",              "last_insert_rowid",     "nullvalue",
+    "onecolumn",              "preupdate",             "profile",
+    "progress",               "rekey",                 "restore",
+    "rollback_hook",          "serialize",             "status",
+    "timeout",                "total_changes",         "trace",
+    "trace_v2",               "transaction",           "unlock_notify",
+    "update_hook",            "version",               "wal_hook",
+    0                        
   };
   enum DB_enum {
     DB_AUTHORIZER,            DB_BACKUP,               DB_BIND_FALLBACK,
@@ -1959,15 +1960,15 @@ static int SQLITE_TCLAPI DbObjCmd(
     DB_CLOSE,                 DB_COLLATE,              DB_COLLATION_NEEDED,
     DB_COMMIT_HOOK,           DB_COMPLETE,             DB_CONFIG,
     DB_COPY,                  DB_DESERIALIZE,          DB_ENABLE_LOAD_EXTENSION,
-    DB_ERRORCODE,             DB_EVAL,                 DB_EXISTS,
-    DB_FUNCTION,              DB_INCRBLOB,             DB_INTERRUPT,
-    DB_LAST_INSERT_ROWID,     DB_NULLVALUE,            DB_ONECOLUMN,
-    DB_PREUPDATE,             DB_PROFILE,              DB_PROGRESS,
-    DB_REKEY,                 DB_RESTORE,              DB_ROLLBACK_HOOK,
-    DB_SERIALIZE,             DB_STATUS,               DB_TIMEOUT,
-    DB_TOTAL_CHANGES,         DB_TRACE,                DB_TRACE_V2,
-    DB_TRANSACTION,           DB_UNLOCK_NOTIFY,        DB_UPDATE_HOOK,
-    DB_VERSION,               DB_WAL_HOOK             
+    DB_ERRORCODE,             DB_ERROROFFSET,          DB_EVAL,
+    DB_EXISTS,                DB_FUNCTION,             DB_INCRBLOB,
+    DB_INTERRUPT,             DB_LAST_INSERT_ROWID,    DB_NULLVALUE,
+    DB_ONECOLUMN,             DB_PREUPDATE,            DB_PROFILE,
+    DB_PROGRESS,              DB_REKEY,                DB_RESTORE,
+    DB_ROLLBACK_HOOK,         DB_SERIALIZE,            DB_STATUS,
+    DB_TIMEOUT,               DB_TOTAL_CHANGES,        DB_TRACE,
+    DB_TRACE_V2,              DB_TRANSACTION,          DB_UNLOCK_NOTIFY,
+    DB_UPDATE_HOOK,           DB_VERSION,              DB_WAL_HOOK,
   };
   /* don't leave trailing commas on DB_enum, it confuses the AIX xlc compiler */
 
@@ -2647,8 +2648,10 @@ static int SQLITE_TCLAPI DbObjCmd(
     for(i=2; i<objc-1; i++){
       const char *z = Tcl_GetString(objv[i]);
       if( strcmp(z,"-maxsize")==0 && i<objc-2 ){
-        rc = Tcl_GetWideIntFromObj(interp, objv[++i], &mxSize);
+        Tcl_WideInt x;
+        rc = Tcl_GetWideIntFromObj(interp, objv[++i], &x);
         if( rc ) goto deserialize_error;
+        mxSize = x;
         continue;
       }
       if( strcmp(z,"-readonly")==0 && i<objc-2 ){
@@ -2725,6 +2728,17 @@ deserialize_error:
   */
   case DB_ERRORCODE: {
     Tcl_SetObjResult(interp, Tcl_NewIntObj(sqlite3_errcode(pDb->db)));
+    break;
+  }
+
+  /*
+  **    $db erroroffset
+  **
+  ** Return the numeric error code that was returned by the most recent
+  ** call to sqlite3_exec().
+  */
+  case DB_ERROROFFSET: {
+    Tcl_SetObjResult(interp, Tcl_NewIntObj(sqlite3_error_offset(pDb->db)));
     break;
   }
 
@@ -3975,7 +3989,9 @@ static const char *tclsh_main_loop(void){
   return zMainloop;
 }
 
-#define TCLSH_MAIN main   /* Needed to fake out mktclapp */
+#ifndef TCLSH_MAIN
+# define TCLSH_MAIN main
+#endif
 int SQLITE_CDECL TCLSH_MAIN(int argc, char **argv){
   Tcl_Interp *interp;
   int i;

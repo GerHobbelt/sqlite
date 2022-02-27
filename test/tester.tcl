@@ -1204,14 +1204,29 @@ proc speed_trial_summary {name} {
   }
 }
 
+# Clear out left-over configuration setup from the end of a test
+#
+proc finish_test_precleanup {} {
+  catch {db1 close}
+  catch {db2 close}
+  catch {db3 close}
+  catch {unregister_devsim}
+  catch {unregister_jt_vfs}
+  catch {unregister_demovfs}
+}
+
 # Run this routine last
 #
 proc finish_test {} {
   global argv
+  finish_test_precleanup
   if {[llength $argv]>0} {
     # If additional test scripts are specified on the command-line, 
     # run them also, before quitting.
-    proc finish_test {} {return}
+    proc finish_test {} {
+      finish_test_precleanup
+      return
+    }
     foreach extra $argv {
       puts "Running \"$extra\""
       db_delete_and_reopen
@@ -1219,9 +1234,6 @@ proc finish_test {} {
     }
   }
   catch {db close}
-  catch {db1 close}
-  catch {db2 close}
-  catch {db3 close}
   if {0==[info exists ::SLAVE]} { finalize_testing }
 }
 proc finalize_testing {} {
@@ -2179,7 +2191,8 @@ proc drop_all_tables {{db db}} {
     set pk [$db one "PRAGMA foreign_keys"]
     $db eval "PRAGMA foreign_keys = OFF"
   }
-  foreach {idx name file} [db eval {PRAGMA database_list}] {
+  foreach {idx name file} [db eval {
+       SELECT seq AS idx, name, file FROM pragma_database_list}] {
     if {$idx==1} {
       set master sqlite_temp_master
     } else {

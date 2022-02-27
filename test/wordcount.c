@@ -262,7 +262,7 @@ static int allLoop(
 #define main(cnt, arr)      sqlite_wordcount_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   const char *zFileToRead = 0;  /* Input file.  NULL for stdin */
   const char *zDbName = 0;      /* Name of the database file to create */
   int useWithoutRowid = 0;      /* True for --without-rowid */
