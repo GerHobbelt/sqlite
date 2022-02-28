@@ -7435,9 +7435,9 @@ int sqlite3PagerSetJournalMode(Pager *pPager, int eMode){
             || eMode==PAGER_JOURNALMODE_PERSIST   /* 1 */
             || eMode==PAGER_JOURNALMODE_OFF       /* 2 */
             || eMode==PAGER_JOURNALMODE_TRUNCATE  /* 3 */
-            || eMode==PAGER_JOURNALMODE_WAL2
             || eMode==PAGER_JOURNALMODE_MEMORY    /* 4 */
-            || eMode==PAGER_JOURNALMODE_WAL       /* 5 */ );
+            || eMode==PAGER_JOURNALMODE_WAL       /* 5 */
+            || eMode==PAGER_JOURNALMODE_WAL2      /* 6 */ );
 
   /* This routine is only called from the OP_JournalMode opcode, and
   ** the logic there will never allow a temporary file to be changed
