@@ -9230,12 +9230,10 @@ DISPATCHABLE_COMMAND( mode ? 1 3 ){
                           "  --wordwrap on/off\n"
                           "  --wrap N\n"
                           "  --ww\n");
-      rc = 1;
-      goto meta_command_exit;
+      return 1;
     }else{
       utf8_printf(stderr, "extra argument: \"%s\"\n", z);
-      rc = 1;
-      goto meta_command_exit;
+      return 1;
     }
   }
   if( zMode==0 ){
