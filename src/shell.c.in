@@ -5764,7 +5764,6 @@ static int shell_dbinfo_command(ShellState *p, int nArg, char **azArg){
 static int shellDatabaseError(sqlite3 *db){
   const char *zErr = sqlite3_errmsg(db);
   utf8_printf(STD_ERR, "Error: %s\n", zErr);
-  sqlite3_free(zErr);
   return 1;
 }
 
@@ -12112,7 +12111,7 @@ static int run_single_query(ShellState *p, const char *zSql){
     /* Some kind of error, to result in exit before REPL. */
     if( zErrMsg!=0 ){
       utf8_printf(STD_ERR,"Error: %s\n", zErrMsg);
-      sqlite3_free(zErr);
+      sqlite3_free(zErrMsg);
     }else{
       utf8_printf(STD_ERR,"Error: unable to process SQL \"%s\"\n", zSql);
     }
