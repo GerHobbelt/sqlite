@@ -7706,7 +7706,7 @@ DISPATCHABLE_COMMAND( seeargs ? 0 0 azArg nArg p ){
   return rc;
 }
 
-CONDITION_COMMAND(archive !defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_HAVE_ZLIB));
+CONDITION_COMMAND(archive (!defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_HAVE_ZLIB)));
 /*****************
  * The .archive command
  */
@@ -11714,7 +11714,6 @@ static int do_meta_command(char *zLine, ShellState *p){
     sqlite3_free(zErr);
   }
 
-meta_command_exit:
   if( p->outCount ){
     p->outCount--;
     if( p->outCount==0 ) output_reset(p);
