@@ -219,7 +219,7 @@ static int hasSharedCacheTableLock(
     int bSeen = 0;
     for(p=sqliteHashFirst(&pSchema->idxHash); p; p=sqliteHashNext(p)){
       Index *pIdx = (Index *)sqliteHashData(p);
-      if( pIdx->tnum==(int)iRoot ){
+      if( pIdx->tnum==iRoot ){
         if( bSeen ){
           /* Two or more indexes share the same root page.  There must
           ** be imposter tables.  So just return true.  The assert is not
@@ -5840,7 +5840,7 @@ static int moveToRoot(BtCursor *pCur){
     pCur->curIntKey = pCur->pPage->intKey;
   }
   pRoot = pCur->pPage;
-  assert( pRoot->pgno==pCur->pgnoRoot );
+  assert( pRoot->pgno==pCur->pgnoRoot || CORRUPT_DB );
 
   /* If pCur->pKeyInfo is not NULL, then the caller that opened this cursor
   ** expected to open it on an index b-tree. Otherwise, if pKeyInfo is
