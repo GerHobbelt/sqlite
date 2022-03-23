@@ -42,7 +42,7 @@ volatile int all_stop = 0;
 ** or print OK if the string "ok" is seen.
 */
 int check_callback(void *pid, int argc, const char** argv, char **notUsed2){
-  int id = (int)pid;
+  int id = (int)(intptr_t)pid;
   if( strcmp(argv[0],"ok") ){
     all_stop = 1;
     fprintf(stderr,"%d: %s\n", id, argv[0]);
@@ -75,7 +75,7 @@ int integrity_check(sqlite3 *db, int id){
 */
 void *worker(void *workerArg){
   sqlite3 *db;
-  int id = (int)workerArg;
+  int id = (int)(intptr_t)workerArg;
   int rc;
   int cnt = 0;
   fprintf(stderr, "Starting worker %d\n", id);
@@ -125,7 +125,7 @@ int main(int argc, const char** argv){
   }
   sqlite3_close(db);
   for(i=0; i<sizeof(aThread)/sizeof(aThread[0]); i++){
-    pthread_create(&aThread[i], 0, worker, (void*)i);
+    pthread_create(&aThread[i], 0, worker, (void*)(intptr_t)i);
   }
   for(i=0; i<sizeof(aThread)/sizeof(aThread[i]); i++){
     pthread_join(aThread[i], 0);
