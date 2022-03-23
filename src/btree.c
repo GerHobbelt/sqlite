@@ -9480,24 +9480,6 @@ int sqlite3BtreeInsert(
   assert( (flags & (BTREE_SAVEPOSITION|BTREE_APPEND|BTREE_PREFORMAT))==flags );
   assert( (flags & BTREE_PREFORMAT)==0 || seekResult || pCur->pKeyInfo==0 );
 
-  if( pCur->eState==CURSOR_FAULT ){
-    assert( pCur->skipNext!=SQLITE_OK );
-    return pCur->skipNext;
-  }
-
-  assert( cursorOwnsBtShared(pCur) );
-  assert( (pCur->curFlags & BTCF_WriteFlag)!=0
-              && pBt->inTransaction==TRANS_WRITE
-              && (pBt->btsFlags & BTS_READ_ONLY)==0 );
-  assert( hasSharedCacheTableLock(p, pCur->pgnoRoot, pCur->pKeyInfo!=0, 2) );
-
-  /* Assert that the caller has been consistent. If this cursor was opened
-  ** expecting an index b-tree, then the caller should be inserting blob
-  ** keys with no associated data. If the cursor was opened expecting an
-  ** intkey table, the caller should be inserting integer keys with a
-  ** blob of associated data.  */
-  assert( (flags & BTREE_PREFORMAT) || (pX->pKey==0)==(pCur->pKeyInfo==0) );
-
   /* Save the positions of any other cursors open on this table.
   **
   ** In some cases, the call to btreeMoveto() below is a no-op. For
@@ -9521,6 +9503,29 @@ int sqlite3BtreeInsert(
       return SQLITE_CORRUPT_BKPT;
     }
   }
+
+  /* Ensure that the cursor is not in the CURSOR_FAULT state and that it
+  ** points to a valid cell.
+  */
+  if( pCur->eState>=CURSOR_REQUIRESEEK ){
+    testcase( pCur->eState==CURSOR_REQUIRESEEK );
+    testcase( pCur->eState==CURSOR_FAULT );
+    rc = moveToRoot(pCur);
+    if( rc && rc!=SQLITE_EMPTY ) return rc;
+  }
+
+  assert( cursorOwnsBtShared(pCur) );
+  assert( (pCur->curFlags & BTCF_WriteFlag)!=0
+              && pBt->inTransaction==TRANS_WRITE
+              && (pBt->btsFlags & BTS_READ_ONLY)==0 );
+  assert( hasSharedCacheTableLock(p, pCur->pgnoRoot, pCur->pKeyInfo!=0, 2) );
+
+  /* Assert that the caller has been consistent. If this cursor was opened
+  ** expecting an index b-tree, then the caller should be inserting blob
+  ** keys with no associated data. If the cursor was opened expecting an
+  ** intkey table, the caller should be inserting integer keys with a
+  ** blob of associated data.  */
+  assert( (flags & BTREE_PREFORMAT) || (pX->pKey==0)==(pCur->pKeyInfo==0) );
 
   if( pCur->pKeyInfo==0 ){
     assert( pX->pKey==0 );
@@ -9610,14 +9615,14 @@ int sqlite3BtreeInsert(
     }
   }
   assert( pCur->eState==CURSOR_VALID 
-       || (pCur->eState==CURSOR_INVALID && loc)
-       || CORRUPT_DB );
+       || (pCur->eState==CURSOR_INVALID && loc) );
 
   pPage = pCur->pPage;
   assert( pPage->intKey || pX->nKey>=0 || (flags & BTREE_PREFORMAT) );
   assert( pPage->leaf || !pPage->intKey );
   if( pPage->nFree<0 ){
-    if( pCur->eState>CURSOR_INVALID ){
+    if( NEVER(pCur->eState>CURSOR_INVALID) ){
+     /* ^^^^^--- due to the moveToRoot() call above */
       rc = SQLITE_CORRUPT_BKPT;
     }else{
       rc = btreeComputeFreeSpace(pPage);
