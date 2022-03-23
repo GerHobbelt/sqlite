@@ -6293,16 +6293,19 @@ int sqlite3BtreeIndexMoveto(
     int c;
     if( pCur->ix==pCur->pPage->nCell-1
      && (c = indexCellCompare(pCur, pCur->ix, pIdxKey, xRecordCompare))<=0
+     && pIdxKey->errCode==SQLITE_OK
     ){
       *pRes = c;
       return SQLITE_OK;  /* Cursor already pointing at the correct spot */
     }
     if( pCur->iPage>0 
-     && (c = indexCellCompare(pCur, 0, pIdxKey, xRecordCompare))<=0
+     && indexCellCompare(pCur, 0, pIdxKey, xRecordCompare)<=0
+     && pIdxKey->errCode==SQLITE_OK
     ){
       pCur->curFlags &= ~BTCF_ValidOvfl;
       goto bypass_moveto_root;  /* Start search on the current page */
     }
+    pIdxKey->errCode = SQLITE_OK;
   }
 
   rc = moveToRoot(pCur);
