@@ -434,7 +434,7 @@ static void endTimer(void){
 static int bail_on_error = 0;
 
 /*
-** Threat stdin as an interactive input if the following variable
+** Treat stdin as an interactive input if the following variable
 ** is true.  Otherwise, assume stdin is connected to a file or pipe.
 */
 static int stdin_is_interactive = 1;
@@ -485,7 +485,7 @@ void utf8_printf(FILE *out, const char *zFormat, ...){
     char *z1 = sqlite3_vmprintf(zFormat, ap);
     char *z2 = sqlite3_win32_utf8_to_mbcs_v2(z1, 0);
     sqlite3_free(z1);
-    fputs(z2, out);
+    if( z2 ) fputs(z2, out);
     sqlite3_free(z2);
   }else{
     vfprintf(out, zFormat, ap);
@@ -1390,7 +1390,8 @@ static void shellPutsFunc(
 ** the caller of the shell's main, "do shell things" entry point.
 **
 ** It is an error, (perhaps with only minor effect such as memory leak),
-** for a meta-command to call this function while it holds resources.
+** for a meta-command to call this function while it holds resources in
+** need of freeing. Instead, it should be called before acquiring them.
 **
 ** The return is true if failing, 0 otherwise.
 */
