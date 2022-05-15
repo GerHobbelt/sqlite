@@ -8660,13 +8660,10 @@ DISPATCHABLE_COMMAND( import ? 3 7 ){
   int nSkip = 0;              /* Initial lines to skip */
   int useOutputMode = 1;      /* Use output mode to determine separators */
   char *zCreate = 0;          /* CREATE TABLE statement text */
-  int rc = 0;
+  int rc = 1;
 
   if(p->bSafeMode) return SHELL_FORBIDDEN_OP;
   memset(&sCtx, 0, sizeof(sCtx));
-  if( 0==(sCtx.z = sqlite3_malloc64(120)) ){
-    shell_out_of_memory();
-  }
 
   if( p->mode==MODE_Ascii ){
     xRead = ascii_read_one_field;
@@ -8714,23 +8711,24 @@ DISPATCHABLE_COMMAND( import ? 3 7 ){
   seenInterrupt = 0;
   open_db(p, 0);
   if( useOutputMode ){
-    const char *zYap = 0;
     /* If neither the --csv or --ascii options are specified, then set
     ** the column and row separator characters from the output mode. */
     nSep = strlen30(p->colSeparator);
     if( nSep==0 ){
-      zYap = "Error: non-null column separator required for import";
+      *pzErr = shellMPrintf(0, "Error: non-null column separator required for import\n");
+      return SHELL_INVALID_ARGS;
+      return 1;
     }
     if( nSep>1 ){
-      zYap = "Error: multi-character or multi-byte column separators"
-        " not allowed for import";
+      *pzErr = shellMPrintf(0, "Error: multi-character or multi-byte column separators"
+        " not allowed for import\n");
+      return SHELL_INVALID_ARGS;
+      return 1;
     }
     nSep = strlen30(p->rowSeparator);
     if( nSep==0 ){
-      zYap = "Error: non-null row separator required for import";
-    }
-    if( zYap!=0 ){
-      *pzErr = shellMPrintf(0,"%s\n", zYap);
+      *pzErr = shellMPrintf(0, "Error: non-null row separator required for import\n");
+      return SHELL_INVALID_ARGS;
       return 1;
     }
     if( nSep==2 && p->mode==MODE_Csv && strcmp(p->rowSeparator,SEP_CrLf)==0 ){
@@ -8765,10 +8763,11 @@ DISPATCHABLE_COMMAND( import ? 3 7 ){
     sCtx.xCloser = fclose;
   }
   if( sCtx.in==0 ){
-        *pzErr = shellMPrintf(0,"Error: cannot open \"%s\"\n", zFile);
+    *pzErr = shellMPrintf(0,"Error: cannot open \"%s\"\n", zFile);
     import_cleanup(&sCtx);
     return 1;
   }
+  rc = 0;
   if( eVerbose>=2 || (eVerbose>=1 && useOutputMode) ){
     char zSep[2];
     zSep[1] = 0;
@@ -8779,6 +8778,11 @@ DISPATCHABLE_COMMAND( import ? 3 7 ){
     zSep[0] = sCtx.cRowSep;
     output_c_string(p->out, zSep);
     utf8_printf(p->out, "\n");
+  }
+    sCtx.z = sqlite3_malloc64(120);
+    if( sCtx.z==0 ){
+      import_cleanup(&sCtx);
+      shell_out_of_memory();
   }
   /* Below, resources must be freed before exit. */
   while( (nSkip--)>0 ){
@@ -12380,6 +12384,9 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const char **argv){
 int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
   char **argv;
 #endif
+#ifdef SQLITE_DEBUG
+  sqlite3_uint64 mem_main_enter = sqlite3_memory_used();
+#endif
   ShellState data;
   const char *zInitFile = 0;
   int i;
@@ -12953,5 +12960,11 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
     rc &= ~1;
   }
   memset(&data, 0, sizeof(data));
+#ifdef SQLITE_DEBUG
+  if( sqlite3_memory_used()>mem_main_enter ){
+    utf8_printf(stderr, "Memory leaked: %u bytes\n",
+                (unsigned int)(sqlite3_memory_used()-mem_main_enter));
+  }
+#endif
   return rc;
 }
