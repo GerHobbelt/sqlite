@@ -106,10 +106,10 @@ struct series_cursor {
 */
 static int seriesConnect(
   sqlite3 *db,
-  void *pAux,
-  int argc, const char *const*argv,
+  void *pUnused,
+  int argcUnused, const char *const*argvUnused,
   sqlite3_vtab **ppVtab,
-  char **pzErr
+  char **pzErrUnused
 ){
   sqlite3_vtab *pNew;
   int rc;
@@ -120,12 +120,17 @@ static int seriesConnect(
 #define SERIES_COLUMN_STOP  2
 #define SERIES_COLUMN_STEP  3
 
+  (void)pUnused;
+  (void)argcUnused;
+  (void)argvUnused;
+  (void)pzErrUnused;
   rc = sqlite3_declare_vtab(db,
      "CREATE TABLE x(value,start hidden,stop hidden,step hidden)");
   if( rc==SQLITE_OK ){
     pNew = *ppVtab = sqlite3_malloc( sizeof(*pNew) );
     if( pNew==0 ) return SQLITE_NOMEM;
     memset(pNew, 0, sizeof(*pNew));
+    sqlite3_vtab_config(db, SQLITE_VTAB_INNOCUOUS);
   }
   return rc;
 }
@@ -141,8 +146,9 @@ static int seriesDisconnect(sqlite3_vtab *pVtab){
 /*
 ** Constructor for a new series_cursor object.
 */
-static int seriesOpen(sqlite3_vtab *p, sqlite3_vtab_cursor **ppCursor){
+static int seriesOpen(sqlite3_vtab *pUnused, sqlite3_vtab_cursor **ppCursor){
   series_cursor *pCur;
+  (void)pUnused;
   pCur = sqlite3_malloc( sizeof(*pCur) );
   if( pCur==0 ) return SQLITE_NOMEM;
   memset(pCur, 0, sizeof(*pCur));
@@ -241,7 +247,8 @@ static int seriesEof(sqlite3_vtab_cursor *cur){
 **    4:    step=VALUE
 **
 ** Also, if bit 8 is set, that means that the series should be output
-** in descending order rather than in ascending order.
+** in descending order rather than in ascending order.  If bit 16 is
+** set, then output must appear in ascending order.
 **
 ** This routine should initialize the cursor and position it so that it
 ** is pointing at the first row, or pointing off the end of the table
@@ -249,11 +256,12 @@ static int seriesEof(sqlite3_vtab_cursor *cur){
 */
 static int seriesFilter(
   sqlite3_vtab_cursor *pVtabCursor, 
-  int idxNum, const char *idxStr,
+  int idxNum, const char *idxStrUnused,
   int argc, sqlite3_value **argv
 ){
   series_cursor *pCur = (series_cursor *)pVtabCursor;
   int i = 0;
+  (void)idxStrUnused;
   if( idxNum & 1 ){
     pCur->mnValue = sqlite3_value_int64(argv[i++]);
   }else{
@@ -266,7 +274,12 @@ static int seriesFilter(
   }
   if( idxNum & 4 ){
     pCur->iStep = sqlite3_value_int64(argv[i++]);
-    if( pCur->iStep<1 ) pCur->iStep = 1;
+    if( pCur->iStep==0 ){
+      pCur->iStep = 1;
+    }else if( pCur->iStep<0 ){
+      pCur->iStep = -pCur->iStep;
+      if( (idxNum & 16)==0 ) idxNum |= 8;
+    }
   }else{
     pCur->iStep = 1;
   }
@@ -310,62 +323,81 @@ static int seriesFilter(
 **  (8)  output in descending order
 */
 static int seriesBestIndex(
-  sqlite3_vtab *tab,
+  sqlite3_vtab *pVTab,
   sqlite3_index_info *pIdxInfo
 ){
-  int i;                 /* Loop over constraints */
+  int i, j;              /* Loop over constraints */
   int idxNum = 0;        /* The query plan bitmask */
-  int startIdx = -1;     /* Index of the start= constraint, or -1 if none */
-  int stopIdx = -1;      /* Index of the stop= constraint, or -1 if none */
-  int stepIdx = -1;      /* Index of the step= constraint, or -1 if none */
+  int bStartSeen = 0;    /* EQ constraint seen on the START column */
+  int unusableMask = 0;  /* Mask of unusable constraints */
   int nArg = 0;          /* Number of arguments that seriesFilter() expects */
-
+  int aIdx[3];           /* Constraints on start, stop, and step */
   const struct sqlite3_index_constraint *pConstraint;
+
+  /* This implementation assumes that the start, stop, and step columns
+  ** are the last three columns in the virtual table. */
+  assert( SERIES_COLUMN_STOP == SERIES_COLUMN_START+1 );
+  assert( SERIES_COLUMN_STEP == SERIES_COLUMN_START+2 );
+
+  aIdx[0] = aIdx[1] = aIdx[2] = -1;
   pConstraint = pIdxInfo->aConstraint;
   for(i=0; i<pIdxInfo->nConstraint; i++, pConstraint++){
-    if( pConstraint->usable==0 ) continue;
-    if( pConstraint->op!=SQLITE_INDEX_CONSTRAINT_EQ ) continue;
-    switch( pConstraint->iColumn ){
-      case SERIES_COLUMN_START:
-        startIdx = i;
-        idxNum |= 1;
-        break;
-      case SERIES_COLUMN_STOP:
-        stopIdx = i;
-        idxNum |= 2;
-        break;
-      case SERIES_COLUMN_STEP:
-        stepIdx = i;
-        idxNum |= 4;
-        break;
+    int iCol;    /* 0 for start, 1 for stop, 2 for step */
+    int iMask;   /* bitmask for those column */
+    if( pConstraint->iColumn<SERIES_COLUMN_START ) continue;
+    iCol = pConstraint->iColumn - SERIES_COLUMN_START;
+    assert( iCol>=0 && iCol<=2 );
+    iMask = 1 << iCol;
+    if( iCol==0 ) bStartSeen = 1;
+    if( pConstraint->usable==0 ){
+      unusableMask |=  iMask;
+      continue;
+    }else if( pConstraint->op==SQLITE_INDEX_CONSTRAINT_EQ ){
+      idxNum |= iMask;
+      aIdx[iCol] = i;
     }
   }
-  if( startIdx>=0 ){
-    pIdxInfo->aConstraintUsage[startIdx].argvIndex = ++nArg;
-    pIdxInfo->aConstraintUsage[startIdx].omit= !SQLITE_SERIES_CONSTRAINT_VERIFY;
+  for(i=0; i<3; i++){
+    if( (j = aIdx[i])>=0 ){
+      pIdxInfo->aConstraintUsage[j].argvIndex = ++nArg;
+      pIdxInfo->aConstraintUsage[j].omit = !SQLITE_SERIES_CONSTRAINT_VERIFY;
+    }
   }
-  if( stopIdx>=0 ){
-    pIdxInfo->aConstraintUsage[stopIdx].argvIndex = ++nArg;
-    pIdxInfo->aConstraintUsage[stopIdx].omit = !SQLITE_SERIES_CONSTRAINT_VERIFY;
+  /* The current generate_column() implementation requires at least one
+  ** argument (the START value).  Legacy versions assumed START=0 if the
+  ** first argument was omitted.  Compile with -DZERO_ARGUMENT_GENERATE_SERIES
+  ** to obtain the legacy behavior */
+#ifndef ZERO_ARGUMENT_GENERATE_SERIES
+  if( !bStartSeen ){
+    sqlite3_free(pVTab->zErrMsg);
+    pVTab->zErrMsg = sqlite3_mprintf(
+        "first argument to \"generate_series()\" missing or unusable");
+    return SQLITE_ERROR;
   }
-  if( stepIdx>=0 ){
-    pIdxInfo->aConstraintUsage[stepIdx].argvIndex = ++nArg;
-    pIdxInfo->aConstraintUsage[stepIdx].omit = !SQLITE_SERIES_CONSTRAINT_VERIFY;
+#endif
+  if( (unusableMask & ~idxNum)!=0 ){
+    /* The start, stop, and step columns are inputs.  Therefore if there
+    ** are unusable constraints on any of start, stop, or step then
+    ** this plan is unusable */
+    return SQLITE_CONSTRAINT;
   }
   if( (idxNum & 3)==3 ){
     /* Both start= and stop= boundaries are available.  This is the 
     ** the preferred case */
     pIdxInfo->estimatedCost = (double)(2 - ((idxNum&4)!=0));
     pIdxInfo->estimatedRows = 1000;
-    if( pIdxInfo->nOrderBy==1 ){
-      if( pIdxInfo->aOrderBy[0].desc ) idxNum |= 8;
+    if( pIdxInfo->nOrderBy>=1 && pIdxInfo->aOrderBy[0].iColumn==0 ){
+      if( pIdxInfo->aOrderBy[0].desc ){
+        idxNum |= 8;
+      }else{
+        idxNum |= 16;
+      }
       pIdxInfo->orderByConsumed = 1;
     }
   }else{
     /* If either boundary is missing, we have to generate a huge span
     ** of numbers.  Make this case very expensive so that the query
     ** planner will work hard to avoid it. */
-    pIdxInfo->estimatedCost = (double)2147483647;
     pIdxInfo->estimatedRows = 2147483647;
   }
   pIdxInfo->idxNum = idxNum;
@@ -397,6 +429,10 @@ static sqlite3_module seriesModule = {
   0,                         /* xRollback */
   0,                         /* xFindMethod */
   0,                         /* xRename */
+  0,                         /* xSavepoint */
+  0,                         /* xRelease */
+  0,                         /* xRollbackTo */
+  0                          /* xShadowName */
 };
 
 #endif /* SQLITE_OMIT_VIRTUALTABLE */
@@ -412,7 +448,7 @@ int sqlite3_series_init(
   int rc = SQLITE_OK;
   SQLITE_EXTENSION_INIT2(pApi);
 #ifndef SQLITE_OMIT_VIRTUALTABLE
-  if( sqlite3_libversion_number()<3008012 ){
+  if( sqlite3_libversion_number()<3008012 && pzErrMsg!=0 ){
     *pzErrMsg = sqlite3_mprintf(
         "generate_series() requires SQLite 3.8.12 or later");
     return SQLITE_ERROR;

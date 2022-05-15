@@ -134,6 +134,7 @@ proc fts3_make_deferrable {tbl token {nRow 0}} {
 #    fts3_zero_long_segments TABLE ?LIMIT?
 #
 proc fts3_zero_long_segments {tbl limit} {
+  sqlite3_db_config db DEFENSIVE 0
   execsql " 
     UPDATE ${tbl}_segments 
     SET block = zeroblob(length(block)) 
@@ -569,6 +570,13 @@ foreach {tn create} {
   do_fts3query_test 4.$tn.4.3 -deferred fi* t1 {on* NEAR/1 fi*}
   do_fts3query_test 4.$tn.4.4 -deferred fi* t1 {on* NEAR/2 fi*}
   do_fts3query_test 4.$tn.4.5 -deferred fi* t1 {on* NEAR/3 fi*}
+
+  ifcapable fts4_deferred {
+    db eval {UPDATE t1_stat SET value=x'' WHERE id=0}
+    do_catchsql_test 4.$tn.4.6 {
+      SELECT docid FROM t1 WHERE t1 MATCH 'on* NEAR/3 fi*'
+    } {1 {database disk image is malformed}}
+  }
 }
 
 #--------------------------------------------------------------------------

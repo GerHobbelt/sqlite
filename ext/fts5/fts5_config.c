@@ -23,7 +23,7 @@
 #define FTS5_DEFAULT_HASHSIZE    (1024*1024)
 
 /* Maximum allowed page size */
-#define FTS5_MAX_PAGE_SIZE (128*1024)
+#define FTS5_MAX_PAGE_SIZE (64*1024)
 
 static int fts5_iswhitespace(char x){
   return (x==' ');
@@ -150,7 +150,7 @@ static int fts5Dequote(char *z){
   assert( q=='[' || q=='\'' || q=='"' || q=='`' );
   if( q=='[' ) q = ']';  
 
-  while( ALWAYS(z[iIn]) ){
+  while( z[iIn] ){
     if( z[iIn]==q ){
       if( z[iIn+1]!=q ){
         /* Character iIn was the close quote. */
@@ -295,7 +295,7 @@ static int fts5ConfigParseSpecial(
 
   if( sqlite3_strnicmp("tokenize", zCmd, nCmd)==0 ){
     const char *p = (const char*)zArg;
-    int nArg = (int)strlen(zArg) + 1;
+    sqlite3_int64 nArg = strlen(zArg) + 1;
     char **azArg = sqlite3Fts5MallocZero(&rc, sizeof(char*) * nArg);
     char *pDel = sqlite3Fts5MallocZero(&rc, nArg * 2);
     char *pSpace = pDel;
@@ -325,7 +325,7 @@ static int fts5ConfigParseSpecial(
           rc = SQLITE_ERROR;
         }else{
           rc = sqlite3Fts5GetTokenizer(pGlobal, 
-              (const char**)azArg, nArg, &pConfig->pTok, &pConfig->pTokApi,
+              (const char**)azArg, (int)nArg, pConfig,
               pzErr
           );
         }
@@ -397,9 +397,7 @@ static int fts5ConfigParseSpecial(
 */
 static int fts5ConfigDefaultTokenizer(Fts5Global *pGlobal, Fts5Config *pConfig){
   assert( pConfig->pTok==0 && pConfig->pTokApi==0 );
-  return sqlite3Fts5GetTokenizer(
-      pGlobal, 0, 0, &pConfig->pTok, &pConfig->pTokApi, 0
-  );
+  return sqlite3Fts5GetTokenizer(pGlobal, 0, 0, pConfig, 0);
 }
 
 /*
@@ -425,8 +423,8 @@ static const char *fts5ConfigGobbleWord(
 ){
   const char *zRet = 0;
 
-  int nIn = (int)strlen(zIn);
-  char *zOut = sqlite3_malloc(nIn+1);
+  sqlite3_int64 nIn = strlen(zIn);
+  char *zOut = sqlite3_malloc64(nIn+1);
 
   assert( *pRc==SQLITE_OK );
   *pbQuoted = 0;
@@ -435,7 +433,7 @@ static const char *fts5ConfigGobbleWord(
   if( zOut==0 ){
     *pRc = SQLITE_NOMEM;
   }else{
-    memcpy(zOut, zIn, nIn+1);
+    memcpy(zOut, zIn, (size_t)(nIn+1));
     if( fts5_isopenquote(zOut[0]) ){
       int ii = fts5Dequote(zOut);
       zRet = &zIn[ii];
@@ -529,7 +527,7 @@ int sqlite3Fts5ConfigParse(
   int rc = SQLITE_OK;             /* Return code */
   Fts5Config *pRet;               /* New object to return */
   int i;
-  int nByte;
+  sqlite3_int64 nByte;
 
   *ppOut = pRet = (Fts5Config*)sqlite3_malloc(sizeof(Fts5Config));
   if( pRet==0 ) return SQLITE_NOMEM;
@@ -539,7 +537,7 @@ int sqlite3Fts5ConfigParse(
 
   nByte = nArg * (sizeof(char*) + sizeof(u8));
   pRet->azCol = (char**)sqlite3Fts5MallocZero(&rc, nByte);
-  pRet->abUnindexed = (u8*)&pRet->azCol[nArg];
+  pRet->abUnindexed = pRet->azCol ? (u8*)&pRet->azCol[nArg] : 0;
   pRet->zDb = sqlite3Fts5Strndup(&rc, azArg[1], -1);
   pRet->zName = sqlite3Fts5Strndup(&rc, azArg[2], -1);
   pRet->bColumnsize = 1;
@@ -564,6 +562,7 @@ int sqlite3Fts5ConfigParse(
     z = fts5ConfigSkipWhitespace(z);
     if( z && *z=='=' ){
       bOption = 1;
+      assert( zOne!=0 );
       z++;
       if( bMustBeCol ) z = 0;
     }
@@ -580,7 +579,11 @@ int sqlite3Fts5ConfigParse(
         rc = SQLITE_ERROR;
       }else{
         if( bOption ){
-          rc = fts5ConfigParseSpecial(pGlobal, pRet, zOne, zTwo?zTwo:"", pzErr);
+          rc = fts5ConfigParseSpecial(pGlobal, pRet, 
+            ALWAYS(zOne)?zOne:"",
+            zTwo?zTwo:"",
+            pzErr
+          );
         }else{
           rc = fts5ConfigParseColumn(pRet, zOne, zTwo, pzErr);
           zOne = 0;
@@ -683,7 +686,7 @@ int sqlite3Fts5ConfigDeclareVtab(Fts5Config *pConfig){
     rc = sqlite3_declare_vtab(pConfig->db, zSql);
     sqlite3_free(zSql);
   }
-  
+ 
   return rc;
 }
 
@@ -828,7 +831,7 @@ int sqlite3Fts5ConfigSetValue(
     if( SQLITE_INTEGER==sqlite3_value_numeric_type(pVal) ){
       pgsz = sqlite3_value_int(pVal);
     }
-    if( pgsz<=0 || pgsz>FTS5_MAX_PAGE_SIZE ){
+    if( pgsz<32 || pgsz>FTS5_MAX_PAGE_SIZE ){
       *pbBadkey = 1;
     }else{
       pConfig->pgsz = pgsz;
@@ -881,6 +884,7 @@ int sqlite3Fts5ConfigSetValue(
       *pbBadkey = 1;
     }else{
       if( nCrisisMerge<=1 ) nCrisisMerge = FTS5_DEFAULT_CRISISMERGE;
+      if( nCrisisMerge>=FTS5_MAX_SEGMENT ) nCrisisMerge = FTS5_MAX_SEGMENT-1;
       pConfig->nCrisisMerge = nCrisisMerge;
     }
   }

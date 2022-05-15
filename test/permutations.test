@@ -48,13 +48,6 @@ proc test_suite {name args} {
     set options([lindex $o 0]) $v
   }
 
-  # Transform "-presql" into a "dbconfig" script
-  #
-  if {[info exists options(-presql)]} {
-    append options(-dbconfig) "\n\$::dbhandle eval { $options(-presql) }"
-    unset options(-presql)
-  }
-
   set     ::testspec($name) [array get options]
   lappend ::testsuitelist $name
 }
@@ -133,18 +126,35 @@ set allquicktests [test_set $alltests -exclude {
   walcrash2.test e_fkey.test backup.test
 
   fts4merge.test fts4merge2.test fts4merge4.test fts4check.test
+  fts4merge5.test
   fts3cov.test fts3snippet.test fts3corrupt2.test fts3an.test
   fts3defer.test fts4langid.test fts3sort.test fts5unicode.test
 
   rtree4.test
+  sessionbig.test
 }]
 if {[info exists ::env(QUICKTEST_INCLUDE)]} {
   set allquicktests [concat $allquicktests $::env(QUICKTEST_INCLUDE)]
 }
 if {[info exists ::env(QUICKTEST_OMIT)]} {
-  foreach x [split $::env(QUICKTEST_OMIT) ,] {
-    regsub -all \\y$x\\y $allquicktests {} allquicktests
+  # If environment variable QUICKTEST_OMIT is set, it is a comma-separated
+  # list of regular expressions to match against test file names in
+  # the "allquicktests" set. Any matches are excluded. Only the filename
+  # is matched, not any directory component of the path.
+  set all [list]
+  foreach a $allquicktests {
+    set bIn 1
+    foreach x [split $::env(QUICKTEST_OMIT) ,] {
+      if {[regexp $x [file tail $a]]} {
+        set bIn 0
+        break
+      }
+    }
+    if {$bIn} {
+      lappend all $a
+    }
   }
+  set allquicktests $all
 }
 
 # If the TEST_FAILURE environment variable is set, it means that we what to
@@ -177,6 +187,12 @@ test_suite "veryquick" -prefix "" -description {
       *fts5corrupt* *fts5big* *fts5aj*
 ]
 
+test_suite "shell" -prefix "" -description {
+  Run tests of the command-line shell
+} -files [
+  test_set [glob $testdir/shell*.test]
+]
+
 test_suite "extraquick" -prefix "" -description {
   "Extra" quick test suite. Runs in a few minutes on a workstation.
   This test suite is the same as the "veryquick" tests, except that
@@ -201,7 +217,8 @@ test_suite "valgrind" -prefix "" -description {
   fail under valgrind) omitted.
 } -files [
   test_set $allquicktests -exclude *malloc* *ioerr* *fault* *_err* wal.test \
-              shell*.test crash8.test atof1.test selectG.test \
+              shell2.test shell6.test shell7.test \
+              crash8.test atof1.test selectG.test \
               tkt-fc62af4523.test numindex1.test corruptK.test
 ] -initialize {
   set ::G(valgrind) 1
@@ -262,6 +279,7 @@ test_suite "fts3" -prefix "" -description {
   fts3am.test fts3an.test fts3ao.test fts3atoken.test
   fts3auto.test fts3aux1.test fts3aux2.test fts3b.test
   fts3comp1.test fts3conf.test fts3corrupt2.test fts3corrupt.test
+  fts3corrupt4.test
   fts3cov.test fts3c.test fts3defer2.test fts3defer3.test
   fts3defer.test fts3drop.test fts3d.test fts3e.test
   fts3expr2.test fts3expr3.test fts3expr4.test fts3expr5.test
@@ -436,10 +454,18 @@ lappend ::testsuitelist xxx
 test_suite "coverage-wal" -description {
   Coverage tests for file wal.c.
 } -files {
-  wal.test       wal2.test     wal3.test       walmode.test    
-  walbak.test    walhook.test  walcrash2.test  walcksum.test
-  walfault.test  walbig.test   walnoshm.test
-  wal5.test
+  wal.test wal2.test wal3.test wal4.test wal5.test
+  wal64k.test wal6.test wal7.test wal8.test wal9.test
+  walbak.test walbig.test walblock.test walcksum.test walcrash2.test
+  walcrash3.test walcrash4.test walcrash.test walfault.test walhook.test
+  walmode.test walnoshm.test waloverwrite.test walpersist.test 
+  walprotocol2.test walprotocol.test walro2.test walrofault.test 
+  walro.test walshared.test walslow.test walvfs.test
+  walfault2.test
+  nockpt.test
+
+  snapshot2.test snapshot3.test snapshot4.test
+  snapshot_fault.test snapshot.test snapshot_up.test
 } 
 
 test_suite "coverage-pager" -description {
@@ -453,8 +479,8 @@ test_suite "coverage-analyze" -description {
   Coverage tests for file analyze.c.
 } -files {
   analyze3.test analyze4.test analyze5.test analyze6.test
-  analyze7.test analyze8.test analyze9.test analyzeA.test
-  analyze.test analyzeB.test mallocA.test
+  analyze7.test analyze8.test analyze9.test
+  analyze.test mallocA.test
 } 
 
 test_suite "coverage-sorter" -description {
@@ -622,7 +648,7 @@ test_suite "utf16" -description {
 } -files {
     alter.test alter3.test
     analyze.test analyze3.test analyze4.test analyze5.test analyze6.test
-    analyze7.test analyze8.test analyze9.test analyzeA.test analyzeB.test
+    analyze7.test analyze8.test analyze9.test
     auth.test bind.test blob.test capi2.test capi3.test collate1.test
     collate2.test collate3.test collate4.test collate5.test collate6.test
     conflict.test date.test delete.test expr.test fkey1.test func.test
@@ -750,7 +776,7 @@ test_suite "inmemory_journal" -description {
   # the number of fsync() calls.
   pager.test exclusive.test jrnlmode.test sync.test misc1.test 
   journal1.test conflict.test crash8.test tkt3457.test io.test
-  journal3.test 8_3_names.test
+  journal3.test 8_3_names.test shmlock.test
 
   pager1.test async4.test corrupt.test filefmt.test pager2.test
   corrupt5.test corruptA.test pageropt.test
@@ -964,7 +990,8 @@ test_suite "journaltest" -description {
   async4.test bigfile.test backcompat.test e_wal* fstat.test mmap2.test
   pager1.test syscall.test tkt3457.test *malloc* mmap* multiplex* nolock*
   pager2.test *fault* rowal* snapshot* superlock* symlink.test
-  delete_db.test
+  delete_db.test shmlock.test chunksize.test
+  busy2.test avfs.test external_reader.test
 }]
 
 if {[info commands register_demovfs] != ""} {
@@ -1030,13 +1057,16 @@ test_suite "rbu" -description {
 test_suite "no_optimization" -description {
   Run test scripts with optimizations disabled using the
   sqlite3_test_control(SQLITE_TESTCTRL_OPTIMIZATIONS) interface.
-} -files {
-  where.test where2.test where3.test where4.test where5.test
-  where6.test where7.test where8.test where9.test
-  whereA.test whereB.test wherelimit.test
-  select1.test select2.test select3.test select4.test select5.test
-  select7.test select8.test selectA.test selectC.test
-} -dbconfig {
+} -files [
+  test_set \
+    [glob -nocomplain $::testdir/window*.test]                       \
+    where.test where2.test where3.test where4.test where5.test       \
+    where6.test where7.test where8.test where9.test                  \
+    whereA.test whereB.test wherelimit.test                          \
+    select1.test select2.test select3.test select4.test select5.test \
+    select7.test select8.test selectA.test selectC.test              \
+    -exclude windowpushd.test
+] -dbconfig {
   optimization_control $::dbhandle all 0
 }
 
@@ -1070,6 +1100,16 @@ test_suite "sorterref" -prefix "" -description {
   autoinstall_test_functions
 }
 
+test_suite "maindbname" -prefix "" -description {
+  Run the "veryquick" test suite with SQLITE_DBCONFIG_MAINDBNAME used to
+  set the name of database 0 to "icecube".
+} -files [
+  test_set $allquicktests -exclude *malloc* *ioerr* *fault* *bigfile* *_err* \
+      *fts5corrupt* *fts5big* *fts5aj*
+] -dbconfig {
+  dbconfig_maindbname_icecube $::dbhandle
+}
+
 # End of tests
 #############################################################################
 
@@ -1089,6 +1129,7 @@ proc run_tests {name args} {
   set options(-shutdown) ""
   set options(-prefix) ""
   set options(-dbconfig) ""
+  set options(-presql) ""
 
   array set options $args
 
@@ -1096,19 +1137,37 @@ proc run_tests {name args} {
   set ::G(perm:prefix)       $options(-prefix)
   set ::G(isquick)           1
   set ::G(perm:dbconfig)     $options(-dbconfig)
+  set ::G(perm:presql)       $options(-presql)
 
-  foreach file [lsort $options(-files)] {
-    uplevel $options(-initialize)
+  set filelist [lsort $options(-files)]
+  if {[info exists ::env(TCLTEST_PART)]} {
+    regexp {^([0-9]*)/([0-9]*)$} $::env(TCLTEST_PART) -> A B
+    set nFile [expr {([llength $filelist]+$B-1)/$B}]
+    set filelist [lrange $filelist [expr ($A-1)*$nFile] [expr $A*$nFile-1]]
+  }
+
+  foreach file $filelist {
     if {[file tail $file] == $file} { set file [file join $::testdir $file] }
+
+    if {[info exists ::env(SQLITE_TEST_PATTERN_LIST)]} {
+      set ok 0
+      foreach p $::env(SQLITE_TEST_PATTERN_LIST) {
+        set p [string map {% *} $p]
+        if {[string match $p [file tail $file]]} {set ok 1 ; break}
+      }
+      if {!$ok} continue
+    }
+
+    uplevel $options(-initialize)
     slave_test_file $file
     uplevel $options(-shutdown)
-
     unset -nocomplain ::G(perm:sqlite3_args)
   }
 
   unset ::G(perm:name)
   unset ::G(perm:prefix)
   unset ::G(perm:dbconfig)
+  unset ::G(perm:presql)
 }
 
 proc run_test_suite {name} {
@@ -1161,6 +1220,7 @@ if {[file tail $argv0] == "permutations.test"} {
         set S $::testspec($suite)
         set i 1
       } else {
+        set suite default
         set S [list]
         set i 0
       }
@@ -1181,9 +1241,10 @@ if {[file tail $argv0] == "permutations.test"} {
         set extra [list -files $files]
       }
 
-      eval run_tests $suite $S $extra
+      eval [list run_tests $suite] $S $extra
     }
   }
   main $argv
+  set argv {}
   finish_test
 }

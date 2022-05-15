@@ -58,6 +58,8 @@ foreach {tn defn} {
   8 { BEFORE UPDATE ON t1 BEGIN UPDATE t2 SET c = ?; END; }
   9 { BEFORE UPDATE ON t1 BEGIN UPDATE t2 SET c = 1 WHERE d = ?; END; }
  10 { AFTER INSERT ON t1 BEGIN SELECT * FROM pragma_stats(?); END; }
+ 11 { BEFORE INSERT ON t1 BEGIN 
+      INSERT INTO t1 SELECT max(b) OVER(ORDER BY $1) FROM t1; END }
 } {
   catchsql {drop trigger tr1}
   do_catchsql_test 1.1.$tn "CREATE TRIGGER tr1 $defn" [list 1 $errmsg]
@@ -68,6 +70,7 @@ foreach {tn defn} {
 # Test that variable references within trigger definitions loaded from 
 # the sqlite_master table are automatically converted to NULL.
 #
+sqlite3_db_config db DEFENSIVE 0
 do_execsql_test 2.1 {
   PRAGMA writable_schema = 1;
   INSERT INTO sqlite_master VALUES('trigger', 'tr1', 't1', 0,

@@ -17,17 +17,17 @@
 
 int sqlite3Fts5BufferSize(int *pRc, Fts5Buffer *pBuf, u32 nByte){
   if( (u32)pBuf->nSpace<nByte ){
-    u32 nNew = pBuf->nSpace ? pBuf->nSpace : 64;
+    u64 nNew = pBuf->nSpace ? pBuf->nSpace : 64;
     u8 *pNew;
     while( nNew<nByte ){
       nNew = nNew * 2;
     }
-    pNew = sqlite3_realloc(pBuf->p, nNew);
+    pNew = sqlite3_realloc64(pBuf->p, nNew);
     if( pNew==0 ){
       *pRc = SQLITE_NOMEM;
       return 1;
     }else{
-      pBuf->nSpace = nNew;
+      pBuf->nSpace = (int)nNew;
       pBuf->p = pNew;
     }
   }
@@ -52,7 +52,7 @@ void sqlite3Fts5Put32(u8 *aBuf, int iVal){
 }
 
 int sqlite3Fts5Get32(const u8 *aBuf){
-  return (aBuf[0] << 24) + (aBuf[1] << 16) + (aBuf[2] << 8) + aBuf[3];
+  return (int)((((u32)aBuf[0])<<24) + (aBuf[1]<<16) + (aBuf[2]<<8) + aBuf[3]);
 }
 
 /*
@@ -66,7 +66,6 @@ void sqlite3Fts5BufferAppendBlob(
   u32 nData, 
   const u8 *pData
 ){
-  assert_nc( *pRc || nData>=0 );
   if( nData ){
     if( fts5BufferGrow(pRc, pBuf, nData) ) return;
     memcpy(&pBuf->p[pBuf->n], pData, nData);
@@ -176,15 +175,28 @@ int sqlite3Fts5PoslistNext64(
     return 1;  
   }else{
     i64 iOff = *piOff;
-    int iVal;
+    u32 iVal;
     fts5FastGetVarint32(a, i, iVal);
-    if( iVal==1 ){
+    if( iVal<=1 ){
+      if( iVal==0 ){
+        *pi = i;
+        return 0;
+      }
       fts5FastGetVarint32(a, i, iVal);
       iOff = ((i64)iVal) << 32;
+      assert( iOff>=0 );
       fts5FastGetVarint32(a, i, iVal);
+      if( iVal<2 ){
+        /* This is a corrupt record. So stop parsing it here. */
+        *piOff = -1;
+        return 1;
+      }
+      *piOff = iOff + ((iVal-2) & 0x7FFFFFFF);
+    }else{
+      *piOff = (iOff & (i64)0x7FFFFFFF<<32)+((iOff + (iVal-2)) & 0x7FFFFFFF);
     }
-    *piOff = iOff + (iVal-2);
     *pi = i;
+    assert_nc( *piOff>=iOff );
     return 0;
   }
 }
@@ -223,14 +235,16 @@ void sqlite3Fts5PoslistSafeAppend(
   i64 *piPrev, 
   i64 iPos
 ){
-  static const i64 colmask = ((i64)(0x7FFFFFFF)) << 32;
-  if( (iPos & colmask) != (*piPrev & colmask) ){
-    pBuf->p[pBuf->n++] = 1;
-    pBuf->n += sqlite3Fts5PutVarint(&pBuf->p[pBuf->n], (iPos>>32));
-    *piPrev = (iPos & colmask);
+  if( iPos>=*piPrev ){
+    static const i64 colmask = ((i64)(0x7FFFFFFF)) << 32;
+    if( (iPos & colmask) != (*piPrev & colmask) ){
+      pBuf->p[pBuf->n++] = 1;
+      pBuf->n += sqlite3Fts5PutVarint(&pBuf->p[pBuf->n], (iPos>>32));
+      *piPrev = (iPos & colmask);
+    }
+    pBuf->n += sqlite3Fts5PutVarint(&pBuf->p[pBuf->n], (iPos-*piPrev)+2);
+    *piPrev = iPos;
   }
-  pBuf->n += sqlite3Fts5PutVarint(&pBuf->p[pBuf->n], (iPos-*piPrev)+2);
-  *piPrev = iPos;
 }
 
 int sqlite3Fts5PoslistWriterAppend(
@@ -244,14 +258,14 @@ int sqlite3Fts5PoslistWriterAppend(
   return SQLITE_OK;
 }
 
-void *sqlite3Fts5MallocZero(int *pRc, int nByte){
+void *sqlite3Fts5MallocZero(int *pRc, sqlite3_int64 nByte){
   void *pRet = 0;
   if( *pRc==SQLITE_OK ){
-    pRet = sqlite3_malloc(nByte);
+    pRet = sqlite3_malloc64(nByte);
     if( pRet==0 ){
       if( nByte>0 ) *pRc = SQLITE_NOMEM;
     }else{
-      memset(pRet, 0, nByte);
+      memset(pRet, 0, (size_t)nByte);
     }
   }
   return pRet;

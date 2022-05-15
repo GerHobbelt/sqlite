@@ -45,7 +45,7 @@ struct Hash {
   unsigned int count;       /* Number of entries in this table */
   HashElem *first;          /* The first element of the array */
   struct _ht {              /* the hash table */
-    int count;                 /* Number of entries with this hash */
+    unsigned int count;        /* Number of entries with this hash */
     HashElem *chain;           /* Pointer to first entry with this hash */
   } *ht;
 };
@@ -91,6 +91,6 @@ void sqlite3HashClear(Hash*);
 /*
 ** Number of entries in a hash table
 */
-/* #define sqliteHashCount(H)  ((H)->count) // NOT USED */
+#define sqliteHashCount(H)  ((H)->count)
 
 #endif /* SQLITE_HASH_H */
