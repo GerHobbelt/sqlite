@@ -4672,18 +4672,17 @@ IdList *sqlite3IdListAppend(Parse *pParse, IdList *pList, Token *pToken){
   if( pList==0 ){
     pList = sqlite3DbMallocZero(db, sizeof(IdList) );
     if( pList==0 ) return 0;
+  }else{
+    IdList *pNew;
+    pNew = sqlite3DbRealloc(db, pList,
+                 sizeof(IdList) + pList->nId*sizeof(pList->a));
+    if( pNew==0 ){
+      sqlite3IdListDelete(db, pList);
+      return 0;
+    }
+    pList = pNew;
   }
-  pList->a = sqlite3ArrayAllocate(
-      db,
-      pList->a,
-      sizeof(pList->a[0]),
-      &pList->nId,
-      &i
-  );
-  if( i<0 ){
-    sqlite3IdListDelete(db, pList);
-    return 0;
-  }
+  i = pList->nId++;
   pList->a[i].zName = sqlite3NameFromToken(db, pToken);
   if( IN_RENAME_OBJECT && pList->a[i].zName ){
     sqlite3RenameTokenMap(pParse, (void*)pList->a[i].zName, pToken);
@@ -4697,10 +4696,10 @@ IdList *sqlite3IdListAppend(Parse *pParse, IdList *pList, Token *pToken){
 void sqlite3IdListDelete(sqlite3 *db, IdList *pList){
   int i;
   if( pList==0 ) return;
+  assert( pList->eU4!=EU4_EXPR ); /* EU4_EXPR mode is not currently used */
   for(i=0; i<pList->nId; i++){
     sqlite3DbFree(db, pList->a[i].zName);
   }
-  sqlite3DbFree(db, pList->a);
   sqlite3DbFreeNN(db, pList);
 }
 
@@ -4971,7 +4970,12 @@ SrcList *sqlite3SrcListAppendFromTerm(
   if( pAlias->n ){
     pItem->zAlias = sqlite3NameFromToken(db, pAlias);
   }
-  pItem->pSelect = pSubquery;
+  if( pSubquery ){
+    pItem->pSelect = pSubquery;
+    if( pSubquery->selFlags & SF_NestedFrom ){
+      pItem->fg.isNestedFrom = 1;
+    }
+  }
   assert( pOnUsing==0 || pOnUsing->pOn==0 || pOnUsing->pUsing==0 );
   assert( pItem->fg.isUsing==0 );
   if( pOnUsing==0 ){
@@ -5031,6 +5035,7 @@ SrcList *sqlite3SrcListAppendList(Parse *pParse, SrcList *p1, SrcList *p2){
       p1 = pNew;
       memcpy(&p1->a[1], p2->a, p2->nSrc*sizeof(SrcItem));
       sqlite3DbFree(pParse->db, p2);
+      p1->a[0].fg.jointype |= (JT_LTORJ & p1->a[1].fg.jointype);
     }
   }
   return p1;
@@ -5075,7 +5080,8 @@ void sqlite3SrcListFuncArgs(Parse *pParse, SrcList *p, ExprList *pList){
 **       code generator can easily tell that the table is part of
 **       the left operand of at least one RIGHT JOIN.
 */
-void sqlite3SrcListShiftJoinType(SrcList *p){
+void sqlite3SrcListShiftJoinType(Parse *pParse, SrcList *p){
+  (void)pParse;
   if( p && p->nSrc>1 ){
     int i = p->nSrc-1;
     u8 allFlags = 0;
@@ -5091,8 +5097,8 @@ void sqlite3SrcListShiftJoinType(SrcList *p){
       i--;
       assert( i>=0 );
       do{
-        p->a[i--].fg.jointype |= JT_LTORJ;
-      }while( i>=0 );
+        p->a[i].fg.jointype |= JT_LTORJ;
+      }while( (--i)>=0 );
     }
   }
 }

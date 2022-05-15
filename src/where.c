@@ -3317,7 +3317,7 @@ static int whereLoopAddBtree(
 #ifndef SQLITE_OMIT_AUTOMATIC_INDEX
   /* Automatic indexes */
   if( !pBuilder->pOrSet      /* Not part of an OR optimization */
-   && (pWInfo->wctrlFlags & WHERE_OR_SUBCLAUSE)==0
+   && (pWInfo->wctrlFlags & (WHERE_RIGHT_JOIN|WHERE_OR_SUBCLAUSE))==0
    && (pWInfo->pParse->db->flags & SQLITE_AutoIndex)!=0
    && !pSrc->fg.isIndexedBy  /* Has no INDEXED BY clause */
    && !pSrc->fg.notIndexed   /* Has no NOT INDEXED clause */
@@ -4015,6 +4015,9 @@ static int whereLoopAddOr(
   memset(&sSum, 0, sizeof(sSum));
   pItem = pWInfo->pTabList->a + pNew->iTab;
   iCur = pItem->iCursor;
+
+  /* The multi-index OR optimization does not work for RIGHT and FULL JOIN */
+  if( pItem->fg.jointype & JT_RIGHT ) return SQLITE_OK;
 
   for(pTerm=pWC->a; pTerm<pWCEnd && rc==SQLITE_OK; pTerm++){
     if( (pTerm->eOperator & WO_OR)!=0
@@ -5880,6 +5883,7 @@ WhereInfo *sqlite3WhereBegin(
       pRJ->regBloom = ++pParse->nMem;
       sqlite3VdbeAddOp2(v, OP_Blob, 65536, pRJ->regBloom);
       pRJ->regReturn = ++pParse->nMem;
+      sqlite3VdbeAddOp2(v, OP_Null, 0, pRJ->regReturn);
       assert( pTab==pTabItem->pTab );
       if( HasRowid(pTab) ){
         KeyInfo *pInfo;
@@ -5896,6 +5900,11 @@ WhereInfo *sqlite3WhereBegin(
         sqlite3VdbeSetP4KeyInfo(pParse, pPk);
       }
       pLoop->wsFlags &= ~WHERE_IDX_ONLY;
+      /* The nature of RIGHT JOIN processing is such that it messes up
+      ** the output order.  So omit any ORDER BY/GROUP BY elimination
+      ** optimizations.  We need to do an actual sort for RIGHT JOIN. */
+      pWInfo->nOBSat = 0;
+      pWInfo->eDistinct = WHERE_DISTINCT_UNORDERED;
     }
   }
   pWInfo->iTop = sqlite3VdbeCurrentAddr(v);
@@ -6013,8 +6022,12 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
       /* Terminate the subroutine that forms the interior of the loop of
       ** the RIGHT JOIN table */
       WhereRightJoin *pRJ = pLevel->pRJ;
-      sqlite3VdbeChangeP1(v, pRJ->addrSubrtn-1, sqlite3VdbeCurrentAddr(v));
-      sqlite3VdbeAddOp2(v, OP_Return, pRJ->regReturn, pRJ->addrSubrtn);
+      sqlite3VdbeResolveLabel(v, pLevel->addrCont);
+      pLevel->addrCont = 0;
+      sqlite3VdbeAddOp3(v, OP_Return, pRJ->regReturn, pRJ->addrSubrtn, 1);
+      VdbeCoverage(v);
+      assert( pParse->withinRJSubrtn>0 );
+      pParse->withinRJSubrtn--;
     }
     pLoop = pLevel->pWLoop;
     if( pLevel->op!=OP_Noop ){
@@ -6043,7 +6056,7 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
       }
 #endif /* SQLITE_DISABLE_SKIPAHEAD_DISTINCT */
       /* The common case: Advance to the next row */
-      sqlite3VdbeResolveLabel(v, pLevel->addrCont);
+      if( pLevel->addrCont ) sqlite3VdbeResolveLabel(v, pLevel->addrCont);
       sqlite3VdbeAddOp3(v, pLevel->op, pLevel->p1, pLevel->p2, pLevel->p3);
       sqlite3VdbeChangeP5(v, pLevel->p5);
       VdbeCoverage(v);
@@ -6058,7 +6071,7 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
 #ifndef SQLITE_DISABLE_SKIPAHEAD_DISTINCT
       if( addrSeek ) sqlite3VdbeJumpHere(v, addrSeek);
 #endif
-    }else{
+    }else if( pLevel->addrCont ){
       sqlite3VdbeResolveLabel(v, pLevel->addrCont);
     }
     if( (pLoop->wsFlags & WHERE_IN_ABLE)!=0 && pLevel->u.in.nIn>0 ){
@@ -6108,6 +6121,10 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
       }
     }
     sqlite3VdbeResolveLabel(v, pLevel->addrBrk);
+    if( pLevel->pRJ ){
+      sqlite3VdbeAddOp3(v, OP_Return, pLevel->pRJ->regReturn, 0, 1);
+      VdbeCoverage(v);
+    }
     if( pLevel->addrSkip ){
       sqlite3VdbeGoto(v, pLevel->addrSkip);
       VdbeComment((v, "next skip-scan on %s", pLoop->u.btree.pIndex->zName));
@@ -6166,55 +6183,7 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
     ** all of the columns of the left operand set to NULL.
     */
     if( pLevel->pRJ ){
-      WhereRightJoin *pRJ = pLevel->pRJ;
-      Expr *pSubWhere = 0;
-      WhereClause *pWC = &pWInfo->sWC;
-      WhereInfo *pSubWInfo;
-      SrcList sFrom;
-      Bitmask mAll = 0;
-      for(k=0; k<=i; k++){
-        mAll |= pWInfo->a[k].pWLoop->maskSelf;
-      }
-      for(k=0; k<pWC->nTerm; k++){
-        WhereTerm *pTerm = &pWC->a[k];
-        if( pTerm->wtFlags & TERM_VIRTUAL ) break;
-        if( pTerm->prereqAll & ~mAll ) continue;
-        if( ExprHasProperty(pTerm->pExpr, EP_FromJoin) ) continue;
-        pSubWhere = sqlite3ExprAnd(pParse, pSubWhere,
-                                   sqlite3ExprDup(db, pTerm->pExpr, 0));
-      }
-      sFrom.nSrc = 1;
-      sFrom.nAlloc = 1;
-      memcpy(&sFrom.a[0], pTabItem, sizeof(SrcItem));
-      sFrom.a[0].fg.jointype = 0;
-      pSubWInfo = sqlite3WhereBegin(pParse, &sFrom, pSubWhere, 0, 0, 0,
-                                    WHERE_OR_SUBCLAUSE, 0);
-      if( pSubWInfo ){
-        int iCur = pLevel->iTabCur;
-        int r = ++pParse->nMem;
-        int nPk;
-        int jmp;
-        int addrCont = sqlite3WhereContinueLabel(pSubWInfo);
-        if( HasRowid(pTab) ){
-          sqlite3ExprCodeGetColumnOfTable(v, pTab, iCur, -1, r);
-          nPk = 1;
-        }else{
-          int iPk;
-          Index *pPk = sqlite3PrimaryKeyIndex(pTab);
-          nPk = pPk->nKeyCol;
-          pParse->nMem += nPk - 1;
-          for(iPk=0; iPk<nPk; iPk++){
-            int iCol = pPk->aiColumn[iPk];
-            sqlite3ExprCodeGetColumnOfTable(v, pTab, iCur, iCol,r+iPk);
-          }
-        }
-        jmp = sqlite3VdbeAddOp4Int(v, OP_Filter, pRJ->regBloom, 0, r, nPk);
-        sqlite3VdbeAddOp4Int(v, OP_Found, pRJ->iMatch, addrCont, r, nPk);
-        sqlite3VdbeJumpHere(v, jmp);
-        sqlite3VdbeAddOp2(v, OP_Gosub, pRJ->regReturn, pRJ->addrSubrtn);
-        sqlite3WhereEnd(pSubWInfo);
-      }
-      sqlite3ExprDelete(pParse->db, pSubWhere);
+      sqlite3WhereRightJoinLoop(pWInfo, i, pLevel);
       continue;
     }
 
