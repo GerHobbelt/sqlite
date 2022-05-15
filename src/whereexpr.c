@@ -64,7 +64,7 @@ static int whereClauseInsert(WhereClause *pWC, Expr *p, u16 wtFlags){
   if( pWC->nTerm>=pWC->nSlot ){
     WhereTerm *pOld = pWC->a;
     sqlite3 *db = pWC->pWInfo->pParse->db;
-    pWC->a = sqlite3DbMallocRawNN(db, sizeof(pWC->a[0])*pWC->nSlot*2 );
+    pWC->a = sqlite3WhereMalloc(pWC->pWInfo, sizeof(pWC->a[0])*pWC->nSlot*2 );
     if( pWC->a==0 ){
       if( wtFlags & TERM_DYNAMIC ){
         sqlite3ExprDelete(db, p);
@@ -73,10 +73,7 @@ static int whereClauseInsert(WhereClause *pWC, Expr *p, u16 wtFlags){
       return 0;
     }
     memcpy(pWC->a, pOld, sizeof(pWC->a[0])*pWC->nTerm);
-    if( pOld!=pWC->aStatic ){
-      sqlite3DbFree(db, pOld);
-    }
-    pWC->nSlot = sqlite3DbMallocSize(db, pWC->a)/sizeof(pWC->a[0]);
+    pWC->nSlot = pWC->nSlot*2;
   }
   pTerm = &pWC->a[idx = pWC->nTerm++];
   if( (wtFlags & TERM_VIRTUAL)==0 ) pWC->nBase = pWC->nTerm;
@@ -464,9 +461,9 @@ static int isAuxiliaryVtabOperator(
 ** a join, then transfer the appropriate markings over to derived.
 */
 static void transferJoinMarkings(Expr *pDerived, Expr *pBase){
-  if( pDerived ){
-    pDerived->flags |= pBase->flags & EP_FromJoin;
-    pDerived->w.iRightJoinTable = pBase->w.iRightJoinTable;
+  if( pDerived && ExprHasProperty(pBase, EP_OuterON|EP_InnerON) ){
+    pDerived->flags |= pBase->flags & (EP_OuterON|EP_InnerON);
+    pDerived->w.iJoin = pBase->w.iJoin;
   }
 }
 
@@ -920,7 +917,7 @@ static int termIsEquivalence(Parse *pParse, Expr *pExpr){
   CollSeq *pColl;
   if( !OptimizationEnabled(pParse->db, SQLITE_Transitive) ) return 0;
   if( pExpr->op!=TK_EQ && pExpr->op!=TK_IS ) return 0;
-  if( ExprHasProperty(pExpr, EP_FromJoin) ) return 0;
+  if( ExprHasProperty(pExpr, EP_OuterON) ) return 0;
   aff1 = sqlite3ExprAffinity(pExpr->pLeft);
   aff2 = sqlite3ExprAffinity(pExpr->pRight);
   if( aff1!=aff2
@@ -951,7 +948,9 @@ static Bitmask exprSelectUsage(WhereMaskSet *pMaskSet, Select *pS){
       int i;
       for(i=0; i<pSrc->nSrc; i++){
         mask |= exprSelectUsage(pMaskSet, pSrc->a[i].pSelect);
-        mask |= sqlite3WhereExprUsage(pMaskSet, pSrc->a[i].pOn);
+        if( pSrc->a[i].fg.isUsing==0 ){
+          mask |= sqlite3WhereExprUsage(pMaskSet, pSrc->a[i].u3.pOn);
+        }
         if( pSrc->a[i].fg.isTabFunc ){
           mask |= sqlite3WhereExprListUsage(pMaskSet, pSrc->a[i].u1.pFuncArg);
         }
@@ -1110,8 +1109,8 @@ static void exprAnalyze(
   }
 #endif
 
-  if( ExprHasProperty(pExpr, EP_FromJoin) ){
-    Bitmask x = sqlite3WhereGetMask(pMaskSet, pExpr->w.iRightJoinTable);
+  if( ExprHasProperty(pExpr, EP_OuterON) ){
+    Bitmask x = sqlite3WhereGetMask(pMaskSet, pExpr->w.iJoin);
     prereqAll |= x;
     extraRight = x-1;  /* ON clause terms may not be used with an index
                        ** on left table of a LEFT JOIN.  Ticket #3015 */
@@ -1185,7 +1184,7 @@ static void exprAnalyze(
       pNew->eOperator = (operatorMask(pDup->op) + eExtraOp) & opMask;
     }else 
     if( op==TK_ISNULL
-     && !ExprHasProperty(pExpr,EP_FromJoin)
+     && !ExprHasProperty(pExpr,EP_OuterON)
      && 0==sqlite3ExprCanBeNull(pLeft)
     ){
       assert( !ExprHasProperty(pExpr, EP_IntValue) );
@@ -1256,7 +1255,7 @@ static void exprAnalyze(
   else if( pExpr->op==TK_NOTNULL ){
     if( pExpr->pLeft->op==TK_COLUMN
      && pExpr->pLeft->iColumn>=0
-     && !ExprHasProperty(pExpr, EP_FromJoin)
+     && !ExprHasProperty(pExpr, EP_OuterON)
     ){
       Expr *pNewExpr;
       Expr *pLeft = pExpr->pLeft;
@@ -1460,9 +1459,9 @@ static void exprAnalyze(
         Expr *pNewExpr;
         pNewExpr = sqlite3PExpr(pParse, TK_MATCH, 
             0, sqlite3ExprDup(db, pRight, 0));
-        if( ExprHasProperty(pExpr, EP_FromJoin) && pNewExpr ){
-          ExprSetProperty(pNewExpr, EP_FromJoin);
-          pNewExpr->w.iRightJoinTable = pExpr->w.iRightJoinTable;
+        if( ExprHasProperty(pExpr, EP_OuterON) && pNewExpr ){
+          ExprSetProperty(pNewExpr, EP_OuterON);
+          pNewExpr->w.iJoin = pExpr->w.iJoin;
         }
         idxNew = whereClauseInsert(pWC, pNewExpr, TERM_VIRTUAL|TERM_DYNAMIC);
         testcase( idxNew==0 );
@@ -1617,7 +1616,7 @@ void sqlite3WhereAddLimit(WhereClause *pWC, Select *p){
         Expr *pExpr = pOrderBy->a[ii].pExpr;
         if( pExpr->op!=TK_COLUMN ) return;
         if( pExpr->iTable!=iCsr ) return;
-        if( pOrderBy->a[ii].sortFlags & KEYINFO_ORDER_BIGNULL ) return;
+        if( pOrderBy->a[ii].fg.sortFlags & KEYINFO_ORDER_BIGNULL ) return;
       }
     }
 
@@ -1683,9 +1682,6 @@ void sqlite3WhereClauseClear(WhereClause *pWC){
       if( a==aLast ) break;
       a++;
     }
-  }
-  if( pWC->a!=pWC->aStatic ){
-    sqlite3DbFree(db, pWC->a);
   }
 }
 
@@ -1813,6 +1809,7 @@ void sqlite3WhereTabFuncArgs(
   if( pArgs==0 ) return;
   for(j=k=0; j<pArgs->nExpr; j++){
     Expr *pRhs;
+    u32 joinType;
     while( k<pTab->nCol && (pTab->aCol[k].colFlags & COLFLAG_HIDDEN)==0 ){k++;}
     if( k>=pTab->nCol ){
       sqlite3ErrorMsg(pParse, "too many arguments on %s() - max %d",
@@ -1829,9 +1826,12 @@ void sqlite3WhereTabFuncArgs(
     pRhs = sqlite3PExpr(pParse, TK_UPLUS, 
         sqlite3ExprDup(pParse->db, pArgs->a[j].pExpr, 0), 0);
     pTerm = sqlite3PExpr(pParse, TK_EQ, pColRef, pRhs);
-    if( pItem->fg.jointype & JT_LEFT ){
-      sqlite3SetJoinExpr(pTerm, pItem->iCursor);
+    if( pItem->fg.jointype & (JT_LEFT|JT_LTORJ) ){
+      joinType = EP_OuterON;
+    }else{
+      joinType = EP_InnerON;
     }
+    sqlite3SetJoinExpr(pTerm, pItem->iCursor, joinType);
     whereClauseInsert(pWC, pTerm, TERM_DYNAMIC);
   }
 }

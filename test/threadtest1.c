@@ -202,7 +202,6 @@ int thread_cnt = 0;
 
 static void *worker_bee(void *pArg){
   const char *zFilename = (char*)pArg;
-  char *azErr;
   int i, cnt;
   int t = atoi(zFilename);
   char **az;

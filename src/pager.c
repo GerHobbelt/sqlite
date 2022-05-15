@@ -2885,6 +2885,9 @@ static int pager_playback(Pager *pPager, int isHot){
         goto end_playback;
       }
       pPager->dbSize = mxPg;
+      if( pPager->mxPgno<mxPg ){
+        pPager->mxPgno = mxPg;
+      }
     }
 
     /* Copy original pages out of the journal and back into the 
@@ -5562,6 +5565,8 @@ static int getPageNormal(
   assert( assert_pager_state(pPager) );
   assert( pPager->hasHeldSharedLock==1 );
 
+  if( pgno==0 ) return SQLITE_CORRUPT_BKPT;
+
 #ifndef SQLITE_OMIT_CONCURRENT
   /* If this is an CONCURRENT transaction and the page being read was
   ** present in the database file when the transaction was opened,
@@ -5601,10 +5606,10 @@ static int getPageNormal(
     /* The pager cache has created a new page. Its content needs to 
     ** be initialized. But first some error checks:
     **
-    ** (1) Never try to fetch the locking page
-    ** (2) Never try to fetch page 0, which does not exist
+    ** (*) obsolete.  Was: maximum page number is 2^31
+    ** (2) Never try to fetch the locking page
     */
-    if( pgno==PAGER_SJ_PGNO(pPager) || pgno==0 ){
+    if( pgno==PAGER_SJ_PGNO(pPager) ){
       rc = SQLITE_CORRUPT_BKPT;
       goto pager_acquire_err;
     }
