@@ -4758,7 +4758,11 @@ static int wherePathSolver(WhereInfo *pWInfo, LogEst nRowEst){
                 pWInfo, nRowEst, nOrderBy, isOrdered
             );
           }
-          rCost = sqlite3LogEstAdd(rUnsorted, aSortCost[isOrdered]);
+          /* TUNING:  Add a small extra penalty (5) to sorting as an
+          ** extra encouragment to the query planner to select a plan
+          ** where the rows emerge in the correct order without any sorting
+          ** required. */
+          rCost = sqlite3LogEstAdd(rUnsorted, aSortCost[isOrdered]) + 5;
           if( OptimizationDisabled(db, SQLITE_SortIfFaster) ){
             /* if the SortIfFaster optimization is disabled, then set the
             ** sort cost very high, to encourage the query to return the
