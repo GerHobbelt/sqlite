@@ -56,7 +56,7 @@ void usage(const char *zArgv0){
 
 void report_default_vfs(){
   sqlite3_vfs *pVfs = sqlite3_vfs_find(0);
-  fprintf(stdout, "default vfs is \"%s\"\n", pVfs->zName);
+  fprintf(stdout, "default vfs is \"%s\"\n", pVfs ? pVfs->zName : "NULL");
 }
 
 void report_rbu_vfs(sqlite3rbu *pRbu){
@@ -78,13 +78,13 @@ int main(int argc, char **argv){
   const char *zTarget;            /* Target database to apply RBU to */
   const char *zRbu;               /* Database containing RBU */
   char zBuf[200];                 /* Buffer for printf() */
-  char *zErrmsg;                  /* Error message, if any */
+  char *zErrmsg = 0;              /* Error message, if any */
   sqlite3rbu *pRbu;               /* RBU handle */
   int nStep = 0;                  /* Maximum number of step() calls */
   int nStatStep = 0;              /* Report stats after this many step calls */
   int bVacuum = 0;
   const char *zPreSql = 0;
-  int rc;
+  int rc = SQLITE_OK;
   sqlite3_int64 nProgress = 0;
   int nArgc = argc-2;
 
@@ -126,11 +126,11 @@ int main(int argc, char **argv){
   report_rbu_vfs(pRbu);
 
   if( zPreSql && pRbu ){
-    sqlite3 *db = sqlite3rbu_db(pRbu, 0);
-    rc = sqlite3_exec(db, zPreSql, 0, 0, 0);
+    sqlite3 *dbMain = sqlite3rbu_db(pRbu, 0);
+    rc = sqlite3_exec(dbMain, zPreSql, 0, 0, 0);
     if( rc==SQLITE_OK ){
-      sqlite3 *db = sqlite3rbu_db(pRbu, 1);
-      rc = sqlite3_exec(db, zPreSql, 0, 0, 0);
+      sqlite3 *dbRbu = sqlite3rbu_db(pRbu, 1);
+      rc = sqlite3_exec(dbRbu, zPreSql, 0, 0, 0);
     }
   }
 
@@ -181,6 +181,13 @@ int main(int argc, char **argv){
     default:
       fprintf(stderr, "error=%d: %s\n", rc, zErrmsg);
       break;
+  }
+
+  if( nStatStep>0 ){
+    sqlite3_int64 nUsed;
+    sqlite3_int64 nHighwater;
+    sqlite3_status64(SQLITE_STATUS_MEMORY_USED, &nUsed, &nHighwater, 0);
+    fprintf(stdout, "memory used=%lld highwater=%lld\n", nUsed, nHighwater);
   }
 
   sqlite3_free(zErrmsg);

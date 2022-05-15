@@ -44,7 +44,7 @@ static int callback(void *pCtx, int argc, char **argv, char **colnames){
       /* Using sqlite3_realloc64() would be better, but it is a recent
       ** addition and will cause a segfault if loaded by an older version
       ** of SQLite.  */
-      zNew = p->nAlloc<=0x7fffffff ? sqlite3_realloc(p->z, (int)p->nAlloc) : 0;
+      zNew = p->nAlloc<=0x7fffffff ? sqlite3_realloc64(p->z, p->nAlloc) : 0;
       if( zNew==0 ){
         sqlite3_free(p->z);
         memset(p, 0, sizeof(*p));
@@ -113,10 +113,12 @@ int sqlite3_eval_init(
   int rc = SQLITE_OK;
   SQLITE_EXTENSION_INIT2(pApi);
   (void)pzErrMsg;  /* Unused parameter */
-  rc = sqlite3_create_function(db, "eval", 1, SQLITE_UTF8, 0,
+  rc = sqlite3_create_function(db, "eval", 1, 
+                               SQLITE_UTF8|SQLITE_DIRECTONLY, 0,
                                sqlEvalFunc, 0, 0);
   if( rc==SQLITE_OK ){
-    rc = sqlite3_create_function(db, "eval", 2, SQLITE_UTF8, 0,
+    rc = sqlite3_create_function(db, "eval", 2,
+                                 SQLITE_UTF8|SQLITE_DIRECTONLY, 0,
                                  sqlEvalFunc, 0, 0);
   }
   return rc;

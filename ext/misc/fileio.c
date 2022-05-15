@@ -72,6 +72,11 @@
 **   $path is a relative path, then $path is interpreted relative to $dir. 
 **   And the paths returned in the "name" column of the table are also 
 **   relative to directory $dir.
+**
+** Notes on building this extension for Windows:
+**   Unless linked statically with the SQLite library, a preprocessor
+**   symbol, FILEIO_WIN32_DLL, must be #define'd to create a stand-alone
+**   DLL form of this extension for WIN32. See its use below for details.
 */
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1
@@ -106,26 +111,62 @@ SQLITE_EXTENSION_INIT1
 #include <errno.h>
 
 
+/*
+** Structure of the fsdir() table-valued function
+*/
+                 /*    0    1    2     3    4           5             */
 #define FSDIR_SCHEMA "(name,mode,mtime,data,path HIDDEN,dir HIDDEN)"
+#define FSDIR_COLUMN_NAME     0     /* Name of the file */
+#define FSDIR_COLUMN_MODE     1     /* Access mode */
+#define FSDIR_COLUMN_MTIME    2     /* Last modification time */
+#define FSDIR_COLUMN_DATA     3     /* File content */
+#define FSDIR_COLUMN_PATH     4     /* Path to top of search */
+#define FSDIR_COLUMN_DIR      5     /* Path is relative to this directory */
+
 
 /*
 ** Set the result stored by context ctx to a blob containing the 
-** contents of file zName.
+** contents of file zName.  Or, leave the result unchanged (NULL)
+** if the file does not exist or is unreadable.
+**
+** If the file exceeds the SQLite blob size limit, through an
+** SQLITE_TOOBIG error.
+**
+** Throw an SQLITE_IOERR if there are difficulties pulling the file
+** off of disk.
 */
 static void readFileContents(sqlite3_context *ctx, const char *zName){
   FILE *in;
-  long nIn;
+  sqlite3_int64 nIn;
   void *pBuf;
+  sqlite3 *db;
+  int mxBlob;
 
   in = fopen(zName, "rb");
-  if( in==0 ) return;
+  if( in==0 ){
+    /* File does not exist or is unreadable. Leave the result set to NULL. */
+    return;
+  }
   fseek(in, 0, SEEK_END);
   nIn = ftell(in);
   rewind(in);
-  pBuf = sqlite3_malloc( nIn );
-  if( pBuf && 1==fread(pBuf, nIn, 1, in) ){
-    sqlite3_result_blob(ctx, pBuf, nIn, sqlite3_free);
+  db = sqlite3_context_db_handle(ctx);
+  mxBlob = sqlite3_limit(db, SQLITE_LIMIT_LENGTH, -1);
+  if( nIn>mxBlob ){
+    sqlite3_result_error_code(ctx, SQLITE_TOOBIG);
+    fclose(in);
+    return;
+  }
+  pBuf = sqlite3_malloc64( nIn ? nIn : 1 );
+  if( pBuf==0 ){
+    sqlite3_result_error_nomem(ctx);
+    fclose(in);
+    return;
+  }
+  if( nIn==(sqlite3_int64)fread(pBuf, 1, (size_t)nIn, in) ){
+    sqlite3_result_blob64(ctx, pBuf, nIn, sqlite3_free);
   }else{
+    sqlite3_result_error_code(ctx, SQLITE_IOERR);
     sqlite3_free(pBuf);
   }
   fclose(in);
@@ -189,6 +230,22 @@ static sqlite3_uint64 fileTimeToUnixTime(
   return (fileIntervals.QuadPart - epochIntervals.QuadPart) / 10000000;
 }
 
+
+#if defined(FILEIO_WIN32_DLL) && (defined(_WIN32) || defined(WIN32))
+#  /* To allow a standalone DLL, use this next replacement function: */
+#  undef sqlite3_win32_utf8_to_unicode
+#  define sqlite3_win32_utf8_to_unicode utf8_to_utf16
+#
+LPWSTR utf8_to_utf16(const char *z){
+  int nAllot = MultiByteToWideChar(CP_UTF8, 0, z, -1, NULL, 0);
+  LPWSTR rv = sqlite3_malloc(nAllot * sizeof(WCHAR));
+  if( rv!=0 && 0 < MultiByteToWideChar(CP_UTF8, 0, z, -1, rv, nAllot) )
+    return rv;
+  sqlite3_free(rv);
+  return 0;
+}
+#endif
+
 /*
 ** This function attempts to normalize the time values found in the stat()
 ** buffer to UTC.  This is necessary on Win32, where the runtime library
@@ -204,7 +261,7 @@ static void statTimesToUtc(
   extern LPWSTR sqlite3_win32_utf8_to_unicode(const char*);
   zUnicodeName = sqlite3_win32_utf8_to_unicode(zPath);
   if( zUnicodeName ){
-    memset(&fd, 0, sizeof(WIN32_FIND_DATA));
+    memset(&fd, 0, sizeof(WIN32_FIND_DATAW));
     hFindFile = FindFirstFileW(zUnicodeName, &fd);
     if( hFindFile!=NULL ){
       pStatBuf->st_ctime = (time_t)fileTimeToUnixTime(&fd.ftCreationTime);
@@ -257,15 +314,15 @@ static int fileLinkStat(
 ** Argument zFile is the name of a file that will be created and/or written
 ** by SQL function writefile(). This function ensures that the directory
 ** zFile will be written to exists, creating it if required. The permissions
-** for any path components created by this function are set to (mode&0777).
+** for any path components created by this function are set in accordance
+** with the current umask.
 **
 ** If an OOM condition is encountered, SQLITE_NOMEM is returned. Otherwise,
 ** SQLITE_OK is returned if the directory is successfully created, or
 ** SQLITE_ERROR otherwise.
 */
 static int makeDirectory(
-  const char *zFile,
-  mode_t mode
+  const char *zFile
 ){
   char *zCopy = sqlite3_mprintf("%s", zFile);
   int rc = SQLITE_OK;
@@ -286,7 +343,7 @@ static int makeDirectory(
 
       rc2 = fileStat(zCopy, &sStat);
       if( rc2!=0 ){
-        if( mkdir(zCopy, mode & 0777) ) rc = SQLITE_ERROR;
+        if( mkdir(zCopy, 0777) ) rc = SQLITE_ERROR;
       }else{
         if( !S_ISDIR(sStat.st_mode) ) rc = SQLITE_ERROR;
       }
@@ -311,10 +368,11 @@ static int writeFile(
   mode_t mode,                    /* MODE parameter passed to writefile() */
   sqlite3_int64 mtime             /* MTIME parameter (or -1 to not set time) */
 ){
+  if( zFile==0 ) return 1;
 #if !defined(_WIN32) && !defined(WIN32)
   if( S_ISLNK(mode) ){
     const char *zTo = (const char*)sqlite3_value_text(pData);
-    if( symlink(zTo, zFile)<0 ) return 1;
+    if( zTo==0 || symlink(zTo, zFile)<0 ) return 1;
   }else
 #endif
   {
@@ -358,6 +416,7 @@ static int writeFile(
 
   if( mtime>=0 ){
 #if defined(_WIN32)
+#if !SQLITE_OS_WINRT
     /* Windows */
     FILETIME lastAccess;
     FILETIME lastWrite;
@@ -388,6 +447,7 @@ static int writeFile(
     }else{
       return 1;
     }
+#endif
 #elif defined(AT_FDCWD) && 0 /* utimensat() is not universally available */
     /* Recent unix */
     struct timespec times[2];
@@ -444,7 +504,7 @@ static void writefileFunc(
 
   res = writeFile(context, zFile, argv[1], mode, mtime);
   if( res==1 && errno==ENOENT ){
-    if( makeDirectory(zFile, mode)==SQLITE_OK ){
+    if( makeDirectory(zFile)==SQLITE_OK ){
       res = writeFile(context, zFile, argv[1], mode, mtime);
     }
   }
@@ -549,6 +609,7 @@ static int fsdirConnect(
     pNew = (fsdir_tab*)sqlite3_malloc( sizeof(*pNew) );
     if( pNew==0 ) return SQLITE_NOMEM;
     memset(pNew, 0, sizeof(*pNew));
+    sqlite3_vtab_config(db, SQLITE_VTAB_DIRECTONLY);
   }
   *ppVtab = (sqlite3_vtab*)pNew;
   return rc;
@@ -635,8 +696,8 @@ static int fsdirNext(sqlite3_vtab_cursor *cur){
     FsdirLevel *pLvl;
     if( iNew>=pCur->nLvl ){
       int nNew = iNew+1;
-      int nByte = nNew*sizeof(FsdirLevel);
-      FsdirLevel *aNew = (FsdirLevel*)sqlite3_realloc(pCur->aLvl, nByte);
+      sqlite3_int64 nByte = nNew*sizeof(FsdirLevel);
+      FsdirLevel *aNew = (FsdirLevel*)sqlite3_realloc64(pCur->aLvl, nByte);
       if( aNew==0 ) return SQLITE_NOMEM;
       memset(&aNew[pCur->nLvl], 0, sizeof(FsdirLevel)*(nNew-pCur->nLvl));
       pCur->aLvl = aNew;
@@ -695,20 +756,20 @@ static int fsdirColumn(
 ){
   fsdir_cursor *pCur = (fsdir_cursor*)cur;
   switch( i ){
-    case 0: { /* name */
+    case FSDIR_COLUMN_NAME: {
       sqlite3_result_text(ctx, &pCur->zPath[pCur->nBase], -1, SQLITE_TRANSIENT);
       break;
     }
 
-    case 1: /* mode */
+    case FSDIR_COLUMN_MODE:
       sqlite3_result_int64(ctx, pCur->sStat.st_mode);
       break;
 
-    case 2: /* mtime */
+    case FSDIR_COLUMN_MTIME:
       sqlite3_result_int64(ctx, pCur->sStat.st_mtime);
       break;
 
-    case 3: { /* data */
+    case FSDIR_COLUMN_DATA: {
       mode_t m = pCur->sStat.st_mode;
       if( S_ISDIR(m) ){
         sqlite3_result_null(ctx);
@@ -716,7 +777,7 @@ static int fsdirColumn(
       }else if( S_ISLNK(m) ){
         char aStatic[64];
         char *aBuf = aStatic;
-        int nBuf = 64;
+        sqlite3_int64 nBuf = 64;
         int n;
 
         while( 1 ){
@@ -724,7 +785,7 @@ static int fsdirColumn(
           if( n<nBuf ) break;
           if( aBuf!=aStatic ) sqlite3_free(aBuf);
           nBuf = nBuf*2;
-          aBuf = sqlite3_malloc(nBuf);
+          aBuf = sqlite3_malloc64(nBuf);
           if( aBuf==0 ){
             sqlite3_result_error_nomem(ctx);
             return SQLITE_NOMEM;
@@ -737,6 +798,12 @@ static int fsdirColumn(
       }else{
         readFileContents(ctx, pCur->zPath);
       }
+    }
+    case FSDIR_COLUMN_PATH:
+    default: {
+      /* The FSDIR_COLUMN_PATH and FSDIR_COLUMN_DIR are input parameters.
+      ** always return their values as NULL */
+      break;
     }
   }
   return SQLITE_OK;
@@ -764,6 +831,9 @@ static int fsdirEof(sqlite3_vtab_cursor *cur){
 
 /*
 ** xFilter callback.
+**
+** idxNum==1   PATH parameter only
+** idxNum==2   Both PATH and DIR supplied
 */
 static int fsdirFilter(
   sqlite3_vtab_cursor *cur, 
@@ -816,40 +886,63 @@ static int fsdirFilter(
 ** In this implementation idxNum is used to represent the
 ** query plan.  idxStr is unused.
 **
-** The query plan is represented by bits in idxNum:
+** The query plan is represented by values of idxNum:
 **
-**  (1)  start = $value  -- constraint exists
-**  (2)  stop = $value   -- constraint exists
-**  (4)  step = $value   -- constraint exists
-**  (8)  output in descending order
+**  (1)  The path value is supplied by argv[0]
+**  (2)  Path is in argv[0] and dir is in argv[1]
 */
 static int fsdirBestIndex(
   sqlite3_vtab *tab,
   sqlite3_index_info *pIdxInfo
 ){
   int i;                 /* Loop over constraints */
-  int idx4 = -1;
-  int idx5 = -1;
+  int idxPath = -1;      /* Index in pIdxInfo->aConstraint of PATH= */
+  int idxDir = -1;       /* Index in pIdxInfo->aConstraint of DIR= */
+  int seenPath = 0;      /* True if an unusable PATH= constraint is seen */
+  int seenDir = 0;       /* True if an unusable DIR= constraint is seen */
   const struct sqlite3_index_constraint *pConstraint;
 
   (void)tab;
   pConstraint = pIdxInfo->aConstraint;
   for(i=0; i<pIdxInfo->nConstraint; i++, pConstraint++){
-    if( pConstraint->usable==0 ) continue;
     if( pConstraint->op!=SQLITE_INDEX_CONSTRAINT_EQ ) continue;
-    if( pConstraint->iColumn==4 ) idx4 = i;
-    if( pConstraint->iColumn==5 ) idx5 = i;
+    switch( pConstraint->iColumn ){
+      case FSDIR_COLUMN_PATH: {
+        if( pConstraint->usable ){
+          idxPath = i;
+          seenPath = 0;
+        }else if( idxPath<0 ){
+          seenPath = 1;
+        }
+        break;
+      }
+      case FSDIR_COLUMN_DIR: {
+        if( pConstraint->usable ){
+          idxDir = i;
+          seenDir = 0;
+        }else if( idxDir<0 ){
+          seenDir = 1;
+        }
+        break;
+      }
+    } 
+  }
+  if( seenPath || seenDir ){
+    /* If input parameters are unusable, disallow this plan */
+    return SQLITE_CONSTRAINT;
   }
 
-  if( idx4<0 ){
+  if( idxPath<0 ){
     pIdxInfo->idxNum = 0;
-    pIdxInfo->estimatedCost = (double)(((sqlite3_int64)1) << 50);
+    /* The pIdxInfo->estimatedCost should have been initialized to a huge
+    ** number.  Leave it unchanged. */
+    pIdxInfo->estimatedRows = 0x7fffffff;
   }else{
-    pIdxInfo->aConstraintUsage[idx4].omit = 1;
-    pIdxInfo->aConstraintUsage[idx4].argvIndex = 1;
-    if( idx5>=0 ){
-      pIdxInfo->aConstraintUsage[idx5].omit = 1;
-      pIdxInfo->aConstraintUsage[idx5].argvIndex = 2;
+    pIdxInfo->aConstraintUsage[idxPath].omit = 1;
+    pIdxInfo->aConstraintUsage[idxPath].argvIndex = 1;
+    if( idxDir>=0 ){
+      pIdxInfo->aConstraintUsage[idxDir].omit = 1;
+      pIdxInfo->aConstraintUsage[idxDir].argvIndex = 2;
       pIdxInfo->idxNum = 2;
       pIdxInfo->estimatedCost = 10.0;
     }else{
@@ -888,7 +981,8 @@ static int fsdirRegister(sqlite3 *db){
     0,                         /* xRename */
     0,                         /* xSavepoint */
     0,                         /* xRelease */
-    0                          /* xRollbackTo */
+    0,                         /* xRollbackTo */
+    0,                         /* xShadowName */
   };
 
   int rc = sqlite3_create_module(db, "fsdir", &fsdirModule, 0);
@@ -909,10 +1003,12 @@ int sqlite3_fileio_init(
   int rc = SQLITE_OK;
   SQLITE_EXTENSION_INIT2(pApi);
   (void)pzErrMsg;  /* Unused parameter */
-  rc = sqlite3_create_function(db, "readfile", 1, SQLITE_UTF8, 0,
+  rc = sqlite3_create_function(db, "readfile", 1, 
+                               SQLITE_UTF8|SQLITE_DIRECTONLY, 0,
                                readfileFunc, 0, 0);
   if( rc==SQLITE_OK ){
-    rc = sqlite3_create_function(db, "writefile", -1, SQLITE_UTF8, 0,
+    rc = sqlite3_create_function(db, "writefile", -1,
+                                 SQLITE_UTF8|SQLITE_DIRECTONLY, 0,
                                  writefileFunc, 0, 0);
   }
   if( rc==SQLITE_OK ){
@@ -924,3 +1020,11 @@ int sqlite3_fileio_init(
   }
   return rc;
 }
+
+#if defined(FILEIO_WIN32_DLL) && (defined(_WIN32) || defined(WIN32))
+/* To allow a standalone DLL, make test_windirent.c use the same
+ * redefined SQLite API calls as the above extension code does.
+ * Just pull in this .c to accomplish this. As a beneficial side
+ * effect, this extension becomes a single translation unit. */
+#  include "test_windirent.c"
+#endif

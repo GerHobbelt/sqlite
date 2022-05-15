@@ -41,11 +41,6 @@ set pragma_def {
   ARG:  SQLITE_NullCallback
   IF:   !defined(SQLITE_OMIT_FLAG_PRAGMAS)
 
-  NAME: legacy_file_format
-  TYPE: FLAG
-  ARG:  SQLITE_LegacyFileFmt
-  IF:   !defined(SQLITE_OMIT_FLAG_PRAGMAS)
-
   NAME: fullfsync
   TYPE: FLAG
   ARG:  SQLITE_FullFSync
@@ -120,7 +115,7 @@ set pragma_def {
 
   NAME: writable_schema
   TYPE: FLAG
-  ARG:  SQLITE_WriteSchema
+  ARG:  SQLITE_WriteSchema|SQLITE_NoSchemaError
   IF:   !defined(SQLITE_OMIT_FLAG_PRAGMAS)
 
   NAME: read_uncommitted
@@ -131,6 +126,11 @@ set pragma_def {
   NAME: recursive_triggers
   TYPE: FLAG
   ARG:  SQLITE_RecTriggers
+  IF:   !defined(SQLITE_OMIT_FLAG_PRAGMAS)
+
+  NAME: trusted_schema
+  TYPE: FLAG
+  ARG:  SQLITE_TrustedSchema
   IF:   !defined(SQLITE_OMIT_FLAG_PRAGMAS)
 
   NAME: foreign_keys
@@ -220,7 +220,21 @@ set pragma_def {
 
   NAME: table_info
   FLAG: NeedSchema Result1 SchemaOpt
+  ARG:  0
   COLS: cid name type notnull dflt_value pk
+  IF:   !defined(SQLITE_OMIT_SCHEMA_PRAGMAS)
+
+  NAME: table_xinfo
+  TYPE: TABLE_INFO
+  FLAG: NeedSchema Result1 SchemaOpt
+  ARG:  1
+  COLS: cid name type notnull dflt_value pk hidden
+  IF:   !defined(SQLITE_OMIT_SCHEMA_PRAGMAS)
+
+  NAME: table_list
+  TYPE: TABLE_LIST
+  FLAG: NeedSchema Result1
+  COLS: schema name type ncol wr strict
   IF:   !defined(SQLITE_OMIT_SCHEMA_PRAGMAS)
 
   NAME: stats
@@ -248,27 +262,27 @@ set pragma_def {
   IF:   !defined(SQLITE_OMIT_SCHEMA_PRAGMAS)
 
   NAME: database_list
-  FLAG: NeedSchema Result0
+  FLAG: Result0
   COLS: seq name file
   IF:   !defined(SQLITE_OMIT_SCHEMA_PRAGMAS)
 
   NAME: function_list
   FLAG: Result0
-  COLS: name builtin
+  COLS: name builtin type enc narg flags
   IF:   !defined(SQLITE_OMIT_SCHEMA_PRAGMAS)
-  IF:   defined(SQLITE_INTROSPECTION_PRAGMAS)
+  IF:   !defined(SQLITE_OMIT_INTROSPECTION_PRAGMAS)
 
   NAME: module_list
   FLAG: Result0
   COLS: name
   IF:   !defined(SQLITE_OMIT_SCHEMA_PRAGMAS)
   IF:   !defined(SQLITE_OMIT_VIRTUALTABLE)
-  IF:   defined(SQLITE_INTROSPECTION_PRAGMAS)
+  IF:   !defined(SQLITE_OMIT_INTROSPECTION_PRAGMAS)
 
   NAME: pragma_list
   FLAG: Result0
   COLS: name
-  IF:   defined(SQLITE_INTROSPECTION_PRAGMAS)
+  IF:   !defined(SQLITE_OMIT_INTROSPECTION_PRAGMAS)
 
   NAME: collation_list
   FLAG: Result0
@@ -281,23 +295,27 @@ set pragma_def {
   IF:   !defined(SQLITE_OMIT_FOREIGN_KEY)
 
   NAME: foreign_key_check
-  FLAG: NeedSchema Result0
+  FLAG: NeedSchema Result0 Result1 SchemaOpt
   COLS: table rowid parent fkid
   IF:   !defined(SQLITE_OMIT_FOREIGN_KEY) && !defined(SQLITE_OMIT_TRIGGER)
 
   NAME: parser_trace
-  IF:   defined(SQLITE_DEBUG) && !defined(SQLITE_OMIT_PARSER_TRACE)
+  TYPE: FLAG
+  ARG:  SQLITE_ParserTrace
+  IF:   !defined(SQLITE_OMIT_FLAG_PRAGMAS)
+  IF:   defined(SQLITE_DEBUG)
 
   NAME: case_sensitive_like
   FLAG: NoColumns
+  IF:   !defined(SQLITE_OMIT_CASE_SENSITIVE_LIKE_PRAGMA)
 
   NAME: integrity_check
-  FLAG: NeedSchema Result0 Result1
+  FLAG: NeedSchema Result0 Result1 SchemaOpt
   IF:   !defined(SQLITE_OMIT_INTEGRITY_CHECK)
 
   NAME: quick_check
   TYPE: INTEGRITY_CHECK
-  FLAG: NeedSchema Result0 Result1
+  FLAG: NeedSchema Result0 Result1 SchemaOpt
   IF:   !defined(SQLITE_OMIT_INTEGRITY_CHECK)
 
   NAME: encoding
@@ -358,30 +376,28 @@ set pragma_def {
   COLS: database status
   IF:   defined(SQLITE_DEBUG) || defined(SQLITE_TEST)
 
-  NAME: key
-  IF:   defined(SQLITE_HAS_CODEC)
-
-  NAME: rekey
-  IF:   defined(SQLITE_HAS_CODEC)
-
-  NAME: hexkey
-  IF:   defined(SQLITE_HAS_CODEC)
-
-  NAME: hexrekey
-  TYPE: HEXKEY
-  IF:   defined(SQLITE_HAS_CODEC)
-
   NAME: activate_extensions
-  IF:   defined(SQLITE_HAS_CODEC) || defined(SQLITE_ENABLE_CEROD)
+  IF:   defined(SQLITE_ENABLE_CEROD)
 
   NAME: soft_heap_limit
+  FLAG: Result0
+
+  NAME: hard_heap_limit
   FLAG: Result0
 
   NAME: threads
   FLAG: Result0
 
+  NAME: analysis_limit
+  FLAG: Result0
+
   NAME: optimize
   FLAG: Result1 NeedSchema
+
+  NAME: legacy_alter_table
+  TYPE: FLAG
+  ARG:  SQLITE_LegacyAlter
+  IF:   !defined(SQLITE_OMIT_FLAG_PRAGMAS)
 }
 
 # Open the output file
@@ -405,20 +421,20 @@ set cols {}
 set cols_list {}
 set arg 0
 proc record_one {} {
-  global name type if arg allbyname typebyif flags cols allcols
+  global name type if arg allbyname typebyif flags cols all_cols
   global cols_list colUsedBy
   if {$name==""} return
   if {$cols!=""} {
-    if {![info exists allcols($cols)]} {
+    if {![info exists all_cols($cols)]} {
+      set all_cols($cols) 1
       lappend cols_list $cols
-      set allcols($cols) [llength $cols_list]
     }
-    set cx $allcols($cols)
+    set cx $cols
     lappend colUsedBy($cols) $name
   } else {
     set cx 0
   }
-  set allbyname($name) [list $type $arg $if $flags $cx]
+  set allbyname($name) [list $type $arg $if $flags $cols]
   set name {}
   set type {}
   set if {}
@@ -459,7 +475,7 @@ record_one
 set allnames [lsort [array names allbyname]]
 
 # Generate #defines for all pragma type names.  Group the pragmas that are
-# omit in default builds (defined(SQLITE_DEBUG) and defined(SQLITE_HAS_CODEC))
+# omit in default builds (ex: defined(SQLITE_DEBUG))
 # at the end.
 #
 puts $fd "\n/* The various pragma types */"
@@ -500,6 +516,13 @@ foreach f [lsort [array names allflags]] {
   set fv [expr {$fv*2}]
 }
 
+# Sort the column lists so that longer column lists occur first
+#
+proc colscmp {a b} {
+  return [expr {[llength $b] - [llength $a]}]
+}
+set cols_list [lsort -command colscmp $cols_list]
+
 # Generate the array of column names used by pragmas that act like
 # queries.
 #
@@ -508,10 +531,23 @@ puts $fd "** or that return single-column results where the name of the"
 puts $fd "** result column is different from the name of the pragma\n*/"
 puts $fd "static const char *const pragCName\[\] = {"
 set offset 0
+set allcollist {}
 foreach cols $cols_list {
-  set cols_offset($allcols($cols)) $offset
+  set n [llength $cols]
+  set limit [expr {[llength $allcollist] - $n}]
+  for {set i 0} {$i<$limit} {incr i} {
+    set sublist [lrange $allcollist $i [expr {$i+$n-1}]]
+    if {$sublist==$cols} {
+      puts $fd [format "%27s/* $colUsedBy($cols) reuses $i */" ""]
+      set cols_offset($cols) $i
+      break
+    }
+  }
+  if {$i<$limit} continue
+  set cols_offset($cols) $offset
   set ub " /* Used by: $colUsedBy($cols) */"
   foreach c $cols {
+    lappend allcollist $c
     puts $fd [format "  /* %3d */ %-14s%s" $offset \"$c\", $ub]
     set ub ""
     incr offset
@@ -529,7 +565,7 @@ puts $fd "  u8 mPragFlg;             /* Zero or more PragFlg_XXX values */"
 puts $fd {  u8 iPragCName;           /* Start of column names in pragCName[] */}
 puts $fd "  u8 nPragCName;          \
 /* Num of col names. 0 means use pragma name */"
-puts $fd "  u32 iArg;                /* Extra argument */"
+puts $fd "  u64 iArg;                /* Extra argument */"
 puts $fd "\175 PragmaName;"
 puts $fd "static const PragmaName aPragmaName\[\] = \173"
 
@@ -537,12 +573,12 @@ set current_if {}
 set spacer [format {    %26s } {}]
 foreach name $allnames {
   foreach {type arg if flag cx} $allbyname($name) break
-  if {$cx==0} {
+  if {$cx==0 || $cx==""} {
     set cy 0
     set nx 0
   } else {
     set cy $cols_offset($cx)
-    set nx [llength [lindex $cols_list [expr {$cx-1}]]]
+    set nx [llength $cx]
   }
   if {$if!=$current_if} {
     if {$current_if!=""} {

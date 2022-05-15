@@ -120,12 +120,8 @@ struct Fts5PhraseIter {
 **
 **   Usually, output parameter *piPhrase is set to the phrase number, *piCol
 **   to the column in which it occurs and *piOff the token offset of the
-**   first token of the phrase. The exception is if the table was created
-**   with the offsets=0 option specified. In this case *piOff is always
-**   set to -1.
-**
-**   Returns SQLITE_OK if successful, or an error code (i.e. SQLITE_NOMEM) 
-**   if an error occurs.
+**   first token of the phrase. Returns SQLITE_OK if successful, or an error
+**   code (i.e. SQLITE_NOMEM) if an error occurs.
 **
 **   This API can be quite slow if used with an FTS5 table created with the
 **   "detail=none" or "detail=column" option. 
@@ -163,10 +159,10 @@ struct Fts5PhraseIter {
 **
 ** xSetAuxdata(pFts5, pAux, xDelete)
 **
-**   Save the pointer passed as the second argument as the extension functions 
+**   Save the pointer passed as the second argument as the extension function's 
 **   "auxiliary data". The pointer may then be retrieved by the current or any
 **   future invocation of the same fts5 extension function made as part of
-**   of the same MATCH query using the xGetAuxdata() API.
+**   the same MATCH query using the xGetAuxdata() API.
 **
 **   Each extension function is allocated a single auxiliary data slot for
 **   each FTS query (MATCH expression). If the extension function is invoked 
@@ -181,7 +177,7 @@ struct Fts5PhraseIter {
 **   The xDelete callback, if one is specified, is also invoked on the
 **   auxiliary data pointer after the FTS5 query has finished.
 **
-**   If an error (e.g. an OOM condition) occurs within this function, an
+**   If an error (e.g. an OOM condition) occurs within this function,
 **   the auxiliary data is set to NULL and an error code returned. If the
 **   xDelete parameter was not NULL, it is invoked on the auxiliary data
 **   pointer before returning.
@@ -405,8 +401,8 @@ struct Fts5ExtensionApi {
 **
 **   There are several ways to approach this in FTS5:
 **
-**   <ol><li> By mapping all synonyms to a single token. In this case, the 
-**            In the above example, this means that the tokenizer returns the
+**   <ol><li> By mapping all synonyms to a single token. In this case, using
+**            the above example, this means that the tokenizer returns the
 **            same token for inputs "first" and "1st". Say that token is in
 **            fact "first", so that when the user inserts the document "I won
 **            1st place" entries are added to the index for tokens "i", "won",
@@ -414,11 +410,11 @@ struct Fts5ExtensionApi {
 **            the tokenizer substitutes "first" for "1st" and the query works
 **            as expected.
 **
-**       <li> By adding multiple synonyms for a single term to the FTS index.
-**            In this case, when tokenizing query text, the tokenizer may 
-**            provide multiple synonyms for a single term within the document.
-**            FTS5 then queries the index for each synonym individually. For
-**            example, faced with the query:
+**       <li> By querying the index for all synonyms of each query term
+**            separately. In this case, when tokenizing query text, the
+**            tokenizer may provide multiple synonyms for a single term 
+**            within the document. FTS5 then queries the index for each 
+**            synonym individually. For example, faced with the query:
 **
 **   <codeblock>
 **     ... MATCH 'first place'</codeblock>
@@ -442,9 +438,9 @@ struct Fts5ExtensionApi {
 **            "place".
 **
 **            This way, even if the tokenizer does not provide synonyms
-**            when tokenizing query text (it should not - to do would be
+**            when tokenizing query text (it should not - to do so would be
 **            inefficient), it doesn't matter if the user queries for 
-**            'first + place' or '1st + place', as there are entires in the
+**            'first + place' or '1st + place', as there are entries in the
 **            FTS index corresponding to both forms of the first token.
 **   </ol>
 **
@@ -472,7 +468,7 @@ struct Fts5ExtensionApi {
 **   extra data to the FTS index or require FTS5 to query for multiple terms,
 **   so it is efficient in terms of disk space and query speed. However, it
 **   does not support prefix queries very well. If, as suggested above, the
-**   token "first" is subsituted for "1st" by the tokenizer, then the query:
+**   token "first" is substituted for "1st" by the tokenizer, then the query:
 **
 **   <codeblock>
 **     ... MATCH '1s*'</codeblock>

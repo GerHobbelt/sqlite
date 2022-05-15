@@ -85,7 +85,7 @@ static void nextCharAppend(nextCharContext *p, unsigned c){
   if( p->nUsed+1 > p->nAlloc ){
     unsigned int *aNew;
     int n = p->nAlloc*2 + 30;
-    aNew = sqlite3_realloc(p->aResult, n*sizeof(unsigned int));
+    aNew = sqlite3_realloc64(p->aResult, n*sizeof(unsigned int));
     if( aNew==0 ){
       p->mallocFailed = 1;
       return;
@@ -269,7 +269,7 @@ static void nextCharFunc(
     sqlite3_result_error_nomem(context);
   }else{
     unsigned char *pRes;
-    pRes = sqlite3_malloc( c.nUsed*4 + 1 );
+    pRes = sqlite3_malloc64( c.nUsed*4 + 1 );
     if( pRes==0 ){
       sqlite3_result_error_nomem(context);
     }else{
@@ -297,14 +297,17 @@ int sqlite3_nextchar_init(
   int rc = SQLITE_OK;
   SQLITE_EXTENSION_INIT2(pApi);
   (void)pzErrMsg;  /* Unused parameter */
-  rc = sqlite3_create_function(db, "next_char", 3, SQLITE_UTF8, 0,
+  rc = sqlite3_create_function(db, "next_char", 3,
+                               SQLITE_UTF8|SQLITE_INNOCUOUS, 0,
                                nextCharFunc, 0, 0);
   if( rc==SQLITE_OK ){
-    rc = sqlite3_create_function(db, "next_char", 4, SQLITE_UTF8, 0,
+    rc = sqlite3_create_function(db, "next_char", 4,
+                                 SQLITE_UTF8|SQLITE_INNOCUOUS, 0,
                                  nextCharFunc, 0, 0);
   }
   if( rc==SQLITE_OK ){
-    rc = sqlite3_create_function(db, "next_char", 5, SQLITE_UTF8, 0,
+    rc = sqlite3_create_function(db, "next_char", 5,
+                                 SQLITE_UTF8|SQLITE_INNOCUOUS, 0,
                                  nextCharFunc, 0, 0);
   }
   return rc;

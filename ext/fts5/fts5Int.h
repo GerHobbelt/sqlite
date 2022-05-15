@@ -35,8 +35,20 @@ typedef sqlite3_uint64 u64;
 #endif
 
 #define testcase(x)
-#define ALWAYS(x) 1
-#define NEVER(x) 0
+
+#if defined(SQLITE_COVERAGE_TEST) || defined(SQLITE_MUTATION_TEST)
+# define SQLITE_OMIT_AUXILIARY_SAFETY_CHECKS 1
+#endif
+#if defined(SQLITE_OMIT_AUXILIARY_SAFETY_CHECKS)
+# define ALWAYS(X)      (1)
+# define NEVER(X)       (0)
+#elif !defined(NDEBUG)
+# define ALWAYS(X)      ((X)?1:(assert(0),0))
+# define NEVER(X)       ((X)?(assert(0),1):0)
+#else
+# define ALWAYS(X)      (X)
+# define NEVER(X)       (X)
+#endif
 
 #define MIN(x,y) (((x) < (y)) ? (x) : (y))
 #define MAX(x,y) (((x) > (y)) ? (x) : (y))
@@ -60,6 +72,11 @@ typedef sqlite3_uint64 u64;
 ** directive in fts5_index.c will cause the build to fail.
 */
 #define FTS5_MAX_PREFIX_INDEXES 31
+
+/*
+** Maximum segments permitted in a single index 
+*/
+#define FTS5_MAX_SEGMENT 2000
 
 #define FTS5_DEFAULT_NEARDIST 10
 #define FTS5_DEFAULT_RANK     "bm25"
@@ -86,6 +103,12 @@ extern int sqlite3_fts5_may_be_corrupt;
 #else
 # define assert_nc(x) assert(x)
 #endif
+
+/*
+** A version of memcmp() that does not cause asan errors if one of the pointer
+** parameters is NULL and the number of bytes to compare is zero.
+*/
+#define fts5Memcmp(s1, s2, n) ((n)<=0 ? 0 : memcmp((s1), (s2), (n)))
 
 /* Mark a function parameter as unused, to suppress nuisance compiler
 ** warnings. */
@@ -172,6 +195,8 @@ struct Fts5Config {
   char *zContentExprlist;
   Fts5Tokenizer *pTok;
   fts5_tokenizer *pTokApi;
+  int bLock;                      /* True when table is preparing statement */
+  int ePattern;                   /* FTS_PATTERN_XXX constant */
 
   /* Values loaded from the %_config table */
   int iCookie;                    /* Incremented when %_config is modified */
@@ -192,17 +217,19 @@ struct Fts5Config {
 };
 
 /* Current expected value of %_config table 'version' field */
-#define FTS5_CURRENT_VERSION 4
+#define FTS5_CURRENT_VERSION  4
 
 #define FTS5_CONTENT_NORMAL   0
 #define FTS5_CONTENT_NONE     1
 #define FTS5_CONTENT_EXTERNAL 2
 
-#define FTS5_DETAIL_FULL    0
-#define FTS5_DETAIL_NONE    1
-#define FTS5_DETAIL_COLUMNS 2
+#define FTS5_DETAIL_FULL      0
+#define FTS5_DETAIL_NONE      1
+#define FTS5_DETAIL_COLUMNS   2
 
-
+#define FTS5_PATTERN_NONE     0
+#define FTS5_PATTERN_LIKE     65  /* matches SQLITE_INDEX_CONSTRAINT_LIKE */
+#define FTS5_PATTERN_GLOB     66  /* matches SQLITE_INDEX_CONSTRAINT_GLOB */
 
 int sqlite3Fts5ConfigParse(
     Fts5Global*, sqlite3*, int, const char **, Fts5Config**, char**
@@ -274,7 +301,7 @@ void sqlite3Fts5Put32(u8*, int);
 int sqlite3Fts5Get32(const u8*);
 
 #define FTS5_POS2COLUMN(iPos) (int)(iPos >> 32)
-#define FTS5_POS2OFFSET(iPos) (int)(iPos & 0xFFFFFFFF)
+#define FTS5_POS2OFFSET(iPos) (int)(iPos & 0x7FFFFFFF)
 
 typedef struct Fts5PoslistReader Fts5PoslistReader;
 struct Fts5PoslistReader {
@@ -309,7 +336,7 @@ int sqlite3Fts5PoslistNext64(
 );
 
 /* Malloc utility */
-void *sqlite3Fts5MallocZero(int *pRc, int nByte);
+void *sqlite3Fts5MallocZero(int *pRc, sqlite3_int64 nByte);
 char *sqlite3Fts5Strndup(int *pRc, const char *pIn, int nIn);
 
 /* Character set tests (like isspace(), isalpha() etc.) */
@@ -411,10 +438,18 @@ int sqlite3Fts5IterNextFrom(Fts5IndexIter*, i64 iMatch);
 void sqlite3Fts5IterClose(Fts5IndexIter*);
 
 /*
+** Close the reader blob handle, if it is open.
+*/
+void sqlite3Fts5IndexCloseReader(Fts5Index*);
+
+/*
 ** This interface is used by the fts5vocab module.
 */
 const char *sqlite3Fts5IterTerm(Fts5IndexIter*, int*);
 int sqlite3Fts5IterNextScan(Fts5IndexIter*);
+void *sqlite3Fts5StructureRef(Fts5Index*);
+void sqlite3Fts5StructureRelease(void*);
+int sqlite3Fts5StructureTest(Fts5Index*, void*);
 
 
 /*
@@ -467,7 +502,7 @@ int sqlite3Fts5IndexSetAverages(Fts5Index *p, const u8*, int);
 /*
 ** Functions called by the storage module as part of integrity-check.
 */
-int sqlite3Fts5IndexIntegrityCheck(Fts5Index*, u64 cksum);
+int sqlite3Fts5IndexIntegrityCheck(Fts5Index*, u64 cksum, int bUseCksum);
 
 /* 
 ** Called during virtual module initialization to register UDF 
@@ -520,19 +555,30 @@ int sqlite3Fts5PutVarint(unsigned char *p, u64 v);
 
 
 /**************************************************************************
-** Interface to code in fts5.c. 
+** Interface to code in fts5_main.c. 
 */
+
+/*
+** Virtual-table object.
+*/
+typedef struct Fts5Table Fts5Table;
+struct Fts5Table {
+  sqlite3_vtab base;              /* Base class used by SQLite core */
+  Fts5Config *pConfig;            /* Virtual table configuration */
+  Fts5Index *pIndex;              /* Full-text index */
+};
 
 int sqlite3Fts5GetTokenizer(
   Fts5Global*, 
   const char **azArg,
   int nArg,
-  Fts5Tokenizer**,
-  fts5_tokenizer**,
+  Fts5Config*,
   char **pzErr
 );
 
-Fts5Index *sqlite3Fts5IndexFromCsrid(Fts5Global*, i64, Fts5Config **);
+Fts5Table *sqlite3Fts5TableFromCsrid(Fts5Global*, i64);
+
+int sqlite3Fts5FlushToDisk(Fts5Table*);
 
 /*
 ** End of interface to code in fts5.c.
@@ -565,8 +611,9 @@ void sqlite3Fts5HashClear(Fts5Hash*);
 
 int sqlite3Fts5HashQuery(
   Fts5Hash*,                      /* Hash table to query */
+  int nPre,
   const char *pTerm, int nTerm,   /* Query term */
-  const u8 **ppDoclist,           /* OUT: Pointer to doclist for pTerm */
+  void **ppObj,                   /* OUT: Pointer to doclist for pTerm */
   int *pnDoclist                  /* OUT: Size of doclist in bytes */
 );
 
@@ -609,7 +656,7 @@ int sqlite3Fts5StorageDelete(Fts5Storage *p, i64, sqlite3_value**);
 int sqlite3Fts5StorageContentInsert(Fts5Storage *p, sqlite3_value**, i64*);
 int sqlite3Fts5StorageIndexInsert(Fts5Storage *p, sqlite3_value**, i64);
 
-int sqlite3Fts5StorageIntegrity(Fts5Storage *p);
+int sqlite3Fts5StorageIntegrity(Fts5Storage *p, int iArg);
 
 int sqlite3Fts5StorageStmt(Fts5Storage *p, int eStmt, sqlite3_stmt**, char**);
 void sqlite3Fts5StorageStmtRelease(Fts5Storage *p, int eStmt, sqlite3_stmt*);
@@ -654,10 +701,18 @@ struct Fts5Token {
 /* Parse a MATCH expression. */
 int sqlite3Fts5ExprNew(
   Fts5Config *pConfig, 
+  int bPhraseToAnd,
   int iCol,                       /* Column on LHS of MATCH operator */
   const char *zExpr,
   Fts5Expr **ppNew, 
   char **pzErr
+);
+int sqlite3Fts5ExprPattern(
+  Fts5Config *pConfig, 
+  int bGlob, 
+  int iCol, 
+  const char *zText, 
+  Fts5Expr **pp
 );
 
 /*
@@ -675,6 +730,7 @@ int sqlite3Fts5ExprEof(Fts5Expr*);
 i64 sqlite3Fts5ExprRowid(Fts5Expr*);
 
 void sqlite3Fts5ExprFree(Fts5Expr*);
+int sqlite3Fts5ExprAnd(Fts5Expr **pp1, Fts5Expr *p2);
 
 /* Called during startup to register a UDF with SQLite */
 int sqlite3Fts5ExprInit(Fts5Global*, sqlite3*);
@@ -766,6 +822,10 @@ int sqlite3Fts5AuxInit(fts5_api*);
 */
 
 int sqlite3Fts5TokenizerInit(fts5_api*);
+int sqlite3Fts5TokenizerPattern(
+    int (*xCreate)(void*, const char**, int, Fts5Tokenizer**),
+    Fts5Tokenizer *pTok
+);
 /*
 ** End of interface to code in fts5_tokenizer.c.
 **************************************************************************/
@@ -784,9 +844,12 @@ int sqlite3Fts5VocabInit(Fts5Global*, sqlite3*);
 /**************************************************************************
 ** Interface to automatically generated code in fts5_unicode2.c. 
 */
-int sqlite3Fts5UnicodeIsalnum(int c);
 int sqlite3Fts5UnicodeIsdiacritic(int c);
 int sqlite3Fts5UnicodeFold(int c, int bRemoveDiacritic);
+
+int sqlite3Fts5UnicodeCatParse(const char*, u8*);
+int sqlite3Fts5UnicodeCategory(u32 iCode);
+void sqlite3Fts5UnicodeAscii(u8*, u8*);
 /*
 ** End of interface to code in fts5_unicode2.c.
 **************************************************************************/

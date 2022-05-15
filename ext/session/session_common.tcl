@@ -95,6 +95,23 @@ proc changeset_from_sql {sql {dbname main}} {
   return $changeset
 }
 
+proc patchset_from_sql {sql {dbname main}} {
+  set rc [catch {
+    sqlite3session S db $dbname
+    db eval "SELECT name FROM $dbname.sqlite_master WHERE type = 'table'" {
+      S attach $name
+    }
+    db eval $sql
+    S patchset
+  } patchset]
+  catch { S delete }
+
+  if {$rc} {
+    error $patchset
+  }
+  return $patchset
+}
+
 proc do_then_apply_sql {sql {dbname main}} {
   proc xConflict args { return "OMIT" }
   set rc [catch {
@@ -155,8 +172,8 @@ proc compare_db {db1 db2} {
     set data1 [$db1 eval $sql]
     set data2 [$db2 eval $sql]
     if {$data1 != $data2} { 
-      puts "$data1"
-      puts "$data2"
+      puts "$db1: $data1"
+      puts "$db2: $data2"
       error "table $tbl data mismatch" 
     }
   }
