@@ -549,7 +549,12 @@ static void usage(const char *zExec){
   exit(1);
 }
 
-int main(int argc, char *argv[]) {
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_tserver_main(cnt, arr)
+#endif
+
+int main(int argc, const char **argv) {
   int sfd;
   int rc;
   int yes = 1;

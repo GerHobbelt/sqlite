@@ -67,7 +67,12 @@ static int readSqlFromFile(sqlite3expert *p, const char *zFile, char **pzErr){
   return rc;
 }
 
-int main(int argc, char **argv){
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_ext_expert_main(cnt, arr)
+#endif
+
+int main(int argc, const char **argv){
   const char *zDb;
   int rc = 0;
   char *zErr = 0;

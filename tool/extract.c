@@ -10,6 +10,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_extract_main(cnt, arr)
+#endif
+
 int main(int argc, const char **argv){
   FILE *f;
   char *zBuf;

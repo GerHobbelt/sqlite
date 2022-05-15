@@ -397,6 +397,11 @@ static void reorder(int *pFrom){
 #define HASH_C1 3
 #define HASH_C2 1
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_mkkeywordhash_main(cnt, arr)
+#endif
+
 /*
 ** This routine does the work.  The generated code is printed on standard
 ** output.

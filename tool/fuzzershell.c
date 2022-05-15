@@ -786,6 +786,11 @@ static sqlite3_int64 timeOfDay(void){
   return t;
 }
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_fuzzer_shell_main(cnt, arr)
+#endif
+
 int main(int argc, const char **argv){
   char *zIn = 0;                /* Input text */
   int nAlloc = 0;               /* Number of bytes allocated for zIn[] */
