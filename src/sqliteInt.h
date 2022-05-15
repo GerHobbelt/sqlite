@@ -1569,6 +1569,7 @@ struct sqlite3 {
   u8 noSharedCache;             /* True if no shared-cache backends */
   u8 nSqlExec;                  /* Number of pending OP_SqlExec opcodes */
   u8 eOpenState;                /* Current condition of the connection */
+  LogEst iSortCost;             /* Extra cost applied to sorting */
   int nextPagesize;             /* Pagesize after VACUUM if >0 */
   FastPrng sPrng;               /* State of the per-connection PRNG */
   i64 nChange;                  /* Value returned by sqlite3_changes() */
@@ -1801,6 +1802,7 @@ struct sqlite3 {
 #define SQLITE_ReleaseReg     0x00400000 /* Use OP_ReleaseReg for testing */
 #define SQLITE_FlttnUnionAll  0x00800000 /* Disable the UNION ALL flattener */
    /* TH3 expects this value  ^^^^^^^^^^ See flatten04.test */
+#define SQLITE_SortIfFaster   0x01000000 /* ORDER BY using sorter if faster */
 #define SQLITE_AllOpts        0xffffffff /* All optimizations */
 
 /*
