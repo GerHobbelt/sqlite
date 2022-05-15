@@ -8655,7 +8655,6 @@ DISPATCHABLE_COMMAND( import ? 3 7 ){
   int nSkip = 0;              /* Initial lines to skip */
   int useOutputMode = 1;      /* Use output mode to determine separators */
   char *zCreate = 0;          /* CREATE TABLE statement text */
-  int rc = 1;
 
   if(p->bSafeMode) return SHELL_FORBIDDEN_OP;
   memset(&sCtx, 0, sizeof(sCtx));
@@ -8762,7 +8761,6 @@ DISPATCHABLE_COMMAND( import ? 3 7 ){
     import_cleanup(&sCtx);
     return 1;
   }
-  rc = 0;
   if( eVerbose>=2 || (eVerbose>=1 && useOutputMode) ){
     char zSep[2];
     zSep[1] = 0;
@@ -8774,10 +8772,10 @@ DISPATCHABLE_COMMAND( import ? 3 7 ){
     output_c_string(p->out, zSep);
     utf8_printf(p->out, "\n");
   }
-    sCtx.z = sqlite3_malloc64(120);
-    if( sCtx.z==0 ){
-      import_cleanup(&sCtx);
-      shell_out_of_memory();
+  sCtx.z = sqlite3_malloc64(120);
+  if( sCtx.z==0 ){
+    import_cleanup(&sCtx);
+    shell_out_of_memory();
   }
   /* Below, resources must be freed before exit. */
   while( (nSkip--)>0 ){
