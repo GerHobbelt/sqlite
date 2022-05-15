@@ -159,10 +159,10 @@ struct Fts5PhraseIter {
 **
 ** xSetAuxdata(pFts5, pAux, xDelete)
 **
-**   Save the pointer passed as the second argument as the extension functions 
+**   Save the pointer passed as the second argument as the extension function's 
 **   "auxiliary data". The pointer may then be retrieved by the current or any
 **   future invocation of the same fts5 extension function made as part of
-**   of the same MATCH query using the xGetAuxdata() API.
+**   the same MATCH query using the xGetAuxdata() API.
 **
 **   Each extension function is allocated a single auxiliary data slot for
 **   each FTS query (MATCH expression). If the extension function is invoked 
@@ -177,7 +177,7 @@ struct Fts5PhraseIter {
 **   The xDelete callback, if one is specified, is also invoked on the
 **   auxiliary data pointer after the FTS5 query has finished.
 **
-**   If an error (e.g. an OOM condition) occurs within this function, an
+**   If an error (e.g. an OOM condition) occurs within this function,
 **   the auxiliary data is set to NULL and an error code returned. If the
 **   xDelete parameter was not NULL, it is invoked on the auxiliary data
 **   pointer before returning.
@@ -401,8 +401,8 @@ struct Fts5ExtensionApi {
 **
 **   There are several ways to approach this in FTS5:
 **
-**   <ol><li> By mapping all synonyms to a single token. In this case, the 
-**            In the above example, this means that the tokenizer returns the
+**   <ol><li> By mapping all synonyms to a single token. In this case, using
+**            the above example, this means that the tokenizer returns the
 **            same token for inputs "first" and "1st". Say that token is in
 **            fact "first", so that when the user inserts the document "I won
 **            1st place" entries are added to the index for tokens "i", "won",

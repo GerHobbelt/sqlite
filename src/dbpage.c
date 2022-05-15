@@ -73,6 +73,7 @@ static int dbpageConnect(
   DbpageTable *pTab = 0;
   int rc = SQLITE_OK;
 
+  sqlite3_vtab_config(db, SQLITE_VTAB_DIRECTONLY);
   rc = sqlite3_declare_vtab(db, 
           "CREATE TABLE x(pgno INTEGER PRIMARY KEY, data BLOB, schema HIDDEN)");
   if( rc==SQLITE_OK ){
@@ -155,6 +156,7 @@ static int dbpageBestIndex(sqlite3_vtab *tab, sqlite3_index_info *pIdxInfo){
   ){
     pIdxInfo->orderByConsumed = 1;
   }
+  sqlite3VtabUsesAllSchemas(pIdxInfo);
   return SQLITE_OK;
 }
 
@@ -332,7 +334,7 @@ static int dbpageUpdate(
     goto update_fail;
   }
   pBt = pTab->db->aDb[iDb].pBt;
-  if( pgno<1 || pBt==0 || pgno>(int)sqlite3BtreeLastPage(pBt) ){
+  if( pgno<1 || pBt==0 || pgno>sqlite3BtreeLastPage(pBt) ){
     zErr = "bad page number";
     goto update_fail;
   }

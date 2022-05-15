@@ -197,5 +197,57 @@ do_execsql_test 4.2 {
   INSERT OR REPLACE INTO t1 VALUES(20000, 20000);
 }
 
-finish_test
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 5.0 {
+  PRAGMA foreign_keys = true;
+  CREATE TABLE parent(
+    p TEXT PRIMARY KEY
+  );
+  CREATE TABLE child(
+    c INTEGER UNIQUE, 
+    FOREIGN KEY(c) REFERENCES parent(p) DEFERRABLE INITIALLY DEFERRED
+  );
+  BEGIN;
+    INSERT INTO child VALUES(123);
+    INSERT INTO parent VALUES('123');
+  COMMIT;
+}
+do_execsql_test 5.1 {
+  PRAGMA integrity_check;
+} {ok}
 
+do_execsql_test 5.2 {
+  INSERT INTO parent VALUES(1200);
+  BEGIN;
+    INSERT INTO child VALUES(456);
+    UPDATE parent SET p = '456' WHERE p=1200;
+  COMMIT;
+}
+do_execsql_test 5.3 {
+  PRAGMA integrity_check;
+} {ok}
+
+#-------------------------------------------------------------------------
+reset_db
+forcedelete test.db2
+do_execsql_test 6.1 {
+  PRAGMA foreign_keys = on;
+  CREATE TABLE c1(b);
+  INSERT INTO c1 VALUES(123);
+}
+
+do_execsql_test 6.2 {
+  ATTACH 'test.db2' AS aux;
+  CREATE TABLE aux.p1(a INTEGER PRIMARY KEY);
+  CREATE TABLE aux.c1(b REFERENCES p1(a) ON DELETE RESTRICT);
+
+  INSERT INTO aux.p1 VALUES(123);
+}
+
+do_execsql_test 6.3 {
+  DELETE FROM aux.p1 WHERE a=123;
+}
+
+
+finish_test

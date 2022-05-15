@@ -632,6 +632,15 @@ static int csvtabConnect(
   for(i=0; i<sizeof(azPValue)/sizeof(azPValue[0]); i++){
     sqlite3_free(azPValue[i]);
   }
+  /* Rationale for DIRECTONLY:
+  ** An attacker who controls a database schema could use this vtab
+  ** to exfiltrate sensitive data from other files in the filesystem.
+  ** And, recommended practice is to put all CSV virtual tables in the
+  ** TEMP namespace, so they should still be usable from within TEMP
+  ** views, so there shouldn't be a serious loss of functionality by
+  ** prohibiting the use of this vtab from persistent triggers and views.
+  */
+  sqlite3_vtab_config(db, SQLITE_VTAB_DIRECTONLY);
   return SQLITE_OK;
 
 csvtab_connect_oom:
@@ -767,7 +776,7 @@ static int csvtabColumn(
   CsvCursor *pCur = (CsvCursor*)cur;
   CsvTable *pTab = (CsvTable*)cur->pVtab;
   if( i>=0 && i<pTab->nCol && pCur->azVal[i]!=0 ){
-    sqlite3_result_text(ctx, pCur->azVal[i], -1, SQLITE_STATIC);
+    sqlite3_result_text(ctx, pCur->azVal[i], -1, SQLITE_TRANSIENT);
   }
   return SQLITE_OK;
 }
@@ -932,7 +941,7 @@ int sqlite3_csv_init(
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi
 ){
-#ifndef SQLITE_OMIT_VIRTUALTABLE	
+#ifndef SQLITE_OMIT_VIRTUALTABLE
   int rc;
   SQLITE_EXTENSION_INIT2(pApi);
   rc = sqlite3_create_module(db, "csv", &CsvModule, 0);

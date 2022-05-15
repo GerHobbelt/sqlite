@@ -41,7 +41,7 @@ static int execSql(sqlite3 *db, char **pzErrMsg, const char *zSql){
     assert( sqlite3_strnicmp(zSql,"SELECT",6)==0 );
     /* The secondary SQL must be one of CREATE TABLE, CREATE INDEX,
     ** or INSERT.  Historically there have been attacks that first
-    ** corrupt the sqlite_master.sql field with other kinds of statements
+    ** corrupt the sqlite_schema.sql field with other kinds of statements
     ** then run VACUUM to get those statements to execute at inappropriate
     ** times. */
     if( zSubSql
@@ -106,6 +106,7 @@ void sqlite3Vacuum(Parse *pParse, Token *pNm, Expr *pInto){
   Vdbe *v = sqlite3GetVdbe(pParse);
   int iDb = 0;
   if( v==0 ) goto build_vacuum_end;
+  if( pParse->nErr ) goto build_vacuum_end;
   if( pNm ){
 #ifndef SQLITE_BUG_COMPATIBLE_20160819
     /* Default behavior:  Report an error if the argument to VACUUM is
@@ -139,19 +140,20 @@ build_vacuum_end:
 /*
 ** This routine implements the OP_Vacuum opcode of the VDBE.
 */
-int sqlite3RunVacuum(
+SQLITE_NOINLINE int sqlite3RunVacuum(
   char **pzErrMsg,        /* Write error message here */
   sqlite3 *db,            /* Database connection */
   int iDb,                /* Which attached DB to vacuum */
-  sqlite3_value *pOut     /* Write results here, if not NULL */
+  sqlite3_value *pOut     /* Write results here, if not NULL. VACUUM INTO */
 ){
   int rc = SQLITE_OK;     /* Return code from service routines */
   Btree *pMain;           /* The database being vacuumed */
   Btree *pTemp;           /* The temporary database we vacuum into */
   u32 saved_mDbFlags;     /* Saved value of db->mDbFlags */
   u64 saved_flags;        /* Saved value of db->flags */
-  int saved_nChange;      /* Saved value of db->nChange */
-  int saved_nTotalChange; /* Saved value of db->nTotalChange */
+  i64 saved_nChange;      /* Saved value of db->nChange */
+  i64 saved_nTotalChange; /* Saved value of db->nTotalChange */
+  u32 saved_openFlags;    /* Saved value of db->openFlags */
   u8 saved_mTrace;        /* Saved trace settings */
   Db *pDb = 0;            /* Database to detach at end of vacuum */
   int isMemDb;            /* True if vacuuming a :memory: database */
@@ -162,18 +164,21 @@ int sqlite3RunVacuum(
 
   if( !db->autoCommit ){
     sqlite3SetString(pzErrMsg, db, "cannot VACUUM from within a transaction");
-    return SQLITE_ERROR;
+    return SQLITE_ERROR; /* IMP: R-12218-18073 */
   }
   if( db->nVdbeActive>1 ){
     sqlite3SetString(pzErrMsg, db,"cannot VACUUM - SQL statements in progress");
-    return SQLITE_ERROR;
+    return SQLITE_ERROR; /* IMP: R-15610-35227 */
   }
+  saved_openFlags = db->openFlags;
   if( pOut ){
     if( sqlite3_value_type(pOut)!=SQLITE_TEXT ){
       sqlite3SetString(pzErrMsg, db, "non-text filename");
       return SQLITE_ERROR;
     }
     zOut = (const char*)sqlite3_value_text(pOut);
+    db->openFlags &= ~SQLITE_OPEN_READONLY;
+    db->openFlags |= SQLITE_OPEN_CREATE|SQLITE_OPEN_READWRITE;
   }else{
     zOut = "";
   }
@@ -212,6 +217,7 @@ int sqlite3RunVacuum(
   */
   nDb = db->nDb;
   rc = execSqlF(db, pzErrMsg, "ATTACH %Q AS vacuum_db", zOut);
+  db->openFlags = saved_openFlags;
   if( rc!=SQLITE_OK ) goto end_of_vacuum;
   assert( (db->nDb-1)==nDb );
   pDb = &db->aDb[nDb];
@@ -225,19 +231,9 @@ int sqlite3RunVacuum(
       sqlite3SetString(pzErrMsg, db, "output file already exists");
       goto end_of_vacuum;
     }
+    db->mDbFlags |= DBFLAG_VacuumInto;
   }
-  nRes = sqlite3BtreeGetOptimalReserve(pMain);
-
-  /* A VACUUM cannot change the pagesize of an encrypted database. */
-#ifdef SQLITE_HAS_CODEC
-  if( db->nextPagesize ){
-    extern void sqlite3CodecGetKey(sqlite3*, int, void**, int*);
-    int nKey;
-    char *zKey;
-    sqlite3CodecGetKey(db, iDb, (void**)&zKey, &nKey);
-    if( nKey ) db->nextPagesize = 0;
-  }
-#endif
+  nRes = sqlite3BtreeGetRequestedReserve(pMain);
 
   sqlite3BtreeSetCacheSize(pTemp, db->aDb[iDb].pSchema->cache_size);
   sqlite3BtreeSetSpillSize(pTemp, sqlite3BtreeSetSpillSize(pMain,0));
@@ -254,7 +250,9 @@ int sqlite3RunVacuum(
 
   /* Do not attempt to change the page size for a WAL database */
   if( sqlite3PagerGetJournalMode(sqlite3BtreePager(pMain))
-                                               ==PAGER_JOURNALMODE_WAL ){
+                                               ==PAGER_JOURNALMODE_WAL
+   && pOut==0
+  ){
     db->nextPagesize = 0;
   }
 
@@ -276,14 +274,14 @@ int sqlite3RunVacuum(
   */
   db->init.iDb = nDb; /* force new CREATE statements into vacuum_db */
   rc = execSqlF(db, pzErrMsg,
-      "SELECT sql FROM \"%w\".sqlite_master"
+      "SELECT sql FROM \"%w\".sqlite_schema"
       " WHERE type='table'AND name<>'sqlite_sequence'"
       " AND coalesce(rootpage,1)>0",
       zDbMain
   );
   if( rc!=SQLITE_OK ) goto end_of_vacuum;
   rc = execSqlF(db, pzErrMsg,
-      "SELECT sql FROM \"%w\".sqlite_master"
+      "SELECT sql FROM \"%w\".sqlite_schema"
       " WHERE type='index'",
       zDbMain
   );
@@ -297,7 +295,7 @@ int sqlite3RunVacuum(
   rc = execSqlF(db, pzErrMsg,
       "SELECT'INSERT INTO vacuum_db.'||quote(name)"
       "||' SELECT*FROM\"%w\".'||quote(name)"
-      "FROM vacuum_db.sqlite_master "
+      "FROM vacuum_db.sqlite_schema "
       "WHERE type='table'AND coalesce(rootpage,1)>0",
       zDbMain
   );
@@ -308,11 +306,11 @@ int sqlite3RunVacuum(
   /* Copy the triggers, views, and virtual tables from the main database
   ** over to the temporary database.  None of these objects has any
   ** associated storage, so all we have to do is copy their entries
-  ** from the SQLITE_MASTER table.
+  ** from the schema table.
   */
   rc = execSqlF(db, pzErrMsg,
-      "INSERT INTO vacuum_db.sqlite_master"
-      " SELECT*FROM \"%w\".sqlite_master"
+      "INSERT INTO vacuum_db.sqlite_schema"
+      " SELECT*FROM \"%w\".sqlite_schema"
       " WHERE type IN('view','trigger')"
       " OR(type='table'AND rootpage=0)",
       zDbMain
@@ -343,8 +341,8 @@ int sqlite3RunVacuum(
        BTREE_APPLICATION_ID,     0,  /* Preserve the application id */
     };
 
-    assert( 1==sqlite3BtreeIsInTrans(pTemp) );
-    assert( pOut!=0 || 1==sqlite3BtreeIsInTrans(pMain) );
+    assert( SQLITE_TXN_WRITE==sqlite3BtreeTxnState(pTemp) );
+    assert( pOut!=0 || SQLITE_TXN_WRITE==sqlite3BtreeTxnState(pMain) );
 
     /* Copy Btree meta values */
     for(i=0; i<ArraySize(aCopy); i+=2){
@@ -370,6 +368,7 @@ int sqlite3RunVacuum(
 
   assert( rc==SQLITE_OK );
   if( pOut==0 ){
+    nRes = sqlite3BtreeGetRequestedReserve(pTemp);
     rc = sqlite3BtreeSetPageSize(pMain, sqlite3BtreeGetPageSize(pTemp), nRes,1);
   }
 
@@ -381,7 +380,7 @@ end_of_vacuum:
   db->nChange = saved_nChange;
   db->nTotalChange = saved_nTotalChange;
   db->mTrace = saved_mTrace;
-  sqlite3BtreeSetPageSize(pMain, -1, -1, 1);
+  sqlite3BtreeSetPageSize(pMain, -1, 0, 1);
 
   /* Currently there is an SQL level transaction open on the vacuum
   ** database. No locks are held on any other files (since the main file

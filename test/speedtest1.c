@@ -7,7 +7,8 @@ static const char zHelp[] =
   "Usage: %s [--options] DATABASE\n"
   "Options:\n"
   "  --autovacuum        Enable AUTOVACUUM mode\n"
-  "  --cachesize N       Set the cache size to N\n" 
+  "  --cachesize N       Set the cache size to N\n"
+  "  --checkpoint        Run PRAGMA wal_checkpoint after each test case\n"
   "  --exclusive         Enable locking_mode=EXCLUSIVE\n"
   "  --explain           Like --sqlonly but with added EXPLAIN keywords\n"
   "  --heap SZ MIN       Memory allocator uses SZ bytes & min allocation MIN\n"
@@ -15,21 +16,25 @@ static const char zHelp[] =
   "  --journal M         Set the journal_mode to M\n"
   "  --key KEY           Set the encryption key to KEY\n"
   "  --lookaside N SZ    Configure lookaside for N slots of SZ bytes each\n"
+  "  --memdb             Use an in-memory database\n"
   "  --mmap SZ           MMAP the first SZ bytes of the database file\n"
   "  --multithread       Set multithreaded mode\n"
   "  --nomemstat         Disable memory statistics\n"
   "  --nosync            Set PRAGMA synchronous=OFF\n"
   "  --notnull           Add NOT NULL constraints to table columns\n"
+  "  --output FILE       Store SQL output in FILE\n"
   "  --pagesize N        Set the page size to N\n"
   "  --pcache N SZ       Configure N pages of pagecache each of size SZ bytes\n"
   "  --primarykey        Use PRIMARY KEY instead of UNIQUE where appropriate\n"
   "  --repeat N          Repeat each SELECT N times (default: 1)\n"
   "  --reprepare         Reprepare each statement upon every invocation\n"
+  "  --reserve N         Reserve N bytes on each database page\n"
   "  --serialized        Set serialized threading mode\n"
   "  --singlethread      Set single-threaded mode - disables all mutexing\n"
   "  --sqlonly           No-op.  Only show the SQL that would have been run.\n"
   "  --shrink-memory     Invoke sqlite3_db_release_memory() frequently.\n"
   "  --size N            Relative test size.  Default=100\n"
+  "  --strict            Use STRICT table where appropriate\n"
   "  --stats             Show statistics at the end\n"
   "  --temp N            N from 0 to 9.  0: no temp table. 9: all temp tables\n"
   "  --testset T         Run test-set T (main, cte, rtree, orm, fp, debug)\n"
@@ -40,7 +45,6 @@ static const char zHelp[] =
   "  --verify            Run additional verification steps.\n"
   "  --without-rowid     Use WITHOUT ROWID where appropriate\n"
 ;
-
 
 #include "sqlite3.h"
 #include <assert.h>
@@ -61,6 +65,20 @@ static const char zHelp[] =
 # define sqlite3_int64 sqlite_int64
 #endif
 
+typedef sqlite3_uint64 u64;
+
+/*
+** State structure for a Hash hash in progress
+*/
+typedef struct HashContext HashContext;
+struct HashContext {
+  unsigned char isInit;          /* True if initialized */
+  unsigned char i, j;            /* State variables */
+  unsigned char s[256];          /* State variables */
+  unsigned char r[32];           /* Result */
+};
+
+
 /* All global state is held in this structure */
 static struct Global {
   sqlite3 *db;               /* The open database connection */
@@ -76,12 +94,19 @@ static struct Global {
   int eTemp;                 /* 0: no TEMP.  9: always TEMP. */
   int szTest;                /* Scale factor for test iterations */
   int nRepeat;               /* Repeat selects this many times */
+  int doCheckpoint;          /* Run PRAGMA wal_checkpoint after each trans */
+  int nReserve;              /* Reserve bytes */
   const char *zWR;           /* Might be WITHOUT ROWID */
   const char *zNN;           /* Might be NOT NULL */
   const char *zPK;           /* Might be UNIQUE or PRIMARY KEY */
   unsigned int x, y;         /* Pseudo-random number generator state */
+  u64 nResByte;              /* Total number of result bytes */
   int nResult;               /* Size of the current result */
   char zResult[3000];        /* Text of the current result */
+#ifndef SPEEDTEST_OMIT_HASH
+  FILE *hashFile;            /* Store all hash results in this file */
+  HashContext hash;          /* Hash of all output */
+#endif
 } g;
 
 /* Return " TEMP" or "", as appropriate for creating a table.
@@ -89,7 +114,6 @@ static struct Global {
 static const char *isTemp(int N){
   return g.eTemp>=N ? " TEMP" : "";
 }
-
 
 /* Print an error message and exit */
 static void fatal_error(const char *zMsg, ...){
@@ -99,6 +123,72 @@ static void fatal_error(const char *zMsg, ...){
   va_end(ap);
   exit(1);
 }
+
+#ifndef SPEEDTEST_OMIT_HASH
+/****************************************************************************
+** Hash algorithm used to verify that compilation is not miscompiled
+** in such a was as to generate an incorrect result.
+*/
+
+/*
+** Initialize a new hash.  iSize determines the size of the hash
+** in bits and should be one of 224, 256, 384, or 512.  Or iSize
+** can be zero to use the default hash size of 256 bits.
+*/
+static void HashInit(void){
+  unsigned int k;
+  g.hash.i = 0;
+  g.hash.j = 0;
+  for(k=0; k<256; k++) g.hash.s[k] = k;
+}
+
+/*
+** Make consecutive calls to the HashUpdate function to add new content
+** to the hash
+*/
+static void HashUpdate(
+  const unsigned char *aData,
+  unsigned int nData
+){
+  unsigned char t;
+  unsigned char i = g.hash.i;
+  unsigned char j = g.hash.j;
+  unsigned int k;
+  if( g.hashFile ) fwrite(aData, 1, nData, g.hashFile);
+  for(k=0; k<nData; k++){
+    j += g.hash.s[i] + aData[k];
+    t = g.hash.s[j];
+    g.hash.s[j] = g.hash.s[i];
+    g.hash.s[i] = t;
+    i++;
+  }
+  g.hash.i = i;
+  g.hash.j = j;
+}
+
+/*
+** After all content has been added, invoke HashFinal() to compute
+** the final hash.  The hash result is stored in g.hash.r[].
+*/
+static void HashFinal(void){
+  unsigned int k;
+  unsigned char t, i, j;
+  i = g.hash.i;
+  j = g.hash.j;
+  for(k=0; k<32; k++){
+    i++;
+    t = g.hash.s[i];
+    j += t;
+    g.hash.s[i] = g.hash.s[j];
+    g.hash.s[j] = t;
+    t += g.hash.s[i];
+    g.hash.r[k] = g.hash.s[t];
+  }
+}
+
+/* End of the Hash hashing logic
+*****************************************************************************/
+#endif /* SPEEDTEST_OMIT_HASH */
 
 /*
 ** Return the value of a hexadecimal digit.  Return -1 if the input
@@ -305,9 +395,13 @@ void speedtest1_begin_test(int iTestNum, const char *zTestName, ...){
   g.y = 0x44f9eac8;
 }
 
+/* Forward reference */
+void speedtest1_exec(const char*,...);
+
 /* Complete a test case */
 void speedtest1_end_test(void){
   sqlite3_int64 iElapseTime = speedtest1_timestamp() - g.iStart;
+  if( g.doCheckpoint ) speedtest1_exec("PRAGMA wal_checkpoint;");
   if( !g.bSqlOnly ){
     g.iTotal += iElapseTime;
     printf("%4d.%03ds\n", (int)(iElapseTime/1000), (int)(iElapseTime%1000));
@@ -323,6 +417,21 @@ void speedtest1_final(void){
   if( !g.bSqlOnly ){
     printf("       TOTAL%.*s %4d.%03ds\n", NAMEWIDTH-5, zDots,
            (int)(g.iTotal/1000), (int)(g.iTotal%1000));
+  }
+  if( g.bVerify ){
+#ifndef SPEEDTEST_OMIT_HASH
+    int i;
+#endif
+    printf("Verification Hash: %llu ", g.nResByte);
+#ifndef SPEEDTEST_OMIT_HASH
+    HashUpdate((const unsigned char*)"\n", 1);
+    HashFinal();
+    for(i=0; i<24; i++){
+      printf("%02x", g.hash.r[i]);
+    }
+    if( g.hashFile && g.hashFile!=stdout ) fclose(g.hashFile);
+#endif
+    printf("\n");
   }
 }
 
@@ -372,6 +481,36 @@ void speedtest1_exec(const char *zFormat, ...){
   speedtest1_shrink_memory();
 }
 
+/* Run SQL and return the first column of the first row as a string.  The
+** returned string is obtained from sqlite_malloc() and must be freed by
+** the caller.
+*/
+char *speedtest1_once(const char *zFormat, ...){
+  va_list ap;
+  char *zSql;
+  sqlite3_stmt *pStmt;
+  char *zResult = 0;
+  va_start(ap, zFormat);
+  zSql = sqlite3_vmprintf(zFormat, ap);
+  va_end(ap);
+  if( g.bSqlOnly ){
+    printSql(zSql);
+  }else{
+    int rc = sqlite3_prepare_v2(g.db, zSql, -1, &pStmt, 0);
+    if( rc ){
+      fatal_error("SQL error: %s\n", sqlite3_errmsg(g.db));
+    }
+    if( sqlite3_step(pStmt)==SQLITE_ROW ){
+      const char *z = (const char*)sqlite3_column_text(pStmt, 0);
+      if( z ) zResult = sqlite3_mprintf("%s", z);
+    }
+    sqlite3_finalize(pStmt);
+  }
+  sqlite3_free(zSql);
+  speedtest1_shrink_memory();
+  return zResult;
+}
+
 /* Prepare an SQL statement */
 void speedtest1_prepare(const char *zFormat, ...){
   va_list ap;
@@ -404,6 +543,39 @@ void speedtest1_run(void){
       const char *z = (const char*)sqlite3_column_text(g.pStmt, i);
       if( z==0 ) z = "nil";
       len = (int)strlen(z);
+#ifndef SPEEDTEST_OMIT_HASH
+      if( g.bVerify ){
+        int eType = sqlite3_column_type(g.pStmt, i);
+        unsigned char zPrefix[2];
+        zPrefix[0] = '\n';
+        zPrefix[1] = "-IFTBN"[eType];
+        if( g.nResByte ){
+          HashUpdate(zPrefix, 2);
+        }else{
+          HashUpdate(zPrefix+1, 1);
+        }
+        if( eType==SQLITE_FLOAT ){
+          /* Omit the value of floating-point results from the verification
+          ** hash.  The only thing we record is the fact that the result was
+          ** a floating-point value. */
+          g.nResByte += 2;
+        }else if( eType==SQLITE_BLOB ){
+          int nBlob = sqlite3_column_bytes(g.pStmt, i);
+          int iBlob;
+          unsigned char zChar[2];
+          const unsigned char *aBlob = sqlite3_column_blob(g.pStmt, i);
+          for(iBlob=0; iBlob<nBlob; iBlob++){
+            zChar[0] = "0123456789abcdef"[aBlob[iBlob]>>4];
+            zChar[1] = "0123456789abcdef"[aBlob[iBlob]&15];
+            HashUpdate(zChar,2);
+          }
+          g.nResByte += nBlob*2 + 2;
+        }else{
+          HashUpdate((unsigned char*)z, len);
+          g.nResByte += len + 2;
+        }
+      }
+#endif
       if( g.nResult+len<sizeof(g.zResult)-2 ){
         if( g.nResult>0 ) g.zResult[g.nResult++] = ' ';
         memcpy(g.zResult + g.nResult, z, len+1);
@@ -536,9 +708,9 @@ void testset_main(void){
   maxb = roundup_allones(sz);
   speedtest1_begin_test(100, "%d INSERTs into table with no index", n);
   speedtest1_exec("BEGIN");
-  speedtest1_exec("CREATE%s TABLE t1(a INTEGER %s, b INTEGER %s, c TEXT %s);",
+  speedtest1_exec("CREATE%s TABLE z1(a INTEGER %s, b INTEGER %s, c TEXT %s);",
                   isTemp(9), g.zNN, g.zNN, g.zNN);
-  speedtest1_prepare("INSERT INTO t1 VALUES(?1,?2,?3); --  %d times", n);
+  speedtest1_prepare("INSERT INTO z1 VALUES(?1,?2,?3); --  %d times", n);
   for(i=1; i<=n; i++){
     x1 = swizzle(i,maxb);
     speedtest1_numbername(x1, zNum, sizeof(zNum));
@@ -555,9 +727,9 @@ void testset_main(void){
   speedtest1_begin_test(110, "%d ordered INSERTS with one index/PK", n);
   speedtest1_exec("BEGIN");
   speedtest1_exec(
-     "CREATE%s TABLE t2(a INTEGER %s %s, b INTEGER %s, c TEXT %s) %s",
+     "CREATE%s TABLE z2(a INTEGER %s %s, b INTEGER %s, c TEXT %s) %s",
      isTemp(5), g.zNN, g.zPK, g.zNN, g.zNN, g.zWR);
-  speedtest1_prepare("INSERT INTO t2 VALUES(?1,?2,?3); -- %d times", n);
+  speedtest1_prepare("INSERT INTO z2 VALUES(?1,?2,?3); -- %d times", n);
   for(i=1; i<=n; i++){
     x1 = swizzle(i,maxb);
     speedtest1_numbername(x1, zNum, sizeof(zNum));
@@ -597,7 +769,7 @@ void testset_main(void){
   speedtest1_begin_test(130, "%d SELECTS, numeric BETWEEN, unindexed", n);
   speedtest1_exec("BEGIN");
   speedtest1_prepare(
-    "SELECT count(*), avg(b), sum(length(c)), group_concat(c) FROM t1\n"
+    "SELECT count(*), avg(b), sum(length(c)), group_concat(c) FROM z1\n"
     " WHERE b BETWEEN ?1 AND ?2; -- %d times", n
   );
   for(i=1; i<=n; i++){
@@ -617,7 +789,7 @@ void testset_main(void){
   speedtest1_begin_test(140, "%d SELECTS, LIKE, unindexed", n);
   speedtest1_exec("BEGIN");
   speedtest1_prepare(
-    "SELECT count(*), avg(b), sum(length(c)), group_concat(c) FROM t1\n"
+    "SELECT count(*), avg(b), sum(length(c)), group_concat(c) FROM z1\n"
     " WHERE c LIKE ?1; -- %d times", n
   );
   for(i=1; i<=n; i++){
@@ -639,7 +811,7 @@ void testset_main(void){
   speedtest1_begin_test(142, "%d SELECTS w/ORDER BY, unindexed", n);
   speedtest1_exec("BEGIN");
   speedtest1_prepare(
-    "SELECT a, b, c FROM t1 WHERE c LIKE ?1\n"
+    "SELECT a, b, c FROM z1 WHERE c LIKE ?1\n"
     " ORDER BY a; -- %d times", n
   );
   for(i=1; i<=n; i++){
@@ -660,7 +832,7 @@ void testset_main(void){
   speedtest1_begin_test(145, "%d SELECTS w/ORDER BY and LIMIT, unindexed", n);
   speedtest1_exec("BEGIN");
   speedtest1_prepare(
-    "SELECT a, b, c FROM t1 WHERE c LIKE ?1\n"
+    "SELECT a, b, c FROM z1 WHERE c LIKE ?1\n"
     " ORDER BY a LIMIT 10; -- %d times", n
   );
   for(i=1; i<=n; i++){
@@ -680,10 +852,10 @@ void testset_main(void){
 
   speedtest1_begin_test(150, "CREATE INDEX five times");
   speedtest1_exec("BEGIN;");
-  speedtest1_exec("CREATE UNIQUE INDEX t1b ON t1(b);");
-  speedtest1_exec("CREATE INDEX t1c ON t1(c);");
-  speedtest1_exec("CREATE UNIQUE INDEX t2b ON t2(b);");
-  speedtest1_exec("CREATE INDEX t2c ON t2(c DESC);");
+  speedtest1_exec("CREATE UNIQUE INDEX t1b ON z1(b);");
+  speedtest1_exec("CREATE INDEX t1c ON z1(c);");
+  speedtest1_exec("CREATE UNIQUE INDEX t2b ON z2(b);");
+  speedtest1_exec("CREATE INDEX t2c ON z2(c DESC);");
   speedtest1_exec("CREATE INDEX t3bc ON t3(b,c);");
   speedtest1_exec("COMMIT;");
   speedtest1_end_test();
@@ -693,7 +865,7 @@ void testset_main(void){
   speedtest1_begin_test(160, "%d SELECTS, numeric BETWEEN, indexed", n);
   speedtest1_exec("BEGIN");
   speedtest1_prepare(
-    "SELECT count(*), avg(b), sum(length(c)), group_concat(a) FROM t1\n"
+    "SELECT count(*), avg(b), sum(length(c)), group_concat(a) FROM z1\n"
     " WHERE b BETWEEN ?1 AND ?2; -- %d times", n
   );
   for(i=1; i<=n; i++){
@@ -713,7 +885,7 @@ void testset_main(void){
   speedtest1_begin_test(161, "%d SELECTS, numeric BETWEEN, PK", n);
   speedtest1_exec("BEGIN");
   speedtest1_prepare(
-    "SELECT count(*), avg(b), sum(length(c)), group_concat(a) FROM t2\n"
+    "SELECT count(*), avg(b), sum(length(c)), group_concat(a) FROM z2\n"
     " WHERE a BETWEEN ?1 AND ?2; -- %d times", n
   );
   for(i=1; i<=n; i++){
@@ -733,7 +905,7 @@ void testset_main(void){
   speedtest1_begin_test(170, "%d SELECTS, text BETWEEN, indexed", n);
   speedtest1_exec("BEGIN");
   speedtest1_prepare(
-    "SELECT count(*), avg(b), sum(length(c)), group_concat(a) FROM t1\n"
+    "SELECT count(*), avg(b), sum(length(c)), group_concat(a) FROM z1\n"
     " WHERE c BETWEEN ?1 AND (?1||'~'); -- %d times", n
   );
   for(i=1; i<=n; i++){
@@ -759,14 +931,14 @@ void testset_main(void){
     isTemp(1), g.zNN, g.zPK, g.zNN, g.zNN, g.zWR);
   speedtest1_exec("CREATE INDEX t4b ON t4(b)");
   speedtest1_exec("CREATE INDEX t4c ON t4(c)");
-  speedtest1_exec("INSERT INTO t4 SELECT * FROM t1");
+  speedtest1_exec("INSERT INTO t4 SELECT * FROM z1");
   speedtest1_exec("COMMIT");
   speedtest1_end_test();
 
   n = sz;
   speedtest1_begin_test(190, "DELETE and REFILL one table", n);
-  speedtest1_exec("DELETE FROM t2;");
-  speedtest1_exec("INSERT INTO t2 SELECT * FROM t1;");
+  speedtest1_exec("DELETE FROM z2;");
+  speedtest1_exec("INSERT INTO z2 SELECT * FROM z1;");
   speedtest1_end_test();
 
 
@@ -776,8 +948,8 @@ void testset_main(void){
 
 
   speedtest1_begin_test(210, "ALTER TABLE ADD COLUMN, and query");
-  speedtest1_exec("ALTER TABLE t2 ADD COLUMN d DEFAULT 123");
-  speedtest1_exec("SELECT sum(d) FROM t2");
+  speedtest1_exec("ALTER TABLE z2 ADD COLUMN d INT DEFAULT 123");
+  speedtest1_exec("SELECT sum(d) FROM z2");
   speedtest1_end_test();
 
 
@@ -785,7 +957,7 @@ void testset_main(void){
   speedtest1_begin_test(230, "%d UPDATES, numeric BETWEEN, indexed", n);
   speedtest1_exec("BEGIN");
   speedtest1_prepare(
-    "UPDATE t2 SET d=b*2 WHERE b BETWEEN ?1 AND ?2; -- %d times", n
+    "UPDATE z2 SET d=b*2 WHERE b BETWEEN ?1 AND ?2; -- %d times", n
   );
   for(i=1; i<=n; i++){
     x1 = speedtest1_random()%maxb;
@@ -802,7 +974,7 @@ void testset_main(void){
   speedtest1_begin_test(240, "%d UPDATES of individual rows", n);
   speedtest1_exec("BEGIN");
   speedtest1_prepare(
-    "UPDATE t2 SET d=b*3 WHERE a=?1; -- %d times", n
+    "UPDATE z2 SET d=b*3 WHERE a=?1; -- %d times", n
   );
   for(i=1; i<=n; i++){
     x1 = speedtest1_random()%sz + 1;
@@ -813,12 +985,12 @@ void testset_main(void){
   speedtest1_end_test();
 
   speedtest1_begin_test(250, "One big UPDATE of the whole %d-row table", sz);
-  speedtest1_exec("UPDATE t2 SET d=b*4");
+  speedtest1_exec("UPDATE z2 SET d=b*4");
   speedtest1_end_test();
 
 
   speedtest1_begin_test(260, "Query added column after filling");
-  speedtest1_exec("SELECT sum(d) FROM t2");
+  speedtest1_exec("SELECT sum(d) FROM z2");
   speedtest1_end_test();
 
 
@@ -827,7 +999,7 @@ void testset_main(void){
   speedtest1_begin_test(270, "%d DELETEs, numeric BETWEEN, indexed", n);
   speedtest1_exec("BEGIN");
   speedtest1_prepare(
-    "DELETE FROM t2 WHERE b BETWEEN ?1 AND ?2; -- %d times", n
+    "DELETE FROM z2 WHERE b BETWEEN ?1 AND ?2; -- %d times", n
   );
   for(i=1; i<=n; i++){
     x1 = speedtest1_random()%maxb + 1;
@@ -856,16 +1028,16 @@ void testset_main(void){
 
 
   speedtest1_begin_test(290, "Refill two %d-row tables using REPLACE", sz);
-  speedtest1_exec("REPLACE INTO t2(a,b,c) SELECT a,b,c FROM t1");
-  speedtest1_exec("REPLACE INTO t3(a,b,c) SELECT a,b,c FROM t1");
+  speedtest1_exec("REPLACE INTO z2(a,b,c) SELECT a,b,c FROM z1");
+  speedtest1_exec("REPLACE INTO t3(a,b,c) SELECT a,b,c FROM z1");
   speedtest1_end_test();
 
   speedtest1_begin_test(300, "Refill a %d-row table using (b&1)==(a&1)", sz);
-  speedtest1_exec("DELETE FROM t2;");
-  speedtest1_exec("INSERT INTO t2(a,b,c)\n"
-                  " SELECT a,b,c FROM t1  WHERE (b&1)==(a&1);");
-  speedtest1_exec("INSERT INTO t2(a,b,c)\n"
-                  " SELECT a,b,c FROM t1  WHERE (b&1)<>(a&1);");
+  speedtest1_exec("DELETE FROM z2;");
+  speedtest1_exec("INSERT INTO z2(a,b,c)\n"
+                  " SELECT a,b,c FROM z1  WHERE (b&1)==(a&1);");
+  speedtest1_exec("INSERT INTO z2(a,b,c)\n"
+                  " SELECT a,b,c FROM z1  WHERE (b&1)<>(a&1);");
   speedtest1_end_test();
 
 
@@ -873,11 +1045,11 @@ void testset_main(void){
   speedtest1_begin_test(310, "%d four-ways joins", n);
   speedtest1_exec("BEGIN");
   speedtest1_prepare(
-    "SELECT t1.c FROM t1, t2, t3, t4\n"
+    "SELECT z1.c FROM z1, z2, t3, t4\n"
     " WHERE t4.a BETWEEN ?1 AND ?2\n"
     "   AND t3.a=t4.b\n"
-    "   AND t2.a=t3.b\n"
-    "   AND t1.c=t2.c"
+    "   AND z2.a=t3.b\n"
+    "   AND z1.c=z2.c"
   );
   for(i=1; i<=n; i++){
     x1 = speedtest1_random()%sz + 1;
@@ -892,8 +1064,8 @@ void testset_main(void){
   speedtest1_begin_test(320, "subquery in result set", n);
   speedtest1_prepare(
     "SELECT sum(a), max(c),\n"
-    "       avg((SELECT a FROM t2 WHERE 5+t2.b=t1.b) AND rowid<?1), max(c)\n"
-    " FROM t1 WHERE rowid<?1;"
+    "       avg((SELECT a FROM z2 WHERE 5+z2.b=z1.b) AND rowid<?1), max(c)\n"
+    " FROM z1 WHERE rowid<?1;"
   );
   sqlite3_bind_int(g.pStmt, 1, est_square_root(g.szTest)*50);
   speedtest1_run();
@@ -1111,10 +1283,10 @@ void testset_cte(void){
   speedtest1_begin_test(400, "EXCEPT operator on %d-element tables", nElem);
   speedtest1_prepare(
     "WITH RECURSIVE \n"
-    "  t1(x) AS (VALUES(2) UNION ALL SELECT x+2 FROM t1 WHERE x<%d),\n"
-    "  t2(y) AS (VALUES(3) UNION ALL SELECT y+3 FROM t2 WHERE y<%d)\n"
+    "  z1(x) AS (VALUES(2) UNION ALL SELECT x+2 FROM z1 WHERE x<%d),\n"
+    "  z2(y) AS (VALUES(3) UNION ALL SELECT y+3 FROM z2 WHERE y<%d)\n"
     "SELECT count(x), avg(x) FROM (\n"
-    "  SELECT x FROM t1 EXCEPT SELECT y FROM t2 ORDER BY 1\n"
+    "  SELECT x FROM z1 EXCEPT SELECT y FROM z2 ORDER BY 1\n"
     ");",
     nElem, nElem
   );
@@ -1147,9 +1319,9 @@ void testset_fp(void){
   n = g.szTest*5000;
   speedtest1_begin_test(100, "Fill a table with %d FP values", n*2);
   speedtest1_exec("BEGIN");
-  speedtest1_exec("CREATE%s TABLE t1(a REAL %s, b REAL %s);",
+  speedtest1_exec("CREATE%s TABLE z1(a REAL %s, b REAL %s);",
                   isTemp(1), g.zNN, g.zNN);
-  speedtest1_prepare("INSERT INTO t1 VALUES(?1,?2); -- %d times", n);
+  speedtest1_prepare("INSERT INTO z1 VALUES(?1,?2); -- %d times", n);
   for(i=1; i<=n; i++){
     speedtest1_random_ascii_fp(zFP1);
     speedtest1_random_ascii_fp(zFP2);
@@ -1162,7 +1334,7 @@ void testset_fp(void){
 
   n = g.szTest/25 + 2;
   speedtest1_begin_test(110, "%d range queries", n);
-  speedtest1_prepare("SELECT sum(b) FROM t1 WHERE a BETWEEN ?1 AND ?2");
+  speedtest1_prepare("SELECT sum(b) FROM z1 WHERE a BETWEEN ?1 AND ?2");
   for(i=1; i<=n; i++){
     speedtest1_random_ascii_fp(zFP1);
     speedtest1_random_ascii_fp(zFP2);
@@ -1174,15 +1346,15 @@ void testset_fp(void){
 
   speedtest1_begin_test(120, "CREATE INDEX three times");
   speedtest1_exec("BEGIN;");
-  speedtest1_exec("CREATE INDEX t1a ON t1(a);");
-  speedtest1_exec("CREATE INDEX t1b ON t1(b);");
-  speedtest1_exec("CREATE INDEX t1ab ON t1(a,b);");
+  speedtest1_exec("CREATE INDEX t1a ON z1(a);");
+  speedtest1_exec("CREATE INDEX t1b ON z1(b);");
+  speedtest1_exec("CREATE INDEX t1ab ON z1(a,b);");
   speedtest1_exec("COMMIT;");
   speedtest1_end_test();
 
   n = g.szTest/3 + 2;
   speedtest1_begin_test(130, "%d indexed range queries", n);
-  speedtest1_prepare("SELECT sum(b) FROM t1 WHERE a BETWEEN ?1 AND ?2");
+  speedtest1_prepare("SELECT sum(b) FROM z1 WHERE a BETWEEN ?1 AND ?2");
   for(i=1; i<=n; i++){
     speedtest1_random_ascii_fp(zFP1);
     speedtest1_random_ascii_fp(zFP2);
@@ -1190,6 +1362,19 @@ void testset_fp(void){
     sqlite3_bind_text(g.pStmt, 2, zFP2, -1, SQLITE_STATIC);
     speedtest1_run();
   }
+  speedtest1_end_test();
+
+  n = g.szTest*5000;
+  speedtest1_begin_test(140, "%d calls to round()", n);
+  speedtest1_exec("SELECT sum(round(a,2)+round(b,4)) FROM z1;");
+  speedtest1_end_test();
+
+
+  speedtest1_begin_test(150, "%d printf() calls", n*4);
+  speedtest1_exec(
+    "WITH c(fmt) AS (VALUES('%%g'),('%%e'),('%%!g'),('%%.20f'))"
+    "SELECT sum(printf(fmt,a)) FROM z1, c"
+  );
   speedtest1_end_test();
 }
 
@@ -1274,8 +1459,8 @@ void testset_rtree(int p1, int p2){
   speedtest1_end_test();
 
   speedtest1_begin_test(101, "Copy from rtree to a regular table");
-  speedtest1_exec("CREATE TABLE t1(id INTEGER PRIMARY KEY,x0,x1,y0,y1,z0,z1)");
-  speedtest1_exec("INSERT INTO t1 SELECT * FROM rt1");
+  speedtest1_exec("CREATE TABLE z1(id INTEGER PRIMARY KEY,x0,x1,y0,y1,z0,z1)");
+  speedtest1_exec("INSERT INTO z1 SELECT * FROM rt1");
   speedtest1_end_test();
 
   n = g.szTest*200;
@@ -1293,7 +1478,7 @@ void testset_rtree(int p1, int p2){
   if( g.bVerify ){
     n = g.szTest*200;
     speedtest1_begin_test(111, "Verify result from 1-D intersect slice queries");
-    speedtest1_prepare("SELECT count(*) FROM t1 WHERE x0>=?1 AND x1<=?2");
+    speedtest1_prepare("SELECT count(*) FROM z1 WHERE x0>=?1 AND x1<=?2");
     iStep = mxCoord/n;
     for(i=0; i<n; i++){
       sqlite3_bind_int(g.pStmt, 1, i*iStep);
@@ -1322,7 +1507,7 @@ void testset_rtree(int p1, int p2){
   if( g.bVerify ){
     n = g.szTest*200;
     speedtest1_begin_test(121, "Verify result from 1-D overlap slice queries");
-    speedtest1_prepare("SELECT count(*) FROM t1 WHERE y1>=?1 AND y0<=?2");
+    speedtest1_prepare("SELECT count(*) FROM z1 WHERE y1>=?1 AND y0<=?2");
     iStep = mxCoord/n;
     for(i=0; i<n; i++){
       sqlite3_bind_int(g.pStmt, 1, i*iStep);
@@ -1418,7 +1603,7 @@ void testset_rtree(int p1, int p2){
   speedtest1_end_test();
 
   speedtest1_begin_test(170, "Restore deleted entries using INSERT OR IGNORE");
-  speedtest1_exec("INSERT OR IGNORE INTO rt1 SELECT * FROM t1");
+  speedtest1_exec("INSERT OR IGNORE INTO rt1 SELECT * FROM z1");
   speedtest1_end_test();
 }
 #endif /* SQLITE_ENABLE_RTREE */
@@ -1703,11 +1888,11 @@ void testset_trigger(void){
 
   speedtest1_exec(
       "BEGIN;"
-      "CREATE TABLE t1(rowid INTEGER PRIMARY KEY, i INTEGER, t TEXT);"
-      "CREATE TABLE t2(rowid INTEGER PRIMARY KEY, i INTEGER, t TEXT);"
+      "CREATE TABLE z1(rowid INTEGER PRIMARY KEY, i INTEGER, t TEXT);"
+      "CREATE TABLE z2(rowid INTEGER PRIMARY KEY, i INTEGER, t TEXT);"
       "CREATE TABLE t3(rowid INTEGER PRIMARY KEY, i INTEGER, t TEXT);"
-      "CREATE VIEW v1 AS SELECT rowid, i, t FROM t1;"
-      "CREATE VIEW v2 AS SELECT rowid, i, t FROM t2;"
+      "CREATE VIEW v1 AS SELECT rowid, i, t FROM z1;"
+      "CREATE VIEW v2 AS SELECT rowid, i, t FROM z2;"
       "CREATE VIEW v3 AS SELECT rowid, i, t FROM t3;"
   );
   for(jj=1; jj<=3; jj++){
@@ -1721,22 +1906,22 @@ void testset_trigger(void){
     }
   }
   speedtest1_exec(
-      "CREATE INDEX i1 ON t1(t);"
-      "CREATE INDEX i2 ON t2(t);"
+      "CREATE INDEX i1 ON z1(t);"
+      "CREATE INDEX i2 ON z2(t);"
       "CREATE INDEX i3 ON t3(t);"
       "COMMIT;"
   );
 
   speedtest1_begin_test(100, "speed4p-join1");
   speedtest1_prepare(
-      "SELECT * FROM t1, t2, t3 WHERE t1.oid = t2.oid AND t2.oid = t3.oid"
+      "SELECT * FROM z1, z2, t3 WHERE z1.oid = z2.oid AND z2.oid = t3.oid"
   );
   speedtest1_run();
   speedtest1_end_test();
 
   speedtest1_begin_test(110, "speed4p-join2");
   speedtest1_prepare(
-      "SELECT * FROM t1, t2, t3 WHERE t1.t = t2.t AND t2.t = t3.t"
+      "SELECT * FROM z1, z2, t3 WHERE z1.t = z2.t AND z2.t = t3.t"
   );
   speedtest1_run();
   speedtest1_end_test();
@@ -1773,8 +1958,8 @@ void testset_trigger(void){
 
   speedtest1_begin_test(150, "speed4p-subselect1");
   speedtest1_prepare("SELECT "
-      "(SELECT t FROM t1 WHERE rowid = ?1),"
-      "(SELECT t FROM t2 WHERE rowid = ?1),"
+      "(SELECT t FROM z1 WHERE rowid = ?1),"
+      "(SELECT t FROM z2 WHERE rowid = ?1),"
       "(SELECT t FROM t3 WHERE rowid = ?1)"
   );
   for(jj=0; jj<NROW2; jj++){
@@ -1785,7 +1970,7 @@ void testset_trigger(void){
 
   speedtest1_begin_test(160, "speed4p-rowid-update");
   speedtest1_exec("BEGIN");
-  speedtest1_prepare("UPDATE t1 SET i=i+1 WHERE rowid=?1");
+  speedtest1_prepare("UPDATE z1 SET i=i+1 WHERE rowid=?1");
   for(jj=0; jj<NROW2; jj++){
     sqlite3_bind_int(g.pStmt, 1, jj);
     speedtest1_run();
@@ -1795,7 +1980,7 @@ void testset_trigger(void){
 
   speedtest1_exec("CREATE TABLE t5(t TEXT PRIMARY KEY, i INTEGER);");
   speedtest1_begin_test(170, "speed4p-insert-ignore");
-  speedtest1_exec("INSERT OR IGNORE INTO t5 SELECT t, i FROM t1");
+  speedtest1_exec("INSERT OR IGNORE INTO t5 SELECT t, i FROM z1");
   speedtest1_end_test();
 
   speedtest1_exec(
@@ -1953,6 +2138,10 @@ static void displayLinuxIoStats(FILE *out){
 #  define sqlite3_sourceid(X) "(before 3.6.18)"
 #endif
 
+#if SQLITE_CKSUMVFS_STATIC
+int sqlite3_register_cksumvfs(const char*);
+#endif
+
 static int xCompileOptions(void *pCtx, int nVal, char **azVal, char **azCol){
   printf("-- Compile option: %s\n", azVal[0]);
   return SQLITE_OK;
@@ -1974,7 +2163,8 @@ int main(int argc, char **argv){
   int showStats = 0;            /* True for --stats */
   int nThread = 0;              /* --threads value */
   int mmapSize = 0;             /* How big of a memory map to use */
-  const char *zTSet = "main";   /* Which --testset torun */
+  int memDb = 0;                /* --memdb.  Use an in-memory database */
+  char *zTSet = "main";         /* Which --testset torun */
   int doTrace = 0;              /* True for --trace */
   const char *zEncoding = 0;    /* --utf16be or --utf16le */
   const char *zDbName = 0;      /* Name of the test database */
@@ -1986,8 +2176,12 @@ int main(int argc, char **argv){
   int i;                        /* Loop counter */
   int rc;                       /* API return code */
 
+#ifdef SQLITE_CKSUMVFS_STATIC
+  sqlite3_register_cksumvfs(0);
+#endif
+
   /* Display the version of SQLite being tested */
-  printf("-- Speedtest1 for SQLite %s %.50s\n",
+  printf("-- Speedtest1 for SQLite %s %.48s\n",
          sqlite3_libversion(), sqlite3_sourceid());
 
   /* Process command-line arguments */
@@ -2008,6 +2202,8 @@ int main(int argc, char **argv){
         cacheSize = integerValue(argv[i]);
       }else if( strcmp(z,"exclusive")==0 ){
         doExclusive = 1;
+      }else if( strcmp(z,"checkpoint")==0 ){
+        g.doCheckpoint = 1;
       }else if( strcmp(z,"explain")==0 ){
         g.bSqlOnly = 1;
         g.bExplain = 1;
@@ -2029,6 +2225,8 @@ int main(int argc, char **argv){
         nLook = integerValue(argv[i+1]);
         szLook = integerValue(argv[i+2]);
         i += 2;
+      }else if( strcmp(z,"memdb")==0 ){
+        memDb = 1;
 #if SQLITE_VERSION_NUMBER>=3006000
       }else if( strcmp(z,"multithread")==0 ){
         sqlite3_config(SQLITE_CONFIG_MULTITHREAD);
@@ -2044,6 +2242,22 @@ int main(int argc, char **argv){
         noSync = 1;
       }else if( strcmp(z,"notnull")==0 ){
         g.zNN = "NOT NULL";
+      }else if( strcmp(z,"output")==0 ){
+#ifdef SPEEDTEST_OMIT_HASH
+        fatal_error("The --output option is not supported with"
+                    " -DSPEEDTEST_OMIT_HASH\n");
+#else
+        if( i>=argc-1 ) fatal_error("missing argument on %s\n", argv[i]);
+        i++;
+        if( strcmp(argv[i],"-")==0 ){
+          g.hashFile = stdout;
+        }else{
+          g.hashFile = fopen(argv[i], "wb");
+          if( g.hashFile==0 ){
+            fatal_error("cannot open \"%s\" for writing\n", argv[i]);
+          }
+        }
+#endif
       }else if( strcmp(z,"pagesize")==0 ){
         if( i>=argc-1 ) fatal_error("missing argument on %s\n", argv[i]);
         pageSize = integerValue(argv[++i]);
@@ -2097,9 +2311,29 @@ int main(int argc, char **argv){
         zEncoding = "utf16be";
       }else if( strcmp(z,"verify")==0 ){
         g.bVerify = 1;
+#ifndef SPEEDTEST_OMIT_HASH
+        HashInit();
+#endif
+      }else if( strcmp(z,"reserve")==0 ){
+        if( i>=argc-1 ) fatal_error("missing argument on %s\n", argv[i]);
+        g.nReserve = atoi(argv[++i]);
       }else if( strcmp(z,"without-rowid")==0 ){
-        g.zWR = "WITHOUT ROWID";
+        if( strstr(g.zWR,"WITHOUT")!=0 ){
+          /* no-op */
+        }else if( strstr(g.zWR,"STRICT")!=0 ){
+          g.zWR = "WITHOUT ROWID,STRICT";
+        }else{
+          g.zWR = "WITHOUT ROWID";
+        }
         g.zPK = "PRIMARY KEY";
+      }else if( strcmp(z,"strict")==0 ){
+        if( strstr(g.zWR,"STRICT")!=0 ){
+          /* no-op */
+        }else if( strstr(g.zWR,"WITHOUT")!=0 ){
+          g.zWR = "WITHOUT ROWID,STRICT";
+        }else{
+          g.zWR = "STRICT";
+        }
       }else if( strcmp(z, "help")==0 || strcmp(z,"?")==0 ){
         printf(zHelp, argv[0]);
         exit(0);
@@ -2135,24 +2369,31 @@ int main(int argc, char **argv){
     sqlite3_config(SQLITE_CONFIG_LOOKASIDE, 0, 0);
   }
 #endif
- 
+  sqlite3_initialize();
+
   /* Open the database and the input file */
-  if( sqlite3_open(zDbName, &g.db) ){
+  if( sqlite3_open(memDb ? ":memory:" : zDbName, &g.db) ){
     fatal_error("Cannot open database file: %s\n", zDbName);
   }
 #if SQLITE_VERSION_NUMBER>=3006001
   if( nLook>0 && szLook>0 ){
     pLook = malloc( nLook*szLook );
-    rc = sqlite3_db_config(g.db, SQLITE_DBCONFIG_LOOKASIDE, pLook, szLook,nLook);
+    rc = sqlite3_db_config(g.db, SQLITE_DBCONFIG_LOOKASIDE,pLook,szLook,nLook);
     if( rc ) fatal_error("lookaside configuration failed: %d\n", rc);
   }
 #endif
+  if( g.nReserve>0 ){
+    sqlite3_file_control(g.db, 0, SQLITE_FCNTL_RESERVE_BYTES, &g.nReserve);
+  }
 
   /* Set database connection options */
   sqlite3_create_function(g.db, "random", 0, SQLITE_UTF8, 0, randomFunc, 0, 0);
 #ifndef SQLITE_OMIT_DEPRECATED
   if( doTrace ) sqlite3_trace(g.db, traceCallback, 0);
 #endif
+  if( memDb>0 ){
+    speedtest1_exec("PRAGMA temp_store=memory");
+  }
   if( mmapSize>0 ){
     speedtest1_exec("PRAGMA mmap_size=%d", mmapSize);
   }
@@ -2183,30 +2424,68 @@ int main(int argc, char **argv){
   }
 
   if( g.bExplain ) printf(".explain\n.echo on\n");
-  if( strcmp(zTSet,"main")==0 ){
-    testset_main();
-  }else if( strcmp(zTSet,"debug1")==0 ){
-    testset_debug1();
-  }else if( strcmp(zTSet,"orm")==0 ){
-    testset_orm();
-  }else if( strcmp(zTSet,"cte")==0 ){
-    testset_cte();
-  }else if( strcmp(zTSet,"fp")==0 ){
-    testset_fp();
-  }else if( strcmp(zTSet,"trigger")==0 ){
-    testset_trigger();
-  }else if( strcmp(zTSet,"rtree")==0 ){
+  do{
+    char *zThisTest = zTSet;
+    char *zComma = strchr(zThisTest,',');
+    if( zComma ){
+      *zComma = 0;
+      zTSet = zComma+1;
+    }else{
+      zTSet = "";
+    }
+    if( g.iTotal>0 || zComma!=0 ){
+      printf("       Begin testset \"%s\"\n", zThisTest);
+    }
+    if( strcmp(zThisTest,"main")==0 ){
+      testset_main();
+    }else if( strcmp(zThisTest,"debug1")==0 ){
+      testset_debug1();
+    }else if( strcmp(zThisTest,"orm")==0 ){
+      testset_orm();
+    }else if( strcmp(zThisTest,"cte")==0 ){
+      testset_cte();
+    }else if( strcmp(zThisTest,"fp")==0 ){
+      testset_fp();
+    }else if( strcmp(zThisTest,"trigger")==0 ){
+      testset_trigger();
+    }else if( strcmp(zThisTest,"rtree")==0 ){
 #ifdef SQLITE_ENABLE_RTREE
-    testset_rtree(6, 147);
+      testset_rtree(6, 147);
 #else
-    fatal_error("compile with -DSQLITE_ENABLE_RTREE to enable "
-                "the R-Tree tests\n");
+      fatal_error("compile with -DSQLITE_ENABLE_RTREE to enable "
+                  "the R-Tree tests\n");
 #endif
-  }else{
-    fatal_error("unknown testset: \"%s\"\n"
-                "Choices: cte debug1 fp main orm rtree trigger\n",
-                 zTSet);
-  }
+    }else{
+      fatal_error("unknown testset: \"%s\"\n"
+                  "Choices: cte debug1 fp main orm rtree trigger\n",
+                   zThisTest);
+    }
+    if( zTSet[0] ){
+      char *zSql, *zObj;
+      speedtest1_begin_test(999, "Reset the database");
+      while( 1 ){
+        zObj = speedtest1_once(
+             "SELECT name FROM main.sqlite_master"
+             " WHERE sql LIKE 'CREATE %%TABLE%%'");
+        if( zObj==0 ) break;
+        zSql = sqlite3_mprintf("DROP TABLE main.\"%w\"", zObj);
+        speedtest1_exec(zSql);
+        sqlite3_free(zSql);
+        sqlite3_free(zObj);
+      }
+      while( 1 ){
+        zObj = speedtest1_once(
+             "SELECT name FROM temp.sqlite_master"
+             " WHERE sql LIKE 'CREATE %%TABLE%%'");
+        if( zObj==0 ) break;
+        zSql = sqlite3_mprintf("DROP TABLE main.\"%w\"", zObj);
+        speedtest1_exec(zSql);
+        sqlite3_free(zSql);
+        sqlite3_free(zObj);
+      }
+      speedtest1_end_test();
+    }
+  }while( zTSet[0] );
   speedtest1_final();
 
   if( showStats ){

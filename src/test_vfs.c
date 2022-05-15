@@ -235,6 +235,8 @@ static int tvfsResultCode(Testvfs *p, int *pRc){
     { SQLITE_BUSY,     "SQLITE_BUSY"   },
     { SQLITE_READONLY, "SQLITE_READONLY"   },
     { SQLITE_READONLY_CANTINIT, "SQLITE_READONLY_CANTINIT"   },
+    { SQLITE_NOTFOUND, "SQLITE_NOTFOUND"   },
+    { -1,              "SQLITE_OMIT"   },
   };
 
   const char *z;
@@ -382,6 +384,7 @@ static int tvfsWrite(
         Tcl_NewWideIntObj(iOfst), Tcl_NewIntObj(iAmt)
     );
     tvfsResultCode(p, &rc);
+    if( rc<0 ) return SQLITE_OK;
   }
 
   if( rc==SQLITE_OK && tvfsInjectFullerr(p) ){
@@ -550,6 +553,7 @@ static int tvfsFileControl(sqlite3_file *pFile, int op, void *pArg){
     } aF[] = {
       { SQLITE_FCNTL_BEGIN_ATOMIC_WRITE, "BEGIN_ATOMIC_WRITE" },
       { SQLITE_FCNTL_COMMIT_ATOMIC_WRITE, "COMMIT_ATOMIC_WRITE" },
+      { SQLITE_FCNTL_ZIPVFS, "ZIPVFS" },
     };
     int i;
     for(i=0; i<sizeof(aF)/sizeof(aF[0]); i++){
@@ -563,7 +567,7 @@ static int tvfsFileControl(sqlite3_file *pFile, int op, void *pArg){
           0, 0
       );
       tvfsResultCode(p, &rc);
-      if( rc ) return rc;
+      if( rc ) return (rc<0 ? SQLITE_OK : rc);
     }
   }
   return sqlite3OsFileControl(pFd->pReal, op, pArg);
@@ -891,7 +895,8 @@ static int tvfsShmMap(
   Testvfs *p = (Testvfs *)(pFd->pVfs->pAppData);
 
   if( p->isFullshm ){
-    return sqlite3OsShmMap(pFd->pReal, iPage, pgsz, isWrite, pp);
+    sqlite3_file *pReal = pFd->pReal;
+    return pReal->pMethods->xShmMap(pReal, iPage, pgsz, isWrite, pp);
   }
 
   if( 0==pFd->pShm ){
@@ -941,7 +946,8 @@ static int tvfsShmLock(
   char zLock[80];
 
   if( p->isFullshm ){
-    return sqlite3OsShmLock(pFd->pReal, ofst, n, flags);
+    sqlite3_file *pReal = pFd->pReal;
+    return pReal->pMethods->xShmLock(pReal, ofst, n, flags);
   }
 
   if( p->pScript && p->mask&TESTVFS_SHMLOCK_MASK ){
@@ -1005,7 +1011,8 @@ static void tvfsShmBarrier(sqlite3_file *pFile){
   }
 
   if( p->isFullshm ){
-    sqlite3OsShmBarrier(pFd->pReal);
+    sqlite3_file *pReal = pFd->pReal;
+    pReal->pMethods->xShmBarrier(pReal);
     return;
   }
 }
@@ -1021,7 +1028,8 @@ static int tvfsShmUnmap(
   TestvfsFd **ppFd;
 
   if( p->isFullshm ){
-    return sqlite3OsShmUnmap(pFd->pReal, deleteFlag);
+    sqlite3_file *pReal = pFd->pReal;
+    return pReal->pMethods->xShmUnmap(pReal, deleteFlag);
   }
 
   if( !pBuffer ) return SQLITE_OK;
@@ -1386,7 +1394,9 @@ static void SQLITE_TCLAPI testvfs_obj_del(ClientData cd){
   Testvfs *p = (Testvfs *)cd;
   if( p->pScript ) Tcl_DecrRefCount(p->pScript);
   sqlite3_vfs_unregister(p->pVfs);
+  memset(p->pVfs, 0, sizeof(sqlite3_vfs));
   ckfree((char *)p->pVfs);
+  memset(p, 0, sizeof(Testvfs));
   ckfree((char *)p);
 }
 

@@ -243,10 +243,14 @@ static int numberOfCachePages(PCache *p){
     ** suggested cache size is set to N. */
     return p->szCache;
   }else{
-    /* IMPLEMENTATION-OF: R-61436-13639 If the argument N is negative, then
-    ** the number of cache pages is adjusted to use approximately abs(N*1024)
-    ** bytes of memory. */
-    return (int)((-1024*(i64)p->szCache)/(p->szPage+p->szExtra));
+    i64 n;
+    /* IMPLEMANTATION-OF: R-59858-46238 If the argument N is negative, then the
+    ** number of cache pages is adjusted to be a number of pages that would
+    ** use approximately abs(N*1024) bytes of memory based on the current
+    ** page size. */
+    n = ((-1024*(i64)p->szCache)/(p->szPage+p->szExtra));
+    if( n>1000000000 ) n = 1000000000;
+    return (int)n;
   }
 }
 
@@ -261,6 +265,7 @@ int sqlite3PcacheInitialize(void){
     ** built-in default page cache is used instead of the application defined
     ** page cache. */
     sqlite3PCacheSetDefault();
+    assert( sqlite3GlobalConfig.pcache2.xInit!=0 );
   }
   return sqlite3GlobalConfig.pcache2.xInit(sqlite3GlobalConfig.pcache2.pArg);
 }

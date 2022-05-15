@@ -335,11 +335,12 @@ static int fts5SnippetScore(
   int nInst;
   int nScore = 0;
   int iLast = 0;
+  sqlite3_int64 iEnd = (sqlite3_int64)iPos + nToken;
 
   rc = pApi->xInstCount(pFts, &nInst);
   for(i=0; i<nInst && rc==SQLITE_OK; i++){
     rc = pApi->xInst(pFts, i, &ip, &ic, &iOff);
-    if( rc==SQLITE_OK && ic==iCol && iOff>=iPos && iOff<(iPos+nToken) ){
+    if( rc==SQLITE_OK && ic==iCol && iOff>=iPos && iOff<iEnd ){
       nScore += (aSeen[ip] ? 1 : 1000);
       aSeen[ip] = 1;
       if( iFirst<0 ) iFirst = iOff;
@@ -349,10 +350,10 @@ static int fts5SnippetScore(
 
   *pnScore = nScore;
   if( piPos ){
-    int iAdj = iFirst - (nToken - (iLast-iFirst)) / 2;
+    sqlite3_int64 iAdj = iFirst - (nToken - (iLast-iFirst)) / 2;
     if( (iAdj+nToken)>nDocsize ) iAdj = nDocsize - nToken;
     if( iAdj<0 ) iAdj = 0;
-    *piPos = iAdj;
+    *piPos = (int)iAdj;
   }
 
   return rc;
@@ -442,7 +443,9 @@ static void fts5SnippetFunction(
         int jj;
 
         rc = pApi->xInst(pFts, ii, &ip, &ic, &io);
-        if( ic!=i || rc!=SQLITE_OK ) continue;
+        if( ic!=i ) continue;
+        if( io>nDocsize ) rc = FTS5_CORRUPT;
+        if( rc!=SQLITE_OK ) continue;
         memset(aSeen, 0, nPhrase);
         rc = fts5SnippetScore(pApi, pFts, nDocsize, aSeen, i,
             io, nToken, &nScore, &iAdj
@@ -563,7 +566,7 @@ static int fts5Bm25GetData(
   int rc = SQLITE_OK;             /* Return code */
   Fts5Bm25Data *p;                /* Object to return */
 
-  p = pApi->xGetAuxdata(pFts, 0);
+  p = (Fts5Bm25Data*)pApi->xGetAuxdata(pFts, 0);
   if( p==0 ){
     int nPhrase;                  /* Number of phrases in query */
     sqlite3_int64 nRow = 0;       /* Number of rows in table */
@@ -578,7 +581,7 @@ static int fts5Bm25GetData(
     if( p==0 ){
       rc = SQLITE_NOMEM;
     }else{
-      memset(p, 0, nByte);
+      memset(p, 0, (size_t)nByte);
       p->nPhrase = nPhrase;
       p->aIDF = (double*)&p[1];
       p->aFreq = &p->aIDF[nPhrase];
@@ -637,7 +640,7 @@ static void fts5Bm25Function(
 ){
   const double k1 = 1.2;          /* Constant "k1" from BM25 formula */
   const double b = 0.75;          /* Constant "b" from BM25 formula */
-  int rc = SQLITE_OK;             /* Error code */
+  int rc;                         /* Error code */
   double score = 0.0;             /* SQL function return value */
   Fts5Bm25Data *pData;            /* Values allocated/calculated once only */
   int i;                          /* Iterator variable */
@@ -669,17 +672,15 @@ static void fts5Bm25Function(
     D = (double)nTok;
   }
 
-  /* Determine the BM25 score for the current row. */
-  for(i=0; rc==SQLITE_OK && i<pData->nPhrase; i++){
-    score += pData->aIDF[i] * (
-      ( aFreq[i] * (k1 + 1.0) ) / 
-      ( aFreq[i] + k1 * (1 - b + b * D / pData->avgdl) )
-    );
-  }
-  
-  /* If no error has occurred, return the calculated score. Otherwise,
-  ** throw an SQL exception.  */
+  /* Determine and return the BM25 score for the current row. Or, if an
+  ** error has occurred, throw an exception. */
   if( rc==SQLITE_OK ){
+    for(i=0; i<pData->nPhrase; i++){
+      score += pData->aIDF[i] * (
+          ( aFreq[i] * (k1 + 1.0) ) / 
+          ( aFreq[i] + k1 * (1 - b + b * D / pData->avgdl) )
+      );
+    }
     sqlite3_result_double(pCtx, -1.0 * score);
   }else{
     sqlite3_result_error_code(pCtx, rc);

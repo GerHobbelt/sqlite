@@ -11,7 +11,6 @@
 # This file implements regression tests for SQLite library.  The
 # focus of this file is testing the use of indices in WHERE clases.
 #
-# $Id: where.test,v 1.50 2008/11/03 09:06:06 danielk1977 Exp $
 
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
@@ -70,10 +69,10 @@ do_test where-1.1.1b {
 } {3 121 10 3}
 do_eqp_test where-1.1.2 {
   SELECT x, y, w FROM t1 WHERE w=10
-} {*SEARCH TABLE t1 USING INDEX i1w (w=?)*}
+} {*SEARCH t1 USING INDEX i1w (w=?)*}
 do_eqp_test where-1.1.2b {
   SELECT x, y, w FROM t1 WHERE w IS 10
-} {*SEARCH TABLE t1 USING INDEX i1w (w=?)*}
+} {*SEARCH t1 USING INDEX i1w (w=?)*}
 do_test where-1.1.3 {
   db status step
 } {0}
@@ -85,13 +84,13 @@ do_test where-1.1.5 {
 } {99}
 do_eqp_test where-1.1.6 {
   SELECT x, y, w FROM t1 WHERE +w=10
-} {*SCAN TABLE t1*}
+} {*SCAN t1*}
 do_test where-1.1.7 {
   count {SELECT x, y, w AS abc FROM t1 WHERE abc=10}
 } {3 121 10 3}
 do_eqp_test where-1.1.8 {
   SELECT x, y, w AS abc FROM t1 WHERE abc=10
-} {*SEARCH TABLE t1 USING INDEX i1w (w=?)*}
+} {*SEARCH t1 USING INDEX i1w (w=?)*}
 do_test where-1.1.9 {
   db status step
 } {0}
@@ -118,22 +117,22 @@ do_test where-1.4.1b {
 } {11 3 144 3}
 do_eqp_test where-1.4.2 {
   SELECT w, x, y FROM t1 WHERE 11=w AND x>2
-} {*SEARCH TABLE t1 USING INDEX i1w (w=?)*}
+} {*SEARCH t1 USING INDEX i1w (w=?)*}
 do_eqp_test where-1.4.2b {
   SELECT w, x, y FROM t1 WHERE 11 IS w AND x>2
-} {*SEARCH TABLE t1 USING INDEX i1w (w=?)*}
+} {*SEARCH t1 USING INDEX i1w (w=?)*}
 do_test where-1.4.3 {
   count {SELECT w AS a, x AS b, y FROM t1 WHERE 11=a AND b>2}
 } {11 3 144 3}
 do_eqp_test where-1.4.4 {
   SELECT w AS a, x AS b, y FROM t1 WHERE 11=a AND b>2
-} {*SEARCH TABLE t1 USING INDEX i1w (w=?)*}
+} {*SEARCH t1 USING INDEX i1w (w=?)*}
 do_test where-1.5 {
   count {SELECT x, y FROM t1 WHERE y<200 AND w=11 AND x>2}
 } {3 144 3}
 do_eqp_test where-1.5.2 {
   SELECT x, y FROM t1 WHERE y<200 AND w=11 AND x>2
-} {*SEARCH TABLE t1 USING INDEX i1w (w=?)*}
+} {*SEARCH t1 USING INDEX i1w (w=?)*}
 do_test where-1.6 {
   count {SELECT x, y FROM t1 WHERE y<200 AND x>2 AND w=11}
 } {3 144 3}
@@ -145,10 +144,10 @@ do_test where-1.8 {
 } {3 144 3}
 do_eqp_test where-1.8.2 {
   SELECT x, y FROM t1 WHERE w>10 AND y=144 AND x=3
-} {*SEARCH TABLE t1 USING INDEX i1xy (x=? AND y=?)*}
+} {*SEARCH t1 USING INDEX i1xy (x=? AND y=?)*}
 do_eqp_test where-1.8.3 {
   SELECT x, y FROM t1 WHERE y=144 AND x=3
-} {*SEARCH TABLE t1 USING COVERING INDEX i1xy (x=? AND y=?)*}
+} {*SEARCH t1 USING COVERING INDEX i1xy (x=? AND y=?)*}
 do_test where-1.9 {
   count {SELECT x, y FROM t1 WHERE y=144 AND w>10 AND x=3}
 } {3 144 3}
@@ -490,12 +489,12 @@ ifcapable subquery {
     count {
       SELECT * FROM t1 WHERE x IN (1,7) AND y IN (9,10) ORDER BY 1;
     }
-  } {2 1 9 4}
+  } {2 1 9 5}
   do_test where-5.15 {
     count {
       SELECT * FROM t1 WHERE x IN (1,7) AND y IN (9,16) ORDER BY 1;
     }
-  } {2 1 9 3 1 16 8}
+  } {2 1 9 3 1 16 9}
   do_test where-5.100 {
     db eval {
       SELECT w, x, y FROM t1 WHERE x IN (1,5) AND y IN (9,8,3025,1000,3969)
@@ -1348,15 +1347,24 @@ do_execsql_test where-18.1 {
   INSERT INTO t181 VALUES(1);
   SELECT DISTINCT a FROM t181 LEFT JOIN t182 ON a=b ORDER BY c IS NULL;
 } {1}
+do_execsql_test where-18.1rj {
+  SELECT DISTINCT a FROM t182 RIGHT JOIN t181 ON a=b ORDER BY c IS NULL;
+} {1}
 do_execsql_test where-18.2 {
   SELECT DISTINCT a FROM t181 LEFT JOIN t182 ON a=b ORDER BY +c;
 } {1}
 do_execsql_test where-18.3 {
   SELECT DISTINCT a FROM t181 LEFT JOIN t182 ON a=b ORDER BY c;
 } {1}
+do_execsql_test where-18.3rj {
+  SELECT DISTINCT a FROM t182 RIGHT JOIN t181 ON a=b ORDER BY c;
+} {1}
 do_execsql_test where-18.4 {
   INSERT INTO t181 VALUES(1),(1),(1),(1);
   SELECT DISTINCT a FROM t181 LEFT JOIN t182 ON a=b ORDER BY +c;
+} {1}
+do_execsql_test where-18.4rj {
+  SELECT DISTINCT a FROM t182 RIGHT JOIN t181 ON a=b ORDER BY +c;
 } {1}
 do_execsql_test where-18.5 {
   INSERT INTO t181 VALUES(2);
@@ -1425,5 +1433,188 @@ do_execsql_test where-22.1 {
   SELECT count(*) FROM t1 LEFT JOIN t2 ON a IS NOT NULL;
 } {5}
 
+# 20190-02-22:  A bug introduced by checkin
+# https://www.sqlite.org/src/info/fa792714ae62fa98.
+#
+do_execsql_test where-23.0 {
+  DROP TABLE IF EXISTS t1;
+  DROP TABLE IF EXISTS t2;
+  CREATE TABLE t1(a INTEGER PRIMARY KEY);
+  INSERT INTO t1(a) VALUES(1),(2),(3);
+  CREATE TABLE t2(x INTEGER PRIMARY KEY, y INT);
+  INSERT INTO t2(y) VALUES(2),(3);
+  SELECT * FROM t1, t2 WHERE a=y AND y=3;
+} {3 2 3}
+
+#-------------------------------------------------------------------------
+#
+reset_db
+do_execsql_test where-24.0 {
+  CREATE TABLE t1(a INTEGER PRIMARY KEY, b);
+  INSERT INTO t1 VALUES(1, 'one');
+  INSERT INTO t1 VALUES(2, 'two');
+  INSERT INTO t1 VALUES(3, 'three');
+  INSERT INTO t1 VALUES(4, 'four');
+}
+
+foreach {tn sql res} {
+  1 "SELECT b FROM t1"                   {one two three four}
+  2 "SELECT b FROM t1 WHERE a<4"         {one two three}
+  3 "SELECT b FROM t1 WHERE a>1"         {two three four}
+  4 "SELECT b FROM t1 WHERE a>1 AND a<4" {two three}
+
+  5 "SELECT b FROM t1 WHERE a>? AND a<4" {}
+  6 "SELECT b FROM t1 WHERE a>1 AND a<?" {}
+  7 "SELECT b FROM t1 WHERE a>? AND a<?" {}
+
+  7 "SELECT b FROM t1 WHERE a>=? AND a<=4" {}
+  8 "SELECT b FROM t1 WHERE a>=1 AND a<=?" {}
+  9 "SELECT b FROM t1 WHERE a>=? AND a<=?" {}
+} {
+  set rev [list]
+  foreach r $res { set rev [concat $r $rev] }
+
+  do_execsql_test where-24.$tn.1 "$sql"                     $res
+  do_execsql_test where-24.$tn.2 "$sql ORDER BY rowid"      $res
+  do_execsql_test where-24.$tn.3 "$sql ORDER BY rowid DESC" $rev
+
+  do_execsql_test where-24-$tn.4 "
+    BEGIN;
+      DELETE FROM t1;
+      $sql;
+      $sql ORDER BY rowid;
+      $sql ORDER BY rowid DESC;
+    ROLLBACK;
+  "
+}
+
+#-------------------------------------------------------------------------
+#
+reset_db
+do_execsql_test where-25.0 {
+  CREATE TABLE t1(a INTEGER PRIMARY KEY, b, c);
+  CREATE UNIQUE INDEX i1 ON t1(c);
+  INSERT INTO t1 VALUES(1, 'one', 'i');
+  INSERT INTO t1 VALUES(2, 'two', 'ii');
+
+  CREATE TABLE t2(a INTEGER PRIMARY KEY, b, c);
+  CREATE UNIQUE INDEX i2 ON t2(c);
+  INSERT INTO t2 VALUES(1, 'one', 'i');
+  INSERT INTO t2 VALUES(2, 'two', 'ii');
+  INSERT INTO t2 VALUES(3, 'three', 'iii');
+
+  PRAGMA writable_schema = 1;
+  UPDATE sqlite_schema SET rootpage = (
+    SELECT rootpage FROM sqlite_schema WHERE name = 'i2'
+  ) WHERE name = 'i1';
+}
+db close
+sqlite3 db test.db
+do_catchsql_test where-25.1 {
+  DELETE FROM t1 WHERE c='iii'
+} {1 {database disk image is malformed}}
+do_catchsql_test where-25.2 {
+  INSERT INTO t1 VALUES(4, 'four', 'iii') 
+    ON CONFLICT(c) DO UPDATE SET b=NULL
+} {1 {database disk image is malformed}}
+
+reset_db
+do_execsql_test where-25.3 {
+  CREATE TABLE t1(a PRIMARY KEY, b, c) WITHOUT ROWID;
+  CREATE UNIQUE INDEX i1 ON t1(c);
+  INSERT INTO t1 VALUES(1, 'one', 'i');
+  INSERT INTO t1 VALUES(2, 'two', 'ii');
+
+  CREATE TABLE t2(a INTEGER PRIMARY KEY, b, c);
+  CREATE UNIQUE INDEX i2 ON t2(c);
+  INSERT INTO t2 VALUES(1, 'one', 'i');
+  INSERT INTO t2 VALUES(2, 'two', 'ii');
+  INSERT INTO t2 VALUES(3, 'three', 'iii');
+
+  PRAGMA writable_schema = 1;
+  UPDATE sqlite_schema SET rootpage = (
+    SELECT rootpage FROM sqlite_schema WHERE name = 'i2'
+  ) WHERE name = 'i1';
+}
+db close
+sqlite3 db test.db
+do_catchsql_test where-25.4 {
+  SELECT * FROM t1 WHERE c='iii'
+} {0 {}}
+do_catchsql_test where-25.5 {
+  INSERT INTO t1 VALUES(4, 'four', 'iii') 
+    ON CONFLICT(c) DO UPDATE SET b=NULL
+} {1 {corrupt database}}
+
+# 2019-08-21 Ticket https://www.sqlite.org/src/info/d9f584e936c7a8d0
+#
+db close
+sqlite3 db :memory:
+do_execsql_test where-26.1 {
+  CREATE TABLE t0(c0 INTEGER PRIMARY KEY, c1 TEXT);
+  INSERT INTO t0(c0, c1) VALUES (1, 'a');
+  CREATE TABLE t1(c0 INT PRIMARY KEY, c1 TEXT);
+  INSERT INTO t1(c0, c1) VALUES (1, 'a');
+  SELECT * FROM t0 WHERE '-1' BETWEEN 0 AND t0.c0;
+} {1 a}
+do_execsql_test where-26.2 {
+  SELECT * FROM t1 WHERE '-1' BETWEEN 0 AND t1.c0;
+} {1 a}
+do_execsql_test where-26.3 {
+  SELECT * FROM t0 WHERE '-1'>=0 AND '-1'<=t0.c0;
+} {1 a}
+do_execsql_test where-26.4 {
+  SELECT * FROM t1 WHERE '-1'>=0 AND '-1'<=t1.c0;
+} {1 a}
+do_execsql_test where-26.5 {
+  SELECT '-1' BETWEEN 0 AND t0.c0 FROM t0;
+} {1}
+do_execsql_test where-26.6 {
+  SELECT '-1' BETWEEN 0 AND t1.c0 FROM t1;
+} {1}
+do_execsql_test where-26.7 {
+  SELECT '-1'>=0 AND '-1'<=t0.c0 FROM t0;
+} {1}
+do_execsql_test where-26.8 {
+  SELECT '-1'>=0 AND '-1'<=t1.c0 FROM t1;
+} {1}
+
+# 2021-07-19 https://sqlite.org/forum/forumpost/2bdb86a068
+# Lose of precision when doing comparisons between integer and
+# floating point values that are near 9223372036854775807 in the
+# OP_SeekGE opcode (and similar).
+#
+# Valgrind documentation acknowledges that under valgrind, FP calculations
+# may not be as accurate as on x86/amd64 hardware. This seems to be causing
+# these tests to fail.
+#
+#   https://valgrind.org/docs/manual/manual-core.html#manual-core.limits
+#
+if {[permutation]!="valgrind"} {
+  reset_db
+  do_execsql_test where-27.1 {
+    CREATE TABLE t1(a INTEGER PRIMARY KEY);
+    INSERT INTO t1(a) VALUES(9223372036854775807);
+    SELECT 1 FROM t1 WHERE a>=(9223372036854775807+1);
+  } {}
+  do_execsql_test where-27.2 {
+    SELECT a>=9223372036854775807+1 FROM t1;
+  } {0}
+}
+
+# 2022-05-10 dbsqlfuzz 4c5e3e89bc251d28378be88233f531b84ec66901
+# 
+reset_db
+do_execsql_test where-28.1 {
+  CREATE TABLE t1(a INTEGER PRIMARY KEY, b INT);
+  CREATE INDEX t1b ON t1(b,b,b,b,b,b,b,b,b,b,b,b,b);
+  INSERT INTO t1(a,b) VALUES(1,1),(15,2),(19,5);
+  UPDATE t1 SET b=999 WHERE a IN (SELECT 15) AND b IN (1,2);
+  SELECT * FROM t1;
+} {
+ 1  1
+ 15 999
+ 19 5
+}
 
 finish_test
