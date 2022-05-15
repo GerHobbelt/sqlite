@@ -5758,10 +5758,13 @@ static int selectExpander(Walker *pWalker, Select *p){
             pRight = sqlite3Expr(db, TK_ID, zName);
             zColname = zName;
             zToFree = 0;
-            if( longNames || pTabList->nSrc>1 ){
+            if( longNames || pTabList->nSrc>1 || IN_RENAME_OBJECT ){
               Expr *pLeft;
               pLeft = sqlite3Expr(db, TK_ID, zTabName);
               pExpr = sqlite3PExpr(pParse, TK_DOT, pLeft, pRight);
+              if( IN_RENAME_OBJECT && pE->pLeft ){
+                sqlite3RenameTokenRemap(pParse, pLeft, pE->pLeft);
+              }
               if( zSchemaName ){
                 pLeft = sqlite3Expr(db, TK_ID, zSchemaName);
                 pExpr = sqlite3PExpr(pParse, TK_DOT, pLeft, pExpr);
@@ -5774,6 +5777,7 @@ static int selectExpander(Walker *pWalker, Select *p){
               pExpr = pRight;
             }
             pNew = sqlite3ExprListAppend(pParse, pNew, pExpr);
+
             sqlite3TokenInit(&sColname, zColname);
             sqlite3ExprListSetName(pParse, pNew, &sColname, 0);
             if( pNew && (p->selFlags & SF_NestedFrom)!=0 && !IN_RENAME_OBJECT ){
