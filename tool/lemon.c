@@ -200,9 +200,9 @@ struct s_options {
   char *arg;
   const char *message;
 };
-int    OptInit(char**,struct s_options*,FILE*);
+int    OptInit(const char**,struct s_options*,FILE*);
 int    OptNArgs(void);
-char  *OptArg(int);
+const char *OptArg(int);
 void   OptErr(int);
 void   OptPrint(void);
 
@@ -415,7 +415,7 @@ struct lemon {
   char *extracode;         /* Code appended to the generated file */
   char *tokendest;         /* Code to execute to destroy token data */
   char *vardest;           /* Code for the default non-terminal destructor */
-  char *filename;          /* Name of the input file */
+  const char *filename;    /* Name of the input file */
   char *outname;           /* Name of the current output file */
   char *tokenprefix;       /* A prefix added to token names in the .h file */
   int nconflict;           /* Number of parsing conflicts */
@@ -426,7 +426,7 @@ struct lemon {
   int printPreprocessed;   /* Show preprocessor output on stdout */
   int has_fallback;        /* True if any %fallback is seen in the grammar */
   int nolinenosflag;       /* True if #line statements should not be printed */
-  char *argv0;             /* Name of the program */
+  const char *argv0;       /* Name of the program */
 };
 
 #define MemoryCheck(X) if((X)==0){ \
@@ -1522,8 +1522,9 @@ static char **azDefine = 0;  /* Name of the -D macros */
 /* This routine is called with the argument to each -D command-line option.
 ** Add the macro defined to the azDefine array.
 */
-static void handle_D_option(char *z){
+static void handle_D_option(const char *z){
   char **paz;
+  char *p;
   nDefine++;
   azDefine = (char **) realloc(azDefine, sizeof(azDefine[0])*nDefine);
   if( azDefine==0 ){
@@ -1537,14 +1538,14 @@ static void handle_D_option(char *z){
     exit(1);
   }
   lemon_strcpy(*paz, z);
-  for(z=*paz; *z && *z!='='; z++){}
-  *z = 0;
+  for(p=*paz; *p && *p!='='; p++){}
+  *p = 0;
 }
 
 /* Rember the name of the output directory 
 */
 static char *outputDir = NULL;
-static void handle_d_option(char *z){
+static void handle_d_option(const char *z){
   outputDir = (char *) malloc( lemonStrlen(z)+1 );
   if( outputDir==0 ){
     fprintf(stderr,"out of memory\n");
@@ -1554,7 +1555,7 @@ static void handle_d_option(char *z){
 }
 
 static char *user_templatename = NULL;
-static void handle_T_option(char *z){
+static void handle_T_option(const char *z){
   user_templatename = (char *) malloc( lemonStrlen(z)+1 );
   if( user_templatename==0 ){
     memory_error();
@@ -1922,7 +1923,7 @@ static char *msort(
   return ep;
 }
 /************************ From the file "option.c" **************************/
-static char **g_argv;
+static const char **g_argv;
 static struct s_options *op;
 static FILE *errstream;
 
@@ -2001,7 +2002,7 @@ static int handleflags(int i, FILE *err)
   }else if( op[j].type==OPT_FFLAG ){
     (*(void(*)(int))(op[j].arg))(v);
   }else if( op[j].type==OPT_FSTR ){
-    (*(void(*)(char *))(op[j].arg))(&g_argv[i][2]);
+    (*(void(*)(const char *))(op[j].arg))(&g_argv[i][2]);
   }else{
     if( err ){
       fprintf(err,"%smissing argument on switch.\n",emsg);
@@ -2102,7 +2103,7 @@ static int handleswitch(int i, FILE *err)
   return errcnt;
 }
 
-int OptInit(char **a, struct s_options *o, FILE *err)
+int OptInit(const char **a, struct s_options *o, FILE *err)
 {
   int errcnt = 0;
   g_argv = a;
@@ -2139,7 +2140,7 @@ int OptNArgs(void){
   return cnt;
 }
 
-char *OptArg(int n)
+const char *OptArg(int n)
 {
   int i;
   i = argindex(n);
@@ -2234,7 +2235,7 @@ enum e_state {
   WAITING_FOR_TOKEN_NAME
 };
 struct pstate {
-  char *filename;       /* Name of the input file */
+  const char *filename;      /* Name of the input file */
   int tokenlineno;      /* Linenumber at which current token starts */
   int errorcnt;         /* Number of errors so far */
   char *tokenstart;     /* Text of current token */
@@ -2631,7 +2632,8 @@ static void parseonetoken(struct pstate *psp)
     case WAITING_FOR_DECL_ARG:
       if( x[0]=='{' || x[0]=='\"' || ISALNUM(x[0]) ){
         const char *zOld, *zNew;
-        char *zBuf, *z;
+        char *zBuf;
+	const char *z;
         int nOld, n, nLine = 0, nNew, nBack;
         int addLineMacro;
         char zLine[50];
@@ -3184,12 +3186,12 @@ PRIVATE char *file_makename(struct lemon *lemp, const char *suffix)
 {
   char *name;
   char *cp;
-  char *filename = lemp->filename;
+  const char *filename = lemp->filename;
   int sz;
 
   if( outputDir ){
-    cp = strrchr(filename, '/');
-    if( cp ) filename = cp + 1;
+    const char *ccp = strrchr(filename, '/');
+    if( ccp ) filename = ccp + 1;
   }
   sz = lemonStrlen(filename);
   sz += lemonStrlen(suffix);
@@ -3522,7 +3524,7 @@ void ReportOutput(struct lemon *lemp)
 
 /* Search for the file "name" which is in the same directory as
 ** the executable */
-PRIVATE char *pathsearch(char *argv0, char *name, int modemask)
+PRIVATE char *pathsearch(const char *argv0, char *name, int modemask)
 {
   const char *pathlist;
   char *pathbufptr = 0;
@@ -3697,7 +3699,7 @@ PRIVATE FILE *tplt_open(struct lemon *lemp)
 }
 
 /* Print a #line directive line to the output file. */
-PRIVATE void tplt_linedir(FILE *out, int lineno, char *filename)
+PRIVATE void tplt_linedir(FILE *out, int lineno, const char *filename)
 {
   fprintf(out,"#line %d \"",lineno);
   while( *filename ){
