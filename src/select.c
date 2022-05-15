@@ -2324,8 +2324,10 @@ Table *sqlite3ResultSetOfSelect(Parse *pParse, Select *pSelect, char aff){
   u64 savedFlags;
 
   savedFlags = db->flags;
-  db->flags &= ~(u64)SQLITE_FullColNames;
-  db->flags |= SQLITE_ShortColNames;
+  if( (db->flags & SQLITE_FullColNames)!=0 ){
+    db->flags &= ~(u64)SQLITE_FullColNames;
+    db->flags |= SQLITE_ShortColNames;
+  }
   sqlite3SelectPrep(pParse, pSelect, 0);
   db->flags = savedFlags;
   if( pParse->nErr ) return 0;
