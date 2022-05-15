@@ -556,6 +556,7 @@ int SQLITE_NOINLINE sqlite3VdbeFinishMoveto(VdbeCursor*);
 int sqlite3VdbeCursorRestore(VdbeCursor*);
 u32 sqlite3VdbeSerialTypeLen(u32);
 u8 sqlite3VdbeOneByteSerialTypeLen(u8);
+u32 sqlite3VdbeSerialPut(unsigned char*, Mem*, u32);
 #ifdef SQLITE_MIXED_ENDIAN_64BIT_FLOAT
   u64 sqlite3FloatSwap(u64 in);
 # define swapMixedEndianFloat(X)  X = sqlite3FloatSwap(X)

@@ -4266,7 +4266,7 @@ int sqlite3WalLockForCommit(
                 rc = SQLITE_BUSY_SNAPSHOT;
               }else
               if( (pPg = sqlite3PagerLookup(pPg1->pPager, sLoc.aPgno[i-1])) ){
-                /* Page aPgno[i], which is present in the pager cache, has been
+                /* Page aPgno[i-1], which is present in the pager cache, has been
                 ** modified since the current CONCURRENT transaction was
                 ** started.  However it was not read by the current
                 ** transaction, so is not a conflict. There are two

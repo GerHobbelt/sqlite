@@ -5622,8 +5622,7 @@ case OP_Delete: {
 
 #ifdef SQLITE_ENABLE_PREUPDATE_HOOK
   /* Invoke the pre-update-hook if required. */
-  assert( db->xPreUpdateCallback==0 || pTab==pOp->p4.pTab );
-  if( pTab ){
+  if( pOp->p4.pTab ){
     rc = sqlite3BtreeScanWrite(pC->uc.pCursor, 0, pC->movetoTarget, 0, 0);
     if( rc ) goto abort_due_to_error;
     if( db->xPreUpdateCallback ){
