@@ -101,7 +101,7 @@ static const char * const sqlite3azCompileOpt[] = {
 #ifdef SQLITE_DEBUG
   "DEBUG",
 #endif
-#ifdef SQLITE_DEFAULT_AUTOMATIC_INDEX
+#if !defined(SQLITE_DEFAULT_AUTOMATIC_INDEX) || SQLITE_DEFAULT_AUTOMATIC_INDEX
   "DEFAULT_AUTOMATIC_INDEX",
 #endif
 #ifdef SQLITE_DEFAULT_AUTOVACUUM
