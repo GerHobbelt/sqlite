@@ -652,13 +652,14 @@ do_catchsql_test misc1-21.2 {
 
 # 2015-04-15
 do_execsql_test misc1-22.1 {
-  SELECT ""+3 FROM (SELECT ""+5);
+  SELECT ''+3 FROM (SELECT ''+5);
 } {3}
 
 # 2015-04-19: NULL pointer dereference on a corrupt schema
 #
 db close
 sqlite3 db :memory:
+sqlite3_db_config db DEFENSIVE 0
 do_execsql_test misc1-23.1 {
   CREATE TABLE t1(x);
   PRAGMA writable_schema=ON;
@@ -674,6 +675,7 @@ do_execsql_test misc1-23.1 {
 db close
 database_may_be_corrupt
 sqlite3 db :memory:
+sqlite3_db_config db DEFENSIVE 0
 do_catchsql_test misc1-23.2 {
   CREATE TABLE t1(x UNIQUE);
   PRAGMA writable_schema=ON;
@@ -685,6 +687,7 @@ do_catchsql_test misc1-23.2 {
 } {1 {no such table: F}}
 db close
 sqlite3 db :memory:
+sqlite3_db_config db DEFENSIVE 0
 do_catchsql_test misc1-23.3 {
   CREATE TABLE t1(x UNIQUE);
   PRAGMA writable_schema=ON;
@@ -725,7 +728,14 @@ do_execsql_test misc1-26.0 {
 # 2017-12-29
 #
 # The following behaviors (duplicate column names on an INSERT or UPDATE)
-# are undocumented.  These tests are added to ensure that historical behavior
+# are undocumented.  <<---  Not so.  There is a long-standing requirement
+# in lang_update.in to say that when the columns to be updated appear more
+# than once in an UPDATE statement that only the rightmost expression is used.
+# See e_update-1.6.* for the tests.  This is unfortunate, since omitting
+# that requirement would greatly simplify the fix to the problem identified
+# by forum post https://sqlite.org/forum/info/16ca0e9f32c38567
+#
+# These tests are added to ensure that historical behavior
 # does not change accidentally.
 #
 # For duplication columns on an INSERT, the first value is used.
@@ -741,5 +751,19 @@ do_execsql_test misc1-27.1 {
   SELECT a,b,c FROM dup1;
 } {10 11 12}
 
+# 2018-12-20
+#
+# The Cursor.seekOp debugging value set incorrectly
+# in OP_NotExists.
+#
+sqlite3 db :memory:
+do_execsql_test misc1-28.0 {
+  CREATE TABLE t1(x);
+  CREATE UNIQUE INDEX t1x ON t1(x) WHERE x=1;
+  INSERT OR ABORT INTO t1 DEFAULT VALUES;
+  UPDATE OR REPLACE t1 SET x = 1;
+  PRAGMA integrity_check;
+  SELECT * FROM t1;
+} {ok 1}
 
 finish_test

@@ -164,4 +164,90 @@ do_catchsql_test 2.3.1 {
   DELETE FROM p3 WHERE a=1
 } {1 {FOREIGN KEY constraint failed}}
 
+
+do_execsql_test 3.0 {
+  PRAGMA foreign_keys=ON;
+  CREATE TABLE t2(
+    a PRIMARY KEY, b, c, d, e,
+      FOREIGN KEY(b, c) REFERENCES t2(d, e)
+  ) WITHOUT ROWID;
+  CREATE UNIQUE INDEX idx ON t2(d, e);
+
+  INSERT INTO t2 VALUES(1, 'one', 'one', 'one', 'one'); -- row is parent of self
+  INSERT INTO t2 VALUES(2, 'one', 'one', 'one', NULL);  -- parent is row 1
+}
+
+do_catchsql_test 3.1 {
+  DELETE FROM t2 WHERE a=1;
+} {1 {FOREIGN KEY constraint failed}}
+
+do_execsql_test 4.0 {
+  CREATE TABLE t1 (
+      c1 PRIMARY KEY,
+      c2 NUMERIC,
+      FOREIGN KEY(c1) REFERENCES t1(c2)
+      ) WITHOUT ROWID ;
+  CREATE INDEX t1c1 ON t1(c1);
+  CREATE UNIQUE INDEX t1c1unique ON t1(c2);
+}
+do_catchsql_test 4.1 {
+  INSERT OR REPLACE INTO t1 VALUES(10000, 20000);
+} {1 {FOREIGN KEY constraint failed}}
+do_execsql_test 4.2 {
+  INSERT OR REPLACE INTO t1 VALUES(20000, 20000);
+}
+
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 5.0 {
+  PRAGMA foreign_keys = true;
+  CREATE TABLE parent(
+    p TEXT PRIMARY KEY
+  );
+  CREATE TABLE child(
+    c INTEGER UNIQUE, 
+    FOREIGN KEY(c) REFERENCES parent(p) DEFERRABLE INITIALLY DEFERRED
+  );
+  BEGIN;
+    INSERT INTO child VALUES(123);
+    INSERT INTO parent VALUES('123');
+  COMMIT;
+}
+do_execsql_test 5.1 {
+  PRAGMA integrity_check;
+} {ok}
+
+do_execsql_test 5.2 {
+  INSERT INTO parent VALUES(1200);
+  BEGIN;
+    INSERT INTO child VALUES(456);
+    UPDATE parent SET p = '456' WHERE p=1200;
+  COMMIT;
+}
+do_execsql_test 5.3 {
+  PRAGMA integrity_check;
+} {ok}
+
+#-------------------------------------------------------------------------
+reset_db
+forcedelete test.db2
+do_execsql_test 6.1 {
+  PRAGMA foreign_keys = on;
+  CREATE TABLE c1(b);
+  INSERT INTO c1 VALUES(123);
+}
+
+do_execsql_test 6.2 {
+  ATTACH 'test.db2' AS aux;
+  CREATE TABLE aux.p1(a INTEGER PRIMARY KEY);
+  CREATE TABLE aux.c1(b REFERENCES p1(a) ON DELETE RESTRICT);
+
+  INSERT INTO aux.p1 VALUES(123);
+}
+
+do_execsql_test 6.3 {
+  DELETE FROM aux.p1 WHERE a=123;
+}
+
+
 finish_test

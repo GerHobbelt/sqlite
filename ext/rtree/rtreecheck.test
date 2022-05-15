@@ -61,6 +61,7 @@ proc setup_simple_db {{module rtree}} {
     INSERT INTO r1 VALUES(4,  8, 8, 8, 8);  -- 21
     INSERT INTO r1 VALUES(5,  9, 9, 9, 9);  -- 27
   "
+  sqlite3_db_config db DEFENSIVE 0
 }
 
 setup_simple_db
@@ -112,16 +113,17 @@ do_execsql_test 3.1 {
   SELECT rtreecheck('r2') 
 } {ok}
 
+sqlite3_db_config db DEFENSIVE 0
 do_execsql_test 3.2 {
   BEGIN;
     UPDATE r2_node SET data = X'123456';
-    SELECT rtreecheck('r2')!="ok";
+    SELECT rtreecheck('r2')!='ok';
 } {1}
 
 do_execsql_test 3.3 {
   ROLLBACK;
   UPDATE r2_node SET data = X'00001234';
-  SELECT rtreecheck('r2')!="ok";
+  SELECT rtreecheck('r2')!='ok';
 } {1}
 
 do_execsql_test 4.0 {
@@ -140,6 +142,7 @@ do_execsql_test 5.0 {
   )
   INSERT INTO r3 SELECT i, i, i, i, i FROM x;
 }
+sqlite3_db_config db DEFENSIVE 0
 do_execsql_test 5.1 {
   BEGIN;
     UPDATE r3_node SET data = set_int32(data, 3, 5000);
@@ -155,4 +158,3 @@ do_execsql_test 5.2 {
 } 0
 
 finish_test
-

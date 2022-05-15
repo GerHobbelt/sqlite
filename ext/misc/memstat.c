@@ -143,7 +143,7 @@ static int memstatFindSchemas(memstat_cursor *pCur){
   }
   while( sqlite3_step(pStmt)==SQLITE_ROW ){
     char **az, *z;
-    az = sqlite3_realloc(pCur->azDb, sizeof(char*)*(pCur->nDb+1));
+    az = sqlite3_realloc64(pCur->azDb, sizeof(char*)*(pCur->nDb+1));
     if( az==0 ){
       memstatClearSchema(pCur);
       return SQLITE_NOMEM;
@@ -235,7 +235,7 @@ static int memstatNext(sqlite3_vtab_cursor *cur){
   assert( pCur->iRowid<=MSV_NROW );
   while(1){
     i = (int)pCur->iRowid - 1;
-    if( (aMemstatColumn[i].mNull & 2)!=0 || (++pCur->iDb)>=pCur->nDb ){
+    if( i<0 || (aMemstatColumn[i].mNull & 2)!=0 || (++pCur->iDb)>=pCur->nDb ){
       pCur->iRowid++;
       if( pCur->iRowid>MSV_NROW ) return SQLITE_OK;  /* End of the table */
       pCur->iDb = 0;
@@ -395,6 +395,7 @@ static sqlite3_module memstatModule = {
   0,                         /* xSavepoint */
   0,                         /* xRelease */
   0,                         /* xRollbackTo */
+  0,                         /* xShadowName */
 };
 
 #endif /* SQLITE_OMIT_VIRTUALTABLE */

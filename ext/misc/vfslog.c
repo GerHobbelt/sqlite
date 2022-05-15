@@ -276,7 +276,7 @@ static VLogLog *vlogLogOpen(const char *zFilename){
          && sqlite3_strglob("-mj??????9??", zFilename+nName-12)==0 ){
     return 0;  /* Do not log master journal files */
   }
-  pTemp = sqlite3_malloc( sizeof(*pLog)*2 + nName + 60 );
+  pTemp = sqlite3_malloc64( sizeof(*pLog)*2 + nName + 60 );
   if( pTemp==0 ) return 0;
   pMutex = sqlite3_mutex_alloc(SQLITE_MUTEX_STATIC_MASTER);
   sqlite3_mutex_enter(pMutex);
@@ -754,6 +754,7 @@ static int vlogCurrentTimeInt64(sqlite3_vfs *pVfs, sqlite3_int64 *p){
 */
 int sqlite3_register_vfslog(const char *zArg){
   vlog_vfs.pVfs = sqlite3_vfs_find(0);
+  if( vlog_vfs.pVfs==0 ) return SQLITE_ERROR;
   vlog_vfs.base.szOsFile = sizeof(VLogFile) + vlog_vfs.pVfs->szOsFile;
   return sqlite3_vfs_register(&vlog_vfs.base, 1);
 }

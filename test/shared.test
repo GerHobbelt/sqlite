@@ -160,11 +160,9 @@ do_test shared-$av.1.8 {
 } {}
 
 do_test shared-$av.2.1 {
-  # Open connection db3 to the database. Use a different path to the same
-  # file so that db3 does *not* share the same pager cache as db and db2
-  # (there should be two open file handles).
+  # Open connection db3 to the database.
   if {$::tcl_platform(platform)=="unix"} {
-    sqlite3 db3 ./test.db
+    sqlite3 db3 "file:test.db?cache=private" -uri 1
   } else {
     sqlite3 db3 TEST.DB
   }
@@ -800,7 +798,7 @@ do_test shared-$av.10.3 {
   # An external connection should be able to read the database, but not
   # prepare a write operation.
   if {$::tcl_platform(platform)=="unix"} {
-    sqlite3 db3 ./test.db
+    sqlite3 db3 "file:test.db?cache=private" -uri 1
   } else {
     sqlite3 db3 TEST.DB
   }
@@ -1145,38 +1143,40 @@ do_test shared-$av-16.8 {
 
 # Shared cache on named memory databases attached to readonly connections.
 #
-do_test shared-$av-16.8.1 {
+if {![sqlite3 -has-codec]} {
+  do_test shared-$av-16.8.1 {
+    db1 close
+    db2 close
+  
+    sqlite3 db test1.db
+    db eval { 
+      CREATE TABLE yy(a, b);
+      INSERT INTO yy VALUES(77, 88);
+    }
+    db close
+  
+    sqlite3 db1 test1.db -uri 1 -readonly 1
+    sqlite3 db2 test2.db -uri 1 
+  
+    db1 eval { 
+      ATTACH 'file:mem?mode=memory&cache=shared' AS shared; 
+      CREATE TABLE shared.xx(a, b);
+      INSERT INTO xx VALUES(55, 66);
+    }
+    db2 eval { 
+      ATTACH 'file:mem?mode=memory&cache=shared' AS shared;
+      SELECT * FROM xx;
+    }
+  } {55 66}
+  
+  do_test shared-$av-16.8.2 { db1 eval { SELECT * FROM yy } } {77 88}
+  do_test shared-$av-16.8.3 { 
+    list [catch {db1 eval { INSERT INTO yy VALUES(1, 2) }} msg] $msg
+  } {1 {attempt to write a readonly database}}
+  
   db1 close
   db2 close
-
-  sqlite3 db test1.db
-  db eval { 
-    CREATE TABLE yy(a, b);
-    INSERT INTO yy VALUES(77, 88);
-  }
-  db close
-
-  sqlite3 db1 test1.db -uri 1 -readonly 1
-  sqlite3 db2 test2.db -uri 1 
-
-  db1 eval { 
-    ATTACH 'file:mem?mode=memory&cache=shared' AS shared; 
-    CREATE TABLE shared.xx(a, b);
-    INSERT INTO xx VALUES(55, 66);
-  }
-  db2 eval { 
-    ATTACH 'file:mem?mode=memory&cache=shared' AS shared;
-    SELECT * FROM xx;
-  }
-} {55 66}
-
-do_test shared-$av-16.8.2 { db1 eval { SELECT * FROM yy } } {77 88}
-do_test shared-$av-16.8.3 { 
-  list [catch {db1 eval { INSERT INTO yy VALUES(1, 2) }} msg] $msg
-} {1 {attempt to write a readonly database}}
-
-db1 close
-db2 close
+}
 
 }  ;# end of autovacuum on/off loop
 

@@ -87,6 +87,7 @@ const char *sqlite3TestInit(Tcl_Interp *interp){
   extern int Sqlitetestintarray_Init(Tcl_Interp*);
   extern int Sqlitetestvfs_Init(Tcl_Interp *);
   extern int Sqlitetestrtree_Init(Tcl_Interp*);
+  extern int Sqlitetestrtreedoc_Init(Tcl_Interp*);
   extern int Sqlitequota_Init(Tcl_Interp*);
   extern int Sqlitemultiplex_Init(Tcl_Interp*);
   extern int SqliteSuperlock_Init(Tcl_Interp*);
@@ -106,6 +107,7 @@ const char *sqlite3TestInit(Tcl_Interp *interp){
 #endif
   extern int TestExpert_Init(Tcl_Interp*);
   extern int Sqlitetest_window_Init(Tcl_Interp *);
+  extern int Sqlitetestvdbecov_Init(Tcl_Interp *);
 
   Tcl_CmdInfo cmdInfo;
 
@@ -155,6 +157,7 @@ const char *sqlite3TestInit(Tcl_Interp *interp){
   Sqlitetestintarray_Init(interp);
   Sqlitetestvfs_Init(interp);
   Sqlitetestrtree_Init(interp);
+  Sqlitetestrtreedoc_Init(interp);
   Sqlitequota_Init(interp);
   Sqlitemultiplex_Init(interp);
   SqliteSuperlock_Init(interp);
@@ -171,6 +174,7 @@ const char *sqlite3TestInit(Tcl_Interp *interp){
 #endif
   TestExpert_Init(interp);
   Sqlitetest_window_Init(interp);
+  Sqlitetestvdbecov_Init(interp);
 
   Tcl_CreateObjCommand(
       interp, "load_testfixture_extensions", load_testfixture_extensions,0,0

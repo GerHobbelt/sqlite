@@ -146,7 +146,10 @@ static int SQLITE_TCLAPI test_sql_exec_changeset(
 static int test_tcl_integer(Tcl_Interp *interp, const char *zVar){
   Tcl_Obj *pObj;
   int iVal = 0;
-  pObj = Tcl_ObjGetVar2(interp, Tcl_NewStringObj(zVar, -1), 0, TCL_GLOBAL_ONLY);
+  Tcl_Obj *pName = Tcl_NewStringObj(zVar, -1);
+  Tcl_IncrRefCount(pName);
+  pObj = Tcl_ObjGetVar2(interp, pName, 0, TCL_GLOBAL_ONLY);
+  Tcl_DecrRefCount(pName);
   if( pObj ) Tcl_GetIntFromObj(0, pObj, &iVal);
   return iVal;
 }
@@ -227,7 +230,7 @@ static int SQLITE_TCLAPI test_session_cmd(
 ){
   TestSession *p = (TestSession*)clientData;
   sqlite3_session *pSession = p->pSession;
-  struct SessionSubcmd {
+  static struct SessionSubcmd {
     const char *zSub;
     int nArg;
     const char *zMsg;
@@ -242,6 +245,9 @@ static int SQLITE_TCLAPI test_session_cmd(
     { "table_filter", 1, "SCRIPT",     }, /* 6 */
     { "patchset",     0, "",           }, /* 7 */
     { "diff",         2, "FROMDB TBL", }, /* 8 */
+    { "memory_used",  0, "",           }, /* 9 */
+    { "changeset_size", 0, "",         }, /* 10 */
+    { "object_config_size", 1, "INTEGER", }, /* 11 */
     { 0 }
   };
   int iSub;
@@ -347,6 +353,35 @@ static int SQLITE_TCLAPI test_session_cmd(
       }
       break;
     }
+
+    case 9: {      /* memory_used */
+      sqlite3_int64 nMalloc = sqlite3session_memory_used(pSession);
+      Tcl_SetObjResult(interp, Tcl_NewWideIntObj(nMalloc));
+      break;
+    }
+
+    case 10: {
+      sqlite3_int64 nSize = sqlite3session_changeset_size(pSession);
+      Tcl_SetObjResult(interp, Tcl_NewWideIntObj(nSize));
+      break;
+    }
+    case 11: {
+      int rc;
+      int iArg;
+      if( Tcl_GetIntFromObj(interp, objv[2], &iArg) ){
+        return TCL_ERROR;
+      }
+      rc = sqlite3session_object_config(
+          pSession, SQLITE_SESSION_OBJCONFIG_SIZE, &iArg
+      );
+      if( rc!=SQLITE_OK ){
+        extern const char *sqlite3ErrName(int);
+        Tcl_SetObjResult(interp, Tcl_NewStringObj(sqlite3ErrName(rc), -1));
+      }else{
+        Tcl_SetObjResult(interp, Tcl_NewIntObj(iArg));
+      }
+      break;
+    }
   }
 
   return TCL_OK;
@@ -372,6 +407,7 @@ static int SQLITE_TCLAPI test_sqlite3session(
   Tcl_CmdInfo info;
   int rc;                         /* sqlite3session_create() return code */
   TestSession *p;                 /* New wrapper object */
+  int iArg = -1;
 
   if( objc!=4 ){
     Tcl_WrongNumArgs(interp, 1, objv, "CMD DB-HANDLE DB-NAME");
@@ -391,6 +427,13 @@ static int SQLITE_TCLAPI test_sqlite3session(
     ckfree((char*)p);
     return test_session_error(interp, rc, 0);
   }
+
+  /* Query the SQLITE_SESSION_OBJCONFIG_SIZE option to ensure that it
+  ** is clear by default. Then set it. */
+  sqlite3session_object_config(p->pSession,SQLITE_SESSION_OBJCONFIG_SIZE,&iArg);
+  assert( iArg==0 );
+  iArg = 1;
+  sqlite3session_object_config(p->pSession,SQLITE_SESSION_OBJCONFIG_SIZE,&iArg);
 
   Tcl_CreateObjCommand(
       interp, Tcl_GetString(objv[1]), test_session_cmd, (ClientData)p,
@@ -737,20 +780,32 @@ static int SQLITE_TCLAPI testSqlite3changesetApply(
   sStr.nStream = test_tcl_integer(interp, SESSION_STREAM_TCL_VAR);
 
   /* Check for the -nosavepoint flag */
-  if( bV2 && objc>1 ){
-    const char *z1 = Tcl_GetString(objv[1]);
-    int n = strlen(z1);
-    if( n>1 && n<=12 && 0==sqlite3_strnicmp("-nosavepoint", z1, n) ){
-      flags = SQLITE_CHANGESETAPPLY_NOSAVEPOINT;
-      objc--;
-      objv++;
+  if( bV2 ){
+    if( objc>1 ){
+      const char *z1 = Tcl_GetString(objv[1]);
+      int n = strlen(z1);
+      if( n>1 && n<=12 && 0==sqlite3_strnicmp("-nosavepoint", z1, n) ){
+        flags |= SQLITE_CHANGESETAPPLY_NOSAVEPOINT;
+        objc--;
+        objv++;
+      }
+    }
+    if( objc>1 ){
+      const char *z1 = Tcl_GetString(objv[1]);
+      int n = strlen(z1);
+      if( n>1 && n<=7 && 0==sqlite3_strnicmp("-invert", z1, n) ){
+        flags |= SQLITE_CHANGESETAPPLY_INVERT;
+        objc--;
+        objv++;
+      }
     }
   }
 
   if( objc!=4 && objc!=5 ){
     const char *zMsg;
     if( bV2 ){
-      zMsg = "?-nosavepoint? DB CHANGESET CONFLICT-SCRIPT ?FILTER-SCRIPT?";
+      zMsg = "?-nosavepoint? ?-inverse? "
+        "DB CHANGESET CONFLICT-SCRIPT ?FILTER-SCRIPT?";
     }else{
       zMsg = "DB CHANGESET CONFLICT-SCRIPT ?FILTER-SCRIPT?";
     }
@@ -969,31 +1024,56 @@ static int SQLITE_TCLAPI test_sqlite3session_foreach(
   Tcl_Obj *pCS;
   Tcl_Obj *pScript;
   int isCheckNext = 0;
+  int isInvert = 0;
 
   TestStreamInput sStr;
   memset(&sStr, 0, sizeof(sStr));
 
-  if( objc>1 ){
+  while( objc>1 ){
     char *zOpt = Tcl_GetString(objv[1]);
-    isCheckNext = (strcmp(zOpt, "-next")==0);
+    int nOpt = strlen(zOpt);
+    if( zOpt[0]!='-' ) break;
+    if( nOpt<=7 && 0==sqlite3_strnicmp(zOpt, "-invert", nOpt) ){
+      isInvert = 1;
+    }else
+    if( nOpt<=5 && 0==sqlite3_strnicmp(zOpt, "-next", nOpt) ){
+      isCheckNext = 1;
+    }else{
+      break;
+    }
+    objv++;
+    objc--;
   }
-  if( objc!=4+isCheckNext ){
-    Tcl_WrongNumArgs(interp, 1, objv, "?-next? VARNAME CHANGESET SCRIPT");
+  if( objc!=4 ){
+    Tcl_WrongNumArgs(
+        interp, 1, objv, "?-next? ?-invert? VARNAME CHANGESET SCRIPT");
     return TCL_ERROR;
   }
 
-  pVarname = objv[1+isCheckNext];
-  pCS = objv[2+isCheckNext];
-  pScript = objv[3+isCheckNext];
+  pVarname = objv[1];
+  pCS = objv[2];
+  pScript = objv[3];
 
   pChangeset = (void *)Tcl_GetByteArrayFromObj(pCS, &nChangeset);
   sStr.nStream = test_tcl_integer(interp, SESSION_STREAM_TCL_VAR);
-  if( sStr.nStream==0 ){
-    rc = sqlite3changeset_start(&pIter, nChangeset, pChangeset);
+  if( isInvert ){
+    int f = SQLITE_CHANGESETSTART_INVERT;
+    if( sStr.nStream==0 ){
+      rc = sqlite3changeset_start_v2(&pIter, nChangeset, pChangeset, f);
+    }else{
+      void *pCtx = (void*)&sStr;
+      sStr.aData = (unsigned char*)pChangeset;
+      sStr.nData = nChangeset;
+      rc = sqlite3changeset_start_v2_strm(&pIter, testStreamInput, pCtx, f);
+    }
   }else{
-    sStr.aData = (unsigned char*)pChangeset;
-    sStr.nData = nChangeset;
-    rc = sqlite3changeset_start_strm(&pIter, testStreamInput, (void*)&sStr);
+    if( sStr.nStream==0 ){
+      rc = sqlite3changeset_start(&pIter, nChangeset, pChangeset);
+    }else{
+      sStr.aData = (unsigned char*)pChangeset;
+      sStr.nData = nChangeset;
+      rc = sqlite3changeset_start_strm(&pIter, testStreamInput, (void*)&sStr);
+    }
   }
   if( rc!=SQLITE_OK ){
     return test_session_error(interp, rc, 0);
@@ -1094,7 +1174,7 @@ static int SQLITE_TCLAPI test_rebaser_cmd(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  struct RebaseSubcmd {
+  static struct RebaseSubcmd {
     const char *zSub;
     int nArg;
     const char *zMsg;
@@ -1202,6 +1282,45 @@ static int SQLITE_TCLAPI test_sqlite3rebaser_create(
   return TCL_OK;
 }
 
+/*
+** tclcmd: sqlite3rebaser_configure OP VALUE
+*/
+static int SQLITE_TCLAPI test_sqlite3session_config(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  static struct ConfigOpt {
+    const char *zSub;
+    int op;
+  } aSub[] = {
+    { "strm_size",    SQLITE_SESSION_CONFIG_STRMSIZE },
+    { "invalid",      0 },
+    { 0 }
+  };
+  int rc;
+  int iSub;
+  int iVal;
+
+  if( objc!=3 ){
+    Tcl_WrongNumArgs(interp, 1, objv, "OP VALUE");
+    return SQLITE_ERROR;
+  }
+  rc = Tcl_GetIndexFromObjStruct(interp, 
+      objv[1], aSub, sizeof(aSub[0]), "sub-command", 0, &iSub
+  );
+  if( rc!=TCL_OK ) return rc;
+  if( Tcl_GetIntFromObj(interp, objv[2], &iVal) ) return TCL_ERROR;
+
+  rc = sqlite3session_config(aSub[iSub].op, (void*)&iVal);
+  if( rc!=SQLITE_OK ){
+    return test_session_error(interp, rc, 0);
+  }
+  Tcl_SetObjResult(interp, Tcl_NewIntObj(iVal));
+  return TCL_OK;
+}
+
 int TestSession_Init(Tcl_Interp *interp){
   struct Cmd {
     const char *zCmd;
@@ -1217,6 +1336,7 @@ int TestSession_Init(Tcl_Interp *interp){
       test_sqlite3changeset_apply_replace_all },
     { "sql_exec_changeset", test_sql_exec_changeset },
     { "sqlite3rebaser_create", test_sqlite3rebaser_create },
+    { "sqlite3session_config", test_sqlite3session_config },
   };
   int i;
 

@@ -21,6 +21,7 @@ ifcapable !vtab||!compound {
   return
 }
 
+sqlite3_db_config db DEFENSIVE 0
 do_test 100 {
   execsql {
     PRAGMA auto_vacuum=0;
@@ -100,5 +101,11 @@ do_execsql_test 260 {
 do_catchsql_test 270 {
   PRAGMA aux1.integrity_check;
 } {0 ok}
+
+db close
+sqlite3 db :memory:
+do_execsql_test 300 {
+  SELECT * FROM sqlite_temp_schema, sqlite_dbpage;
+} {}
 
 finish_test

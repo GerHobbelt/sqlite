@@ -148,10 +148,8 @@ do_test attach-1.14 {
     ATTACH 'test.db' as db9;
   }
 } {1 {database db9 is already in use}}
-do_test attach-1.15 {
-  catchsql {
-    ATTACH 'test.db' as main;
-  }
+do_catchsql_test attach-1.15 {
+  ATTACH 'test.db' as main;
 } {1 {database main is already in use}}
 ifcapable tempdb {
   do_test attach-1.16 {
@@ -160,10 +158,8 @@ ifcapable tempdb {
     }
   } {1 {database temp is already in use}}
 }
-do_test attach-1.17 {
-  catchsql {
-    ATTACH 'test.db' as MAIN;
-  }
+do_catchsql_test attach-1.17 {
+  ATTACH 'test.db' as MAIN;
 } {1 {database MAIN is already in use}}
 do_test attach-1.18 {
   catchsql {
@@ -230,6 +226,7 @@ do_test attach-1.26 {
     DETACH main;
   }
 } {1 {cannot detach database main}}
+
 
 ifcapable tempdb {
   do_test attach-1.27 {
@@ -726,6 +723,32 @@ ifcapable subquery {
     } db2
   } {1 {trigger r5 cannot reference objects in database temp}}
 } ;# endif subquery
+ifcapable json1&&vtab {
+  do_test attach-5.10 {
+    db close
+    catch {db2 close}
+    forcedelete test.db
+    sqlite3 db test.db
+    db eval {
+      CREATE TABLE t1(x);
+      CREATE TABLE t2(a,b);
+      CREATE TRIGGER x1 AFTER INSERT ON t1 BEGIN
+        INSERT INTO t2(a,b) SELECT key, value FROM json_each(NEW.x);
+      END;
+      INSERT INTO t1(x) VALUES('{"a":1}');
+      SELECT * FROM t2;
+    }
+  } {a 1}
+  do_test attach-5.11 {
+    sqlite3 db2 :memory:
+    db2 eval {
+      CREATE TABLE t3(y);
+      ATTACH 'test.db' AS aux;
+      INSERT INTO aux.t1(x) VALUES('{"b":2}');
+      SELECT * FROM aux.t2;
+    }
+  } {a 1 b 2}
+} ;# endif json1
 } ;# endif trigger
 
 # Check to make sure we get a sensible error if unable to open
@@ -886,5 +909,20 @@ do_execsql_test attach-12.1 {
   INSERT INTO Table2 VALUES(1,2,3,4);
   PRAGMA integrity_check;
 } {ok}
+
+# 2021-03-10 Forum post https://sqlite.org/forum/forumpost/a006d86f72
+#
+reset_db
+do_test attach-13.1 {
+  sqlite3 db :memory:
+  db eval {CREATE TABLE base(x);}
+  for {set i 0} {$i<$SQLITE_MAX_ATTACHED} {incr i} {
+    db eval "ATTACH ':memory:' AS a$i"
+  }
+  set m "a[expr {$SQLITE_MAX_ATTACHED-1}]"
+  db eval "CREATE TABLE $m.t1(a INTEGER PRIMARY KEY, b);"
+  db eval "CREATE TABLE $m.t2(a INTEGER PRIMARY KEY, b);"
+  db eval {SELECT a FROM t1 WHERE b IN (SELECT a FROM t2);}
+} {}
 
 finish_test
