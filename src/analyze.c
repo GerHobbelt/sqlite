@@ -186,7 +186,7 @@ static void openStatTable(
   sqlite3 *db = pParse->db;
   Db *pDb;
   Vdbe *v = sqlite3GetVdbe(pParse);
-  int aRoot[ArraySize(aTable)];
+  u32 aRoot[ArraySize(aTable)];
   u8 aCreateTbl[ArraySize(aTable)];
 #ifdef SQLITE_ENABLE_STAT4
   const int nToOpen = OptimizationEnabled(db,SQLITE_Stat4) ? 2 : 1;
@@ -215,7 +215,7 @@ static void openStatTable(
         sqlite3NestedParse(pParse,
             "CREATE TABLE %Q.%s(%s)", pDb->zDbSName, zTab, aTable[i].zCols
         );
-        aRoot[i] = pParse->regRoot;
+        aRoot[i] = (u32)pParse->regRoot;
         aCreateTbl[i] = OPFLAG_P2ISREG;
       }
     }else{
@@ -235,7 +235,7 @@ static void openStatTable(
 #endif
       }else{
         /* The sqlite_stat[134] table already exists.  Delete all rows. */
-        sqlite3VdbeAddOp2(v, OP_Clear, aRoot[i], iDb);
+        sqlite3VdbeAddOp2(v, OP_Clear, (int)aRoot[i], iDb);
       }
     }
   }
@@ -243,7 +243,7 @@ static void openStatTable(
   /* Open the sqlite_stat[134] tables for writing. */
   for(i=0; i<nToOpen; i++){
     assert( i<ArraySize(aTable) );
-    sqlite3VdbeAddOp4Int(v, OP_OpenWrite, iStatCur+i, aRoot[i], iDb, 3);
+    sqlite3VdbeAddOp4Int(v, OP_OpenWrite, iStatCur+i, (int)aRoot[i], iDb, 3);
     sqlite3VdbeChangeP5(v, aCreateTbl[i]);
     VdbeComment((v, aTable[i].zName));
   }
@@ -433,7 +433,6 @@ static void statInit(
       + sizeof(tRowcnt)*3*nColUp*(nCol+mxSample);
   }
 #endif
-  db = sqlite3_context_db_handle(context);
   p = sqlite3DbMallocZero(db, n);
   if( p==0 ){
     sqlite3_result_error_nomem(context);
@@ -848,32 +847,29 @@ static void statGet(
     **   * "WHERE a=? AND b=?" matches 2 rows.
     **
     ** If D is the count of distinct values and K is the total number of 
-    ** rows, then each estimate is computed as:
+    ** rows, then each estimate is usually computed as:
     **
     **        I = (K+D-1)/D
+    **
+    ** In other words, I is K/D rounded up to the next whole integer.
+    ** However, if I is between 1.0 and 1.1 (in other words if I is
+    ** close to 1.0 but just a little larger) then do not round up but
+    ** instead keep the I value at 1.0.
     */
-    char *z;
-    int i;
+    sqlite3_str sStat;   /* Text of the constructed "stat" line */
+    int i;               /* Loop counter */
 
-    char *zRet = sqlite3MallocZero( (p->nKeyCol+1)*25 );
-    if( zRet==0 ){
-      sqlite3_result_error_nomem(context);
-      return;
-    }
-
-    sqlite3_snprintf(24, zRet, "%llu", 
+    sqlite3StrAccumInit(&sStat, 0, 0, 0, (p->nKeyCol+1)*100);
+    sqlite3_str_appendf(&sStat, "%llu", 
         p->nSkipAhead ? (u64)p->nEst : (u64)p->nRow);
-    z = zRet + sqlite3Strlen30(zRet);
     for(i=0; i<p->nKeyCol; i++){
       u64 nDistinct = p->current.anDLt[i] + 1;
       u64 iVal = (p->nRow + nDistinct - 1) / nDistinct;
-      sqlite3_snprintf(24, z, " %llu", iVal);
-      z += sqlite3Strlen30(z);
+      if( iVal==2 && p->nRow*10 <= nDistinct*11 ) iVal = 1;
+      sqlite3_str_appendf(&sStat, " %llu", iVal);
       assert( p->current.anEq[i] );
     }
-    assert( z[0]=='\0' && z>zRet );
-
-    sqlite3_result_text(context, zRet, -1, sqlite3_free);
+    sqlite3ResultStrAccum(context, &sStat);
   }
 #ifdef SQLITE_ENABLE_STAT4
   else if( eCall==STAT_GET_ROWID ){
@@ -892,6 +888,8 @@ static void statGet(
     }
   }else{
     tRowcnt *aCnt = 0;
+    sqlite3_str sStat;
+    int i;
 
     assert( p->iGet<p->nSample );
     switch( eCall ){
@@ -903,23 +901,12 @@ static void statGet(
         break;
       }
     }
-
-    {
-      char *zRet = sqlite3MallocZero(p->nCol * 25);
-      if( zRet==0 ){
-        sqlite3_result_error_nomem(context);
-      }else{
-        int i;
-        char *z = zRet;
-        for(i=0; i<p->nCol; i++){
-          sqlite3_snprintf(24, z, "%llu ", (u64)aCnt[i]);
-          z += sqlite3Strlen30(z);
-        }
-        assert( z[0]=='\0' && z>zRet );
-        z[-1] = '\0';
-        sqlite3_result_text(context, zRet, -1, sqlite3_free);
-      }
+    sqlite3StrAccumInit(&sStat, 0, 0, 0, p->nCol*100);
+    for(i=0; i<p->nCol; i++){
+      sqlite3_str_appendf(&sStat, "%llu ", (u64)aCnt[i]);
     }
+    if( sStat.nChar ) sStat.nChar--;
+    sqlite3ResultStrAccum(context, &sStat);
   }
 #endif /* SQLITE_ENABLE_STAT4 */
 #ifndef SQLITE_DEBUG
@@ -968,7 +955,7 @@ static void analyzeVdbeCommentIndexWithColumnName(
   }else if( i==XN_EXPR ){
     VdbeComment((v,"%s.expr(%d)",pIdx->zName, k));
   }else{
-    VdbeComment((v,"%s.%s", pIdx->zName, pIdx->pTable->aCol[i].zName));
+    VdbeComment((v,"%s.%s", pIdx->zName, pIdx->pTable->aCol[i].zCnName));
   }
 }
 #else
@@ -1015,7 +1002,7 @@ static void analyzeOneTable(
   if( v==0 || NEVER(pTab==0) ){
     return;
   }
-  if( pTab->tnum==0 ){
+  if( !IsOrdinaryTable(pTab) ){
     /* Do not gather statistics on views or virtual tables */
     return;
   }
@@ -1042,7 +1029,7 @@ static void analyzeOneTable(
     memcpy(pStat1->zName, "sqlite_stat1", 13);
     pStat1->nCol = 3;
     pStat1->iPKey = -1;
-    sqlite3VdbeAddOp4(pParse->pVdbe, OP_Noop, 0, 0, 0,(char*)pStat1,P4_DYNBLOB);
+    sqlite3VdbeAddOp4(pParse->pVdbe, OP_Noop, 0, 0, 0,(char*)pStat1,P4_DYNAMIC);
   }
 #endif
 
@@ -1772,6 +1759,7 @@ static int loadStatTbl(
     }
     pSpace = (tRowcnt*)&pIdx->aSample[nSample];
     pIdx->aAvgEq = pSpace; pSpace += nIdxCol;
+    pIdx->pTable->tabFlags |= TF_HasStat4;
     for(i=0; i<nSample; i++){
       pIdx->aSample[i].anEq = pSpace; pSpace += nIdxCol;
       pIdx->aSample[i].anLt = pSpace; pSpace += nIdxCol;
@@ -1839,9 +1827,12 @@ static int loadStatTbl(
 */
 static int loadStat4(sqlite3 *db, const char *zDb){
   int rc = SQLITE_OK;             /* Result codes from subroutines */
+  const Table *pStat4;
 
   assert( db->lookaside.bDisable );
-  if( sqlite3FindTable(db, "sqlite_stat4", zDb) ){
+  if( (pStat4 = sqlite3FindTable(db, "sqlite_stat4", zDb))!=0
+   && IsOrdinaryTable(pStat4)
+  ){
     rc = loadStatTbl(db,
       "SELECT idx,count(*) FROM %Q.sqlite_stat4 GROUP BY idx", 
       "SELECT idx,neq,nlt,ndlt,sample FROM %Q.sqlite_stat4",
@@ -1878,6 +1869,7 @@ int sqlite3AnalysisLoad(sqlite3 *db, int iDb){
   char *zSql;
   int rc = SQLITE_OK;
   Schema *pSchema = db->aDb[iDb].pSchema;
+  const Table *pStat1;
 
   assert( iDb>=0 && iDb<db->nDb );
   assert( db->aDb[iDb].pBt!=0 );
@@ -1900,7 +1892,9 @@ int sqlite3AnalysisLoad(sqlite3 *db, int iDb){
   /* Load new statistics out of the sqlite_stat1 table */
   sInfo.db = db;
   sInfo.zDatabase = db->aDb[iDb].zDbSName;
-  if( sqlite3FindTable(db, "sqlite_stat1", sInfo.zDatabase)!=0 ){
+  if( (pStat1 = sqlite3FindTable(db, "sqlite_stat1", sInfo.zDatabase))
+   && IsOrdinaryTable(pStat1)
+  ){
     zSql = sqlite3MPrintf(db, 
         "SELECT tbl,idx,stat FROM %Q.sqlite_stat1", sInfo.zDatabase);
     if( zSql==0 ){

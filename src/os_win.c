@@ -4070,9 +4070,13 @@ static int winShmLock(
   winFile *pDbFd = (winFile*)fd;        /* Connection holding shared memory */
   winShm *p = pDbFd->pShm;              /* The shared memory being locked */
   winShm *pX;                           /* For looping over all siblings */
-  winShmNode *pShmNode = p->pShmNode;
+  winShmNode *pShmNode;
   int rc = SQLITE_OK;                   /* Result code */
   u16 mask;                             /* Mask of locks to take or release */
+
+  if( p==0 ) return SQLITE_IOERR_SHMLOCK;
+  pShmNode = p->pShmNode;
+  if( NEVER(pShmNode==0) ) return SQLITE_IOERR_SHMLOCK;
 
   assert( ofst>=0 && ofst+n<=SQLITE_SHM_NLOCK );
   assert( n>=1 );
@@ -5126,7 +5130,11 @@ static int winOpen(
     dwCreationDisposition = OPEN_EXISTING;
   }
 
-  dwShareMode = FILE_SHARE_READ | FILE_SHARE_WRITE;
+  if( 0==sqlite3_uri_boolean(zName, "exclusive", 0) ){
+    dwShareMode = FILE_SHARE_READ | FILE_SHARE_WRITE;
+  }else{
+    dwShareMode = 0;
+  }
 
   if( isDelete ){
 #if SQLITE_OS_WINCE

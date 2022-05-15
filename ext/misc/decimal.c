@@ -459,10 +459,11 @@ static void decimalSubFunc(
   Decimal *pA = decimal_new(context, argv[0], 0, 0);
   Decimal *pB = decimal_new(context, argv[1], 0, 0);
   UNUSED_PARAMETER(argc);
-  if( pB==0 ) return;
-  pB->sign = !pB->sign;
-  decimal_add(pA, pB);
-  decimal_result(context, pA);
+  if( pB ){
+    pB->sign = !pB->sign;
+    decimal_add(pA, pB);
+    decimal_result(context, pA);
+  }
   decimal_free(pA);
   decimal_free(pB);
 }
@@ -599,7 +600,6 @@ int sqlite3_decimal_init(
   const sqlite3_api_routines *pApi
 ){
   int rc = SQLITE_OK;
-  SQLITE_EXTENSION_INIT2(pApi);
   static const struct {
     const char *zFuncName;
     int nArg;
@@ -613,6 +613,8 @@ int sqlite3_decimal_init(
   };
   unsigned int i;
   (void)pzErrMsg;  /* Unused parameter */
+
+  SQLITE_EXTENSION_INIT2(pApi);
 
   for(i=0; i<sizeof(aFunc)/sizeof(aFunc[0]) && rc==SQLITE_OK; i++){
     rc = sqlite3_create_function(db, aFunc[i].zFuncName, aFunc[i].nArg,

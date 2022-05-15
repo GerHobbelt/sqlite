@@ -60,7 +60,11 @@ do_multiclient_test tn {
   # Configure all connections to use a 1000 ms timeout.
   #
   do_test 2.$tn.0 {
+    code1 {
+      sqlite3 db1.2 test.db
+    }
     sql1 {
+      PRAGMA auto_vacuum = off;
       PRAGMA journal_mode = wal;
       CREATE TABLE t1(a, b);
       INSERT INTO t1 VALUES(1, 2);
@@ -69,7 +73,6 @@ do_multiclient_test tn {
       db2 timeout 1000
     }
     code1 {
-      sqlite3 db1.2 test.db
       db1.2 timeout 1000
       db    timeout 1000
       db1.2 eval {SELECT * FROM t1}
@@ -128,5 +131,40 @@ do_multiclient_test tn {
   }
 }
 
-finish_test
+#-------------------------------------------------------------------------
+# Check that even if the busy-handler fails (returns zero) within a
+# call to sqlite3_prepare() (or _v2(), or _v3()), it is still invoked
+# the next time an SQLITE_BUSY is encountered.
+#
+do_multiclient_test tn {
+  code1 {
+    set ::busy_called 0
+    proc busy {args} {
+      if {$::busy_called} { return 1 }
+      set ::busy_called 1
+      return 0
+    }
+    db busy busy
+  }
 
+  do_test 3.$tn.1 {
+    sql2 {
+      CREATE TABLE t1(x);
+      BEGIN EXCLUSIVE;
+        INSERT INTO t1 VALUES('x');
+    }
+  } {}
+
+  do_test 3.$tn.2 {
+    set ::busy_called 0
+    list [catch { sql1 { SELECT * FROM t1 } } msg] $::busy_called
+  } {1 1}
+
+  do_test 3.$tn.3 {
+    set ::busy_called 0
+    list [catch { sql1 { SELECT * FROM t1 } } msg] $::busy_called
+  } {1 1}
+
+}
+
+finish_test

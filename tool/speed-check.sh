@@ -62,6 +62,9 @@ while test "$1" != ""; do
     --without-rowid)
         SPEEDTEST_OPTS="$SPEEDTEST_OPTS $1"
         ;;
+    --strict)
+        SPEEDTEST_OPTS="$SPEEDTEST_OPTS $1"
+        ;;
     --nomemstat)
         SPEEDTEST_OPTS="$SPEEDTEST_OPTS $1"
         ;;
@@ -92,6 +95,9 @@ while test "$1" != ""; do
         ;;
     --cachesize)
         shift; SPEEDTEST_OPTS="$SPEEDTEST_OPTS --cachesize $1"
+        ;;
+    --checkpoint)
+        SPEEDTEST_OPTS="$SPEEDTEST_OPTS --checkpoint"
         ;;
     --explain)
         doExplain=1

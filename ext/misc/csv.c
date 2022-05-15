@@ -776,7 +776,7 @@ static int csvtabColumn(
   CsvCursor *pCur = (CsvCursor*)cur;
   CsvTable *pTab = (CsvTable*)cur->pVtab;
   if( i>=0 && i<pTab->nCol && pCur->azVal[i]!=0 ){
-    sqlite3_result_text(ctx, pCur->azVal[i], -1, SQLITE_STATIC);
+    sqlite3_result_text(ctx, pCur->azVal[i], -1, SQLITE_TRANSIENT);
   }
   return SQLITE_OK;
 }
@@ -941,7 +941,7 @@ int sqlite3_csv_init(
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi
 ){
-#ifndef SQLITE_OMIT_VIRTUALTABLE	
+#ifndef SQLITE_OMIT_VIRTUALTABLE
   int rc;
   SQLITE_EXTENSION_INIT2(pApi);
   rc = sqlite3_create_module(db, "csv", &CsvModule, 0);
