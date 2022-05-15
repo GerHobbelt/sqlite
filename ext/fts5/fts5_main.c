@@ -1732,7 +1732,6 @@ static int fts5UpdateMethod(
     }
   }
 
-  sqlite3Fts5IndexCloseReader(pTab->p.pIndex);
   pTab->p.pConfig->pzErrmsg = 0;
   return rc;
 }
