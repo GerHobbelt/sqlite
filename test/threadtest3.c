@@ -1494,12 +1494,14 @@ static void dynamic_triggers(int nMs){
 #include "tt3_stress.c"
 #include "tt3_shared.c"
 
+#include "tt3_bcwal2.c"
+
 
 #if defined(BUILD_MONOLITHIC)
 #define main(cnt, arr)      sqlite_threadtest3_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   struct ThreadTest {
     void (*xTest)(int);   /* Routine for running this test */
     const char *zTest;    /* Name of this test */
@@ -1523,6 +1525,8 @@ int main(int argc, const char **argv){
     { stress1,             "stress1", 10000 },
     { stress2,             "stress2", 60000 },
     { shared1,             "shared1", 10000 },
+
+    { bcwal2_1,            "bcwal2_1", 100000 },
   };
   static char *substArgv[] = { 0, "*", 0 };
   int i, iArg;

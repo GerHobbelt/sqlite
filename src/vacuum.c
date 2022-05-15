@@ -250,7 +250,9 @@ SQLITE_NOINLINE int sqlite3RunVacuum(
 
   /* Do not attempt to change the page size for a WAL database */
   if( sqlite3PagerGetJournalMode(sqlite3BtreePager(pMain))
-                                               ==PAGER_JOURNALMODE_WAL ){
+                                               ==PAGER_JOURNALMODE_WAL
+   && pOut==0
+  ){
     db->nextPagesize = 0;
   }
 
@@ -366,6 +368,7 @@ SQLITE_NOINLINE int sqlite3RunVacuum(
 
   assert( rc==SQLITE_OK );
   if( pOut==0 ){
+    nRes = sqlite3BtreeGetRequestedReserve(pTemp);
     rc = sqlite3BtreeSetPageSize(pMain, sqlite3BtreeGetPageSize(pTemp), nRes,1);
   }
 

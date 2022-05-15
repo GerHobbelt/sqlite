@@ -22,7 +22,7 @@
 #define main(cnt, arr)      sqlite_enlargedb_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   char *zEnd;
   long long int toAppend;
   long long int currentSz;

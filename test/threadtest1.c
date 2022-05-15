@@ -202,7 +202,6 @@ int thread_cnt = 0;
 
 static void *worker_bee(void *pArg){
   const char *zFilename = (char*)pArg;
-  char *azErr;
   int i, cnt;
   int t = atoi(zFilename);
   char **az;
@@ -259,7 +258,7 @@ static void *worker_bee(void *pArg){
 #define main(cnt, arr)      sqlite_threadtest1_main(cnt, arr)
 #endif
 
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   char *zFile;
   int i, n;
   pthread_t id;

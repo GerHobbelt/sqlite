@@ -1155,6 +1155,15 @@ static struct win_syscall {
 #define osFlushViewOfFile \
         ((BOOL(WINAPI*)(LPCVOID,SIZE_T))aSyscall[79].pCurrent)
 
+#if !SQLITE_OS_WINRT
+  { "GetFileInformationByHandle", (SYSCALL)GetFileInformationByHandle, 0 },
+#else
+  { "GetFileInformationByHandle", (SYSCALL)0,                  0 },
+#endif
+
+#define osGetFileInformationByHandle ((BOOL(WINAPI*)(HANDLE, \
+        LPBY_HANDLE_FILE_INFORMATION))aSyscall[80].pCurrent)
+
 }; /* End of the overrideable system calls */
 
 /*
@@ -3824,6 +3833,135 @@ static int winShmSystemLock(
 /* Forward references to VFS methods */
 static int winOpen(sqlite3_vfs*,const char*,sqlite3_file*,int,int*);
 static int winDelete(sqlite3_vfs *,const char*,int);
+static int winFullPathname(sqlite3_vfs *,const char *,int,char *);
+static void *winConvertFromUtf8Filename(const char *);
+
+#if !SQLITE_OS_WINRT
+/*
+** This function attempts to query the metadata information for the
+** specified file.  Upon success, SQLITE_OK is returned; otherwise,
+** an appropriate error code is returned.
+*/
+
+static int winGetFileInfo(
+  const char *zFilename,
+  winFile *pFile,
+  LPBY_HANDLE_FILE_INFORMATION pFileInfo
+){
+  int rc = SQLITE_OK;
+  HANDLE hFile = NULL;
+  int lastError = 0;
+  void *zConverted = winConvertFromUtf8Filename(zFilename);
+  if( zConverted==0 ){
+    lastError = osGetLastError();
+    if( pFile ) pFile->lastErrno = lastError;
+    return winLogError(SQLITE_IOERR_NOMEM, lastError,
+                       "winGetFileInfo1", zFilename);
+  }
+  if( osIsNT() ){
+    hFile = osCreateFileW(
+        (LPCWSTR)zConverted, GENERIC_READ,
+        FILE_SHARE_READ|FILE_SHARE_WRITE, NULL,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL
+    );
+#ifdef SQLITE_WIN32_HAS_ANSI
+  }else{
+    hFile = osCreateFileA(
+        (LPCSTR)zConverted, GENERIC_READ,
+        FILE_SHARE_READ|FILE_SHARE_WRITE, NULL,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL
+    );
+#endif
+  }
+  sqlite3_free(zConverted);
+  if( hFile==INVALID_HANDLE_VALUE ){
+    lastError = osGetLastError();
+    if( pFile ) pFile->lastErrno = lastError;
+    return winLogError(SQLITE_CANTOPEN, lastError,
+                       "winGetFileInfo2", zFilename);
+  }
+  if( !osGetFileInformationByHandle(hFile, pFileInfo) ){
+    lastError = osGetLastError();
+    if( pFile ) pFile->lastErrno = lastError;
+    rc = winLogError(SQLITE_IOERR_FSTAT, lastError,
+                     "winGetFileInfo3", zFilename);
+  }
+  osCloseHandle(hFile);
+  return rc;
+}
+#endif
+
+/*
+** Returns non-zero if both of the specified file names refer to the same
+** underlying file.  On some sub-platforms, this function may return zero
+** even when both file names refer to the same underlying file; however,
+** it will never return non-zero unless both file names refer to the same
+** underlying file.
+*/
+
+static int winIsSameFile(
+  sqlite3_vfs *pVfs,
+  winFile *pFile,
+  const char *zFilename1,
+  const char *zFilename2,
+  BOOL *pbSame
+){
+  *pbSame = 0; /* initially, assume not the same file */
+
+#if !SQLITE_OS_WINRT
+  {
+    BY_HANDLE_FILE_INFORMATION info1;
+    BY_HANDLE_FILE_INFORMATION info2;
+
+    if( !winGetFileInfo(zFilename1, pFile, &info1)
+     || !winGetFileInfo(zFilename2, pFile, &info2) ){
+      /* wrong file system type?  ok, use fallback. */
+      goto fallback;
+    }
+    if( info1.dwVolumeSerialNumber == info2.dwVolumeSerialNumber
+           && info1.nFileIndexHigh == info2.nFileIndexHigh
+            && info1.nFileIndexLow == info2.nFileIndexLow ){
+      OSTRACE(("SAME pid=%lu, pFile=%p, name1=%s, name2=%s, "
+               "YES (ID), rc=SQLITE_OK\n", osGetCurrentProcessId(),
+               pFile, zFilename1, zFilename2));
+      *pbSame = 1;
+      return SQLITE_OK;
+    }
+  }
+#endif
+
+fallback:
+  {
+    int rc = SQLITE_OK;
+    int nFull = pVfs->mxPathname+1;
+    char *zFull1 = NULL;
+    char *zFull2 = NULL;
+
+    zFull1 = sqlite3MallocZero( nFull );
+    if( zFull1==0 ){
+      rc = SQLITE_IOERR_NOMEM_BKPT;
+      goto done;
+    }
+    zFull2 = sqlite3MallocZero( nFull );
+    if( zFull2==0 ){
+      rc = SQLITE_IOERR_NOMEM_BKPT;
+      goto done;
+    }
+    rc = winFullPathname(pVfs, zFilename1, nFull, zFull1);
+    if( rc!=SQLITE_OK ) goto done;
+    rc = winFullPathname(pVfs, zFilename2, nFull, zFull2);
+    if( rc!=SQLITE_OK ) goto done;
+    *pbSame = sqlite3StrICmp(zFull1, zFull2)==0;
+done:
+    if( zFull2 ) sqlite3_free(zFull2);
+    if( zFull1 ) sqlite3_free(zFull1);
+    OSTRACE(("SAME pid=%lu, pFile=%p, name1=%s, name2=%s, "
+             "%s (NAME), rc=%s\n", osGetCurrentProcessId(),
+             pFile, zFilename1, zFilename2, *pbSame?"YES":"NO",
+             sqlite3ErrName(rc)));
+    return rc;
+  }
+}
 
 /*
 ** Purge the winShmNodeList list of all entries with winShmNode.nRef==0.
@@ -3940,10 +4078,13 @@ static int winOpenSharedMemory(winFile *pDbFd){
   */
   winShmEnterMutex();
   for(pShmNode = winShmNodeList; pShmNode; pShmNode=pShmNode->pNext){
-    /* TBD need to come up with better match here.  Perhaps
-    ** use FILE_ID_BOTH_DIR_INFO Structure.
-    */
-    if( sqlite3StrICmp(pShmNode->zFilename, pNew->zFilename)==0 ) break;
+    BOOL bSame;
+    rc = winIsSameFile(
+        pDbFd->pVfs, pDbFd, pShmNode->zFilename, pNew->zFilename,
+        &bSame
+    );
+    if( rc!=SQLITE_OK ) goto shm_open_err;
+    if( bSame ) break;
   }
   if( pShmNode ){
     sqlite3_free(pNew);
@@ -4070,9 +4211,13 @@ static int winShmLock(
   winFile *pDbFd = (winFile*)fd;        /* Connection holding shared memory */
   winShm *p = pDbFd->pShm;              /* The shared memory being locked */
   winShm *pX;                           /* For looping over all siblings */
-  winShmNode *pShmNode = p->pShmNode;
+  winShmNode *pShmNode;
   int rc = SQLITE_OK;                   /* Result code */
   u16 mask;                             /* Mask of locks to take or release */
+
+  if( p==0 ) return SQLITE_IOERR_SHMLOCK;
+  pShmNode = p->pShmNode;
+  if( NEVER(pShmNode==0) ) return SQLITE_IOERR_SHMLOCK;
 
   assert( ofst>=0 && ofst+n<=SQLITE_SHM_NLOCK );
   assert( n>=1 );
@@ -4990,7 +5135,7 @@ static int winOpen(
   int flags,                /* Open mode flags */
   int *pOutFlags            /* Status return flags */
 ){
-  HANDLE h;
+  HANDLE h = INVALID_HANDLE_VALUE;
   DWORD lastErrno = 0;
   DWORD dwDesiredAccess;
   DWORD dwShareMode;
@@ -5277,7 +5422,7 @@ static int winOpen(
     pFile->ctrlFlags |= WINFILE_RDONLY;
   }
   if( (flags & SQLITE_OPEN_MAIN_DB)
-   && sqlite3_uri_boolean(zName, "psow", SQLITE_POWERSAFE_OVERWRITE) 
+   && sqlite3_uri_boolean(zName, "psow", SQLITE_POWERSAFE_OVERWRITE)
   ){
     pFile->ctrlFlags |= WINFILE_PSOW;
   }
@@ -6105,7 +6250,7 @@ int sqlite3_os_init(void){
 
   /* Double-check that the aSyscall[] array has been constructed
   ** correctly.  See ticket [bb3a86e890c8e96ab] */
-  assert( ArraySize(aSyscall)==80 );
+  assert( ArraySize(aSyscall)==81 );
 
   /* get memory map allocation granularity */
   memset(&winSysInfo, 0, sizeof(SYSTEM_INFO));

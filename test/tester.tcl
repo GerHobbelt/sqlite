@@ -89,6 +89,9 @@
 #      verbose
 #
 
+# Only run this script once.  If sourced a second time, make it a no-op
+if {[info exists ::tester_tcl_has_run]} return
+
 # Set the precision of FP arithmatic used by the interpreter. And
 # configure SQLite to take database file locks on the page that begins
 # 64KB into the database file instead of the one 1GB in. This means
@@ -181,7 +184,7 @@ proc get_pwd {} {
       set comSpec {C:\Windows\system32\cmd.exe}
     }
     return [string map [list \\ /] \
-        [string trim [exec -- $comSpec /c echo %CD%]]]
+        [string trim [exec -- $comSpec /c CD]]]
   } else {
     return [pwd]
   }
@@ -1009,6 +1012,7 @@ proc query_plan_graph {sql} {
   append a [append_graph "  " dx cx 0]
   regsub -all { 0x[A-F0-9]+\y} $a { xxxxxx} a
   regsub -all {(MATERIALIZE|CO-ROUTINE|SUBQUERY) \d+\y} $a {\1 xxxxxx} a
+  regsub -all {\((join|subquery)-\d+\)} $a {(\1-xxxxxx)} a
   return $a
 }
 
@@ -1201,13 +1205,36 @@ proc speed_trial_summary {name} {
   }
 }
 
-# Run this routine last
+# Clear out left-over configuration setup from the end of a test
 #
-proc finish_test {} {
-  catch {db close}
+proc finish_test_precleanup {} {
   catch {db1 close}
   catch {db2 close}
   catch {db3 close}
+  catch {unregister_devsim}
+  catch {unregister_jt_vfs}
+  catch {unregister_demovfs}
+}
+
+# Run this routine last
+#
+proc finish_test {} {
+  global argv
+  finish_test_precleanup
+  if {[llength $argv]>0} {
+    # If additional test scripts are specified on the command-line, 
+    # run them also, before quitting.
+    proc finish_test {} {
+      finish_test_precleanup
+      return
+    }
+    foreach extra $argv {
+      puts "Running \"$extra\""
+      db_delete_and_reopen
+      uplevel #0 source $extra
+    }
+  }
+  catch {db close}
   if {0==[info exists ::SLAVE]} { finalize_testing }
 }
 proc finalize_testing {} {
@@ -2165,7 +2192,8 @@ proc drop_all_tables {{db db}} {
     set pk [$db one "PRAGMA foreign_keys"]
     $db eval "PRAGMA foreign_keys = OFF"
   }
-  foreach {idx name file} [db eval {PRAGMA database_list}] {
+  foreach {idx name file} [db eval {
+       SELECT seq AS idx, name, file FROM pragma_database_list}] {
     if {$idx==1} {
       set master sqlite_temp_master
     } else {
@@ -2467,13 +2495,44 @@ proc test_find_binary {nm} {
 }
 
 # Find the name of the 'shell' executable (e.g. "sqlite3.exe") to use for
-# the tests in shell[1-5].test. If no such executable can be found, invoke
+# the tests in shell*.test. If no such executable can be found, invoke
 # [finish_test ; return] in the callers context.
 #
 proc test_find_cli {} {
   set prog [test_find_binary sqlite3]
   if {$prog==""} { return -code return }
   return $prog
+}
+
+# Find invocation of the 'shell' executable (e.g. "sqlite3.exe") to use
+# for the tests in shell*.test with optional valgrind prefix when the
+# environment variable SQLITE_CLI_VALGRIND_OPT is set. The set value
+# operates as follows:
+#   empty or 0 => no valgrind prefix;
+#   1 => valgrind options for memory leak check;
+#   other => use value as valgrind options.
+# If shell not found, invoke [finish_test ; return] in callers context.
+#
+proc test_cli_invocation {} {
+  set prog [test_find_binary sqlite3]
+  if {$prog==""} { return -code return }
+  set vgrun [expr {[permutation]=="valgrind"}]
+  if {$vgrun || [info exists ::env(SQLITE_CLI_VALGRIND_OPT)]} {
+    if {$vgrun} {
+      set vgo "--quiet"
+    } else {
+      set vgo $::env(SQLITE_CLI_VALGRIND_OPT)
+    }
+    if {$vgo == 0 || $vgo eq ""} {
+      return $prog
+    } elseif {$vgo == 1} {
+      return "valgrind --quiet --leak-check=yes $prog"
+    } else {
+      return "valgrind $vgo $prog"
+    }
+  } else {
+    return $prog
+  }
 }
 
 # Find the name of the 'sqldiff' executable (e.g. "sqlite3.exe") to use for
@@ -2513,3 +2572,5 @@ extra_schema_checks 1
 
 source $testdir/thread_common.tcl
 source $testdir/malloc_common.tcl
+
+set tester_tcl_has_run 1

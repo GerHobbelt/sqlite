@@ -29,7 +29,7 @@
 ** the entire block.
 **
 ** For blocks of more than 16 bytes, the signature is a hex dump of the
-** first 8 bytes followed by a 64-bit has of the entire block.
+** first 8 bytes followed by a 64-bit hash of the entire block.
 */
 static void vlogSignature(unsigned char *p, int n, char *zCksum){
   unsigned int s0 = 0, s1 = 0;
@@ -94,7 +94,7 @@ endComputeSigs:
 /*
 ** Find page signatures for all named files.
 */
-int main(int argc, const char **argv){
+int main(int argc, const char** argv){
   int i;
   for(i=1; i<argc; i++) computeSigs(argv[i]);
   return 0;
