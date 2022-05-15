@@ -8827,7 +8827,7 @@ DISPATCHABLE_COMMAND( import ? 3 7 ){
     shell_out_of_memory();
   }
   nByte = strlen30(zSql);
-  rc = sqlite3_prepare_v2(p->db, zSql, -1, &pStmt, 0);
+  int rc = sqlite3_prepare_v2(p->db, zSql, -1, &pStmt, 0);
   import_append_char(&sCtx, 0);    /* To ensure sCtx.z is allocated */
   if( rc && sqlite3_strglob("no such table: *", sqlite3_errmsg(p->db))==0 ){
     sqlite3 *dbCols = 0;
