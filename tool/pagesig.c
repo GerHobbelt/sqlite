@@ -77,7 +77,7 @@ static void computeSigs(const char *zFilename){
   }
   rewind(in);
   for(n=1; (got=fread(aPage, 1, pgsz, in))==pgsz; n++){
-    vlogSignature(aPage, pgsz, aBuf);
+    vlogSignature(aPage, pgsz, (char *)aBuf);
     printf("%4d: %s\n", n, aBuf);
   }
 
