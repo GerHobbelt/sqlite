@@ -167,8 +167,5 @@ void sqlite3WalDb(Wal *pWal, sqlite3 *db);
 /* sqlite3_wal_info() data */
 int sqlite3WalInfo(Wal *pWal, u32 *pnPrior, u32 *pnFrame);
 
-/* sqlite3_wal_info() data */
-int sqlite3WalInfo(Wal *pWal, u32 *pnPrior, u32 *pnFrame);
-
 #endif /* ifndef SQLITE_OMIT_WAL */
 #endif /* SQLITE_WAL_H */

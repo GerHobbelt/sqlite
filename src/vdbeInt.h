@@ -506,6 +506,7 @@ struct PreUpdate {
   VdbeCursor *pCsr;               /* Cursor to read old values from */
   int op;                         /* One of SQLITE_INSERT, UPDATE, DELETE */
   u8 *aRecord;                    /* old.* database record */
+  int nRecord;                    /* Size of aRecord in bytes */
   KeyInfo keyinfo;
   UnpackedRecord *pUnpacked;      /* Unpacked version of aRecord[] */
   UnpackedRecord *pNewUnpacked;   /* Unpacked version of new.* record */
@@ -555,6 +556,7 @@ int SQLITE_NOINLINE sqlite3VdbeFinishMoveto(VdbeCursor*);
 int sqlite3VdbeCursorRestore(VdbeCursor*);
 u32 sqlite3VdbeSerialTypeLen(u32);
 u8 sqlite3VdbeOneByteSerialTypeLen(u8);
+u32 sqlite3VdbeSerialPut(unsigned char*, Mem*, u32);
 #ifdef SQLITE_MIXED_ENDIAN_64BIT_FLOAT
   u64 sqlite3FloatSwap(u64 in);
 # define swapMixedEndianFloat(X)  X = sqlite3FloatSwap(X)

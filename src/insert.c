@@ -2506,7 +2506,8 @@ static void codeWithoutRowidPreupdate(
   Parse *pParse,                  /* Parse context */
   Table *pTab,                    /* Table being updated */
   int iCur,                       /* Cursor number for table */
-  int regData                     /* Data containing new record */
+  int regData,                    /* Data containing new record */
+  u16 flags
 ){
   Vdbe *v = pParse->pVdbe;
   int r = sqlite3GetTempReg(pParse);
@@ -2514,11 +2515,11 @@ static void codeWithoutRowidPreupdate(
   assert( 0==(pParse->db->mDbFlags & DBFLAG_Vacuum) || CORRUPT_DB );
   sqlite3VdbeAddOp2(v, OP_Integer, 0, r);
   sqlite3VdbeAddOp4(v, OP_Insert, iCur, regData, r, (char*)pTab, P4_TABLE);
-  sqlite3VdbeChangeP5(v, OPFLAG_ISNOOP);
+  sqlite3VdbeChangeP5(v, flags);
   sqlite3ReleaseTempReg(pParse, r);
 }
 #else
-# define codeWithoutRowidPreupdate(a,b,c,d)
+# define codeWithoutRowidPreupdate(a,b,c,d,e)
 #endif
 
 /*
@@ -2568,8 +2569,10 @@ void sqlite3CompleteInsertion(
     if( IsPrimaryKeyIndex(pIdx) && !HasRowid(pTab) ){
       pik_flags |= OPFLAG_NCHANGE;
       pik_flags |= (update_flags & OPFLAG_SAVEPOSITION);
-      if( update_flags==0 ){
-        codeWithoutRowidPreupdate(pParse, pTab, iIdxCur+i, aRegIdx[i]);
+      if( 1 || update_flags==0 ){
+        codeWithoutRowidPreupdate(pParse, pTab, iIdxCur+i, aRegIdx[i],
+            OPFLAG_ISNOOP|(update_flags & OPFLAG_ISUPDATE)
+        );
       }
     }
     sqlite3VdbeAddOp4Int(v, OP_IdxInsert, iIdxCur+i, aRegIdx[i],
@@ -3113,7 +3116,7 @@ static int xferOptimization(
        && !HasRowid(pDest) 
        && IsPrimaryKeyIndex(pDestIdx) 
       ){
-        codeWithoutRowidPreupdate(pParse, pDest, iDest, regData);
+        codeWithoutRowidPreupdate(pParse, pDest, iDest, regData, OPFLAG_ISNOOP);
       }
     }
     sqlite3VdbeAddOp2(v, OP_IdxInsert, iDest, regData);
