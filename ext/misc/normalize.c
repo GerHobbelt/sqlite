@@ -249,42 +249,42 @@ static const unsigned char sqlite3CtypeMap[256] = {
 /*
 ** Token values
 */
-#define TK_SPACE    0
-#define TK_NAME     1
-#define TK_LITERAL  2
-#define TK_PUNCT    3
-#define TK_ERROR    4
+#define TKN_SPACE    0
+#define TKN_NAME     1
+#define TKN_LITERAL  2
+#define TKN_PUNCT    3
+#define TKN_ERROR    4
 
-#define TK_MINUS    TK_PUNCT
-#define TK_LP       TK_PUNCT
-#define TK_RP       TK_PUNCT
-#define TK_SEMI     TK_PUNCT
-#define TK_PLUS     TK_PUNCT
-#define TK_STAR     TK_PUNCT
-#define TK_SLASH    TK_PUNCT
-#define TK_REM      TK_PUNCT
-#define TK_EQ       TK_PUNCT
-#define TK_LE       TK_PUNCT
-#define TK_NE       TK_PUNCT
-#define TK_LSHIFT   TK_PUNCT
-#define TK_LT       TK_PUNCT
-#define TK_GE       TK_PUNCT
-#define TK_RSHIFT   TK_PUNCT
-#define TK_GT       TK_PUNCT
-#define TK_GE       TK_PUNCT
-#define TK_BITOR    TK_PUNCT
-#define TK_CONCAT   TK_PUNCT
-#define TK_COMMA    TK_PUNCT
-#define TK_BITAND   TK_PUNCT
-#define TK_BITNOT   TK_PUNCT
-#define TK_STRING   TK_LITERAL
-#define TK_ID       TK_NAME
-#define TK_ILLEGAL  TK_ERROR
-#define TK_DOT      TK_PUNCT
-#define TK_INTEGER  TK_LITERAL
-#define TK_FLOAT    TK_LITERAL
-#define TK_VARIABLE TK_LITERAL
-#define TK_BLOB     TK_LITERAL
+#define TKN_MINUS    TKN_PUNCT
+#define TKN_LP       TKN_PUNCT
+#define TKN_RP       TKN_PUNCT
+#define TKN_SEMI     TKN_PUNCT
+#define TKN_PLUS     TKN_PUNCT
+#define TKN_STAR     TKN_PUNCT
+#define TKN_SLASH    TKN_PUNCT
+#define TKN_REM      TKN_PUNCT
+#define TKN_EQ       TKN_PUNCT
+#define TKN_LE       TKN_PUNCT
+#define TKN_NE       TKN_PUNCT
+#define TKN_LSHIFT   TKN_PUNCT
+#define TKN_LT       TKN_PUNCT
+#define TKN_GE       TKN_PUNCT
+#define TKN_RSHIFT   TKN_PUNCT
+#define TKN_GT       TKN_PUNCT
+#define TKN_GE       TKN_PUNCT
+#define TKN_BITOR    TKN_PUNCT
+#define TKN_CONCAT   TKN_PUNCT
+#define TKN_COMMA    TKN_PUNCT
+#define TKN_BITAND   TKN_PUNCT
+#define TKN_BITNOT   TKN_PUNCT
+#define TKN_STRING   TKN_LITERAL
+#define TKN_ID       TKN_NAME
+#define TKN_ILLEGAL  TKN_ERROR
+#define TKN_DOT      TKN_PUNCT
+#define TKN_INTEGER  TKN_LITERAL
+#define TKN_FLOAT    TKN_LITERAL
+#define TKN_VARIABLE TKN_LITERAL
+#define TKN_BLOB     TKN_LITERAL
 
 /* Disable nuisance warnings about case fall-through */
 #if !defined(deliberate_fall_through) && defined(__GCC__) && __GCC__>=7
@@ -304,111 +304,111 @@ static int sqlite3GetToken(const unsigned char *z, int *tokenType){
                           ** above. */
     case CC_SPACE: {
       for(i=1; sqlite3Isspace(z[i]); i++){}
-      *tokenType = TK_SPACE;
+      *tokenType = TKN_SPACE;
       return i;
     }
     case CC_MINUS: {
       if( z[1]=='-' ){
         for(i=2; (c=z[i])!=0 && c!='\n'; i++){}
-        *tokenType = TK_SPACE;
+        *tokenType = TKN_SPACE;
         return i;
       }
-      *tokenType = TK_MINUS;
+      *tokenType = TKN_MINUS;
       return 1;
     }
     case CC_LP: {
-      *tokenType = TK_LP;
+      *tokenType = TKN_LP;
       return 1;
     }
     case CC_RP: {
-      *tokenType = TK_RP;
+      *tokenType = TKN_RP;
       return 1;
     }
     case CC_SEMI: {
-      *tokenType = TK_SEMI;
+      *tokenType = TKN_SEMI;
       return 1;
     }
     case CC_PLUS: {
-      *tokenType = TK_PLUS;
+      *tokenType = TKN_PLUS;
       return 1;
     }
     case CC_STAR: {
-      *tokenType = TK_STAR;
+      *tokenType = TKN_STAR;
       return 1;
     }
     case CC_SLASH: {
       if( z[1]!='*' || z[2]==0 ){
-        *tokenType = TK_SLASH;
+        *tokenType = TKN_SLASH;
         return 1;
       }
       for(i=3, c=z[2]; (c!='*' || z[i]!='/') && (c=z[i])!=0; i++){}
       if( c ) i++;
-      *tokenType = TK_SPACE;
+      *tokenType = TKN_SPACE;
       return i;
     }
     case CC_PERCENT: {
-      *tokenType = TK_REM;
+      *tokenType = TKN_REM;
       return 1;
     }
     case CC_EQ: {
-      *tokenType = TK_EQ;
+      *tokenType = TKN_EQ;
       return 1 + (z[1]=='=');
     }
     case CC_LT: {
       if( (c=z[1])=='=' ){
-        *tokenType = TK_LE;
+        *tokenType = TKN_LE;
         return 2;
       }else if( c=='>' ){
-        *tokenType = TK_NE;
+        *tokenType = TKN_NE;
         return 2;
       }else if( c=='<' ){
-        *tokenType = TK_LSHIFT;
+        *tokenType = TKN_LSHIFT;
         return 2;
       }else{
-        *tokenType = TK_LT;
+        *tokenType = TKN_LT;
         return 1;
       }
     }
     case CC_GT: {
       if( (c=z[1])=='=' ){
-        *tokenType = TK_GE;
+        *tokenType = TKN_GE;
         return 2;
       }else if( c=='>' ){
-        *tokenType = TK_RSHIFT;
+        *tokenType = TKN_RSHIFT;
         return 2;
       }else{
-        *tokenType = TK_GT;
+        *tokenType = TKN_GT;
         return 1;
       }
     }
     case CC_BANG: {
       if( z[1]!='=' ){
-        *tokenType = TK_ILLEGAL;
+        *tokenType = TKN_ILLEGAL;
         return 1;
       }else{
-        *tokenType = TK_NE;
+        *tokenType = TKN_NE;
         return 2;
       }
     }
     case CC_PIPE: {
       if( z[1]!='|' ){
-        *tokenType = TK_BITOR;
+        *tokenType = TKN_BITOR;
         return 1;
       }else{
-        *tokenType = TK_CONCAT;
+        *tokenType = TKN_CONCAT;
         return 2;
       }
     }
     case CC_COMMA: {
-      *tokenType = TK_COMMA;
+      *tokenType = TKN_COMMA;
       return 1;
     }
     case CC_AND: {
-      *tokenType = TK_BITAND;
+      *tokenType = TKN_BITAND;
       return 1;
     }
     case CC_TILDA: {
-      *tokenType = TK_BITNOT;
+      *tokenType = TKN_BITNOT;
       return 1;
     }
     case CC_QUOTE: {
@@ -426,19 +426,19 @@ static int sqlite3GetToken(const unsigned char *z, int *tokenType){
         }
       }
       if( c=='\'' ){
-        *tokenType = TK_STRING;
+        *tokenType = TKN_STRING;
         return i+1;
       }else if( c!=0 ){
-        *tokenType = TK_ID;
+        *tokenType = TKN_ID;
         return i+1;
       }else{
-        *tokenType = TK_ILLEGAL;
+        *tokenType = TKN_ILLEGAL;
         return i;
       }
     }
     case CC_DOT: {
       if( !sqlite3Isdigit(z[1]) ){
-        *tokenType = TK_DOT;
+        *tokenType = TKN_DOT;
         return 1;
       }
       /* If the next character is a digit, this is a floating point
@@ -446,7 +446,7 @@ static int sqlite3GetToken(const unsigned char *z, int *tokenType){
       /* no break */ deliberate_fall_through
     }
     case CC_DIGIT: {
-      *tokenType = TK_INTEGER;
+      *tokenType = TKN_INTEGER;
       if( z[0]=='0' && (z[1]=='x' || z[1]=='X') && sqlite3Isxdigit(z[2]) ){
         for(i=3; sqlite3Isxdigit(z[i]); i++){}
         return i;
@@ -455,7 +455,7 @@ static int sqlite3GetToken(const unsigned char *z, int *tokenType){
       if( z[i]=='.' ){
         i++;
         while( sqlite3Isdigit(z[i]) ){ i++; }
-        *tokenType = TK_FLOAT;
+        *tokenType = TKN_FLOAT;
       }
       if( (z[i]=='e' || z[i]=='E') &&
            ( sqlite3Isdigit(z[i+1]) 
@@ -464,21 +464,21 @@ static int sqlite3GetToken(const unsigned char *z, int *tokenType){
       ){
         i += 2;
         while( sqlite3Isdigit(z[i]) ){ i++; }
-        *tokenType = TK_FLOAT;
+        *tokenType = TKN_FLOAT;
       }
       while( IdChar(z[i]) ){
-        *tokenType = TK_ILLEGAL;
+        *tokenType = TKN_ILLEGAL;
         i++;
       }
       return i;
     }
     case CC_QUOTE2: {
       for(i=1, c=z[0]; c!=']' && (c=z[i])!=0; i++){}
-      *tokenType = c==']' ? TK_ID : TK_ILLEGAL;
+      *tokenType = c==']' ? TKN_ID : TKN_ILLEGAL;
       return i;
     }
     case CC_VARNUM: {
-      *tokenType = TK_VARIABLE;
+      *tokenType = TKN_VARIABLE;
       for(i=1; sqlite3Isdigit(z[i]); i++){}
       return i;
     }
@@ -487,7 +487,7 @@ static int sqlite3GetToken(const unsigned char *z, int *tokenType){
       int n = 0;
       testcase( z[0]=='$' );  testcase( z[0]=='@' );
       testcase( z[0]==':' );  testcase( z[0]=='#' );
-      *tokenType = TK_VARIABLE;
+      *tokenType = TKN_VARIABLE;
       for(i=1; (c=z[i])!=0; i++){
         if( IdChar(c) ){
           n++;
@@ -498,7 +498,7 @@ static int sqlite3GetToken(const unsigned char *z, int *tokenType){
           if( c==')' ){
             i++;
           }else{
-            *tokenType = TK_ILLEGAL;
+            *tokenType = TKN_ILLEGAL;
           }
           break;
         }else if( c==':' && z[i+1]==':' ){
@@ -507,7 +507,7 @@ static int sqlite3GetToken(const unsigned char *z, int *tokenType){
           break;
         }
       }
-      if( n==0 ) *tokenType = TK_ILLEGAL;
+      if( n==0 ) *tokenType = TKN_ILLEGAL;
       return i;
     }
     case CC_KYWD: {
@@ -519,16 +519,16 @@ static int sqlite3GetToken(const unsigned char *z, int *tokenType){
         i++;
         break;
       }
-      *tokenType = TK_ID;
+      *tokenType = TKN_ID;
       return i;
     }
     case CC_X: {
       testcase( z[0]=='x' ); testcase( z[0]=='X' );
       if( z[1]=='\'' ){
-        *tokenType = TK_BLOB;
+        *tokenType = TKN_BLOB;
         for(i=2; sqlite3Isxdigit(z[i]); i++){}
         if( z[i]!='\'' || i%2 ){
-          *tokenType = TK_ILLEGAL;
+          *tokenType = TKN_ILLEGAL;
           while( z[i] && z[i]!='\'' ){ i++; }
         }
         if( z[i] ) i++;
@@ -543,12 +543,12 @@ static int sqlite3GetToken(const unsigned char *z, int *tokenType){
       break;
     }
     default: {
-      *tokenType = TK_ILLEGAL;
+      *tokenType = TKN_ILLEGAL;
       return 1;
     }
   }
   while( IdChar(z[i]) ){ i++; }
-  *tokenType = TK_ID;
+  *tokenType = TKN_ID;
   return i;
 }
 
@@ -569,19 +569,19 @@ char *sqlite3_normalize(const char *zSql){
   for(i=j=0; zSql[i]; i += n){
     n = sqlite3GetToken((unsigned char*)zSql+i, &tokenType);
     switch( tokenType ){
-      case TK_SPACE: {
+      case TKN_SPACE: {
         break;
       }
-      case TK_ERROR: {
+      case TKN_ERROR: {
         sqlite3_free(z);
         return 0;
       }
-      case TK_LITERAL: {
+      case TKN_LITERAL: {
         z[j++] = '?';
         break;
       }
-      case TK_PUNCT:
-      case TK_NAME: {
+      case TKN_PUNCT:
+      case TKN_NAME: {
         if( n==4 && sqlite3_strnicmp(zSql+i,"NULL",4)==0 ){
           if( (j>=3 && strncmp(z+j-2,"is",2)==0 && !IdChar(z[j-3]))
            || (j>=4 && strncmp(z+j-3,"not",3)==0 && !IdChar(z[j-4]))
