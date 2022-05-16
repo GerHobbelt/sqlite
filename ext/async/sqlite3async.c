@@ -25,8 +25,12 @@
 #include <assert.h>
 
 /* Useful macros used in several places */
-#define MIN(x,y) ((x)<(y)?(x):(y))
-#define MAX(x,y) ((x)>(y)?(x):(y))
+#ifndef MIN
+# define MIN(A,B) ((A)<(B)?(A):(B))
+#endif
+#ifndef MAX
+# define MAX(A,B) ((A)>(B)?(A):(B))
+#endif
 
 #ifndef SQLITE_AMALGAMATION
 /* Macro to mark parameters as unused and silence compiler warnings. */
