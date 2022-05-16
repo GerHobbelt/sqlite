@@ -1190,6 +1190,11 @@ static int fuzzDoOneFuzz(
   return rc;
 }
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_ext_session_fuzzer_main(cnt, arr)
+#endif
+
 int main(int argc, char **argv){
   int nRepeat = 0;                /* Number of output files */
   int iSeed = 0;                  /* Value of PRNG seed */
