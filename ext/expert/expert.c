@@ -28,7 +28,7 @@ static int option_integer_arg(const char *zVal){
   return atoi(zVal);
 }
 
-static void usage(char **argv){
+static void usage(const char **argv){
   fprintf(stderr, "\n");
   fprintf(stderr, "Usage %s ?OPTIONS? DATABASE\n", argv[0]);
   fprintf(stderr, "\n");
@@ -97,7 +97,7 @@ int main(int argc, const char **argv){
     rc = 1;
   }else{
     for(i=1; i<(argc-1); i++){
-      char *zArg = argv[i];
+      const char *zArg = argv[i];
       int nArg;
       if( zArg[0]=='-' && zArg[1]=='-' && zArg[2]!=0 ) zArg++;
       nArg = (int)strlen(zArg);
