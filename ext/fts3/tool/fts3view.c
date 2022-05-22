@@ -25,7 +25,7 @@
 ** Extra command-line arguments:
 */
 int nExtra;
-char **azExtra;
+const char **azExtra;
 
 /*
 ** Look for a command-line argument.
@@ -129,22 +129,26 @@ static void showSchema(sqlite3 *db, const char *zTab){
   sqlite3_finalize(pStmt);
 }
 
-/* 
+#ifndef SQLITEINT_H
+
+/*
 ** Read a 64-bit variable-length integer from memory starting at p[0].
 ** Return the number of bytes read, or 0 on error.
 ** The value is stored in *v.
 */
-int getVarint(const unsigned char *p, sqlite_int64 *v){
+u8 sqlite3GetVarint(const unsigned char *p, u64 *v) {
   const unsigned char *q = p;
   sqlite_uint64 x = 0, y = 1;
-  while( (*q&0x80)==0x80 && q-(unsigned char *)p<9 ){
+  while( (*q&0x80)==0x80 && q-p<9 ){
     x += y * (*q++ & 0x7f);
     y <<= 7;
   }
   x += y * (*q++);
-  *v = (sqlite_int64) x;
-  return (int) (q - (unsigned char *)p);
+  *v = x;
+  return (q - p);
 }
+
+#endif
 
 
 /* Show the content of the %_stat table
@@ -815,7 +819,12 @@ static void usage(const char *argv0){
   exit(1);
 }
 
-int main(int argc, char **argv){
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_fts3view_main(cnt, arr)
+#endif
+
+int main(int argc, const char **argv){
   sqlite3 *db;
   int rc;
   const char *zTab;
