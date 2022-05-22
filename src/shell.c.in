@@ -7915,6 +7915,7 @@ DISPATCHABLE_COMMAND( changes 3 2 2 ){
   return 0;
 }
 DISPATCHABLE_COMMAND( check 3 0 0 ){
+#ifndef SQLITE_SHELL_WASM_MODE
   /* Cancel output redirection, if it is currently set (by .testcase)
   ** Then read the content of the testcase-out.txt file and compare against
   ** azArg[1].  If there are differences, report an error and exit.
@@ -7939,11 +7940,14 @@ DISPATCHABLE_COMMAND( check 3 0 0 ){
   }
   sqlite3_free(zRes);
   return rc;
+#endif /* !defined(SQLITE_SHELL_WASM_MODE) */
 }
 DISPATCHABLE_COMMAND( clone ? 2 2 ){
+#ifndef SQLITE_SHELL_WASM_MODE
   if( p->bSafeMode ) return SHELL_FORBIDDEN_OP;
   tryToClone(p, azArg[1]);
   return 0;
+#endif /* !defined(SQLITE_SHELL_WASM_MODE) */
 }
 DISPATCHABLE_COMMAND( connection ? 1 4 ){
   if( nArg==1 ){
