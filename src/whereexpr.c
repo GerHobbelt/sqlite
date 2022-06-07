@@ -1106,6 +1106,7 @@ static void exprAnalyze(
     printf("\n*** Incorrect prereqAll computed for:\n");
     sqlite3TreeViewExpr(0,pExpr,0);
     assert( 0 );
+    abort();
   }
 #endif
 
