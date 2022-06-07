@@ -34,7 +34,9 @@ typedef sqlite3_uint64 u64;
 # define ArraySize(x) ((int)(sizeof(x) / sizeof(x[0])))
 #endif
 
+#ifndef testcase
 #define testcase(x)
+#endif
 
 #if defined(SQLITE_COVERAGE_TEST) || defined(SQLITE_MUTATION_TEST)
 # define SQLITE_OMIT_AUXILIARY_SAFETY_CHECKS 1
@@ -50,8 +52,12 @@ typedef sqlite3_uint64 u64;
 # define NEVER(X)       (X)
 #endif
 
+#ifndef MIN
 #define MIN(x,y) (((x) < (y)) ? (x) : (y))
+#endif
+#ifndef MAX
 #define MAX(x,y) (((x) > (y)) ? (x) : (y))
+#endif
 
 /*
 ** Constants for the largest and smallest possible 64-bit signed integers.
