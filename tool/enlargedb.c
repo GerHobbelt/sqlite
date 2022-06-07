@@ -38,12 +38,12 @@ int main(int argc, const char** argv){
   if( zEnd==argv[2] || zEnd[0] ) goto usage_error;
   if( toAppend<1 ){
     fprintf(stderr, "N must be at least 1\n");
-    exit(1);
+    return 1;
   }
   f = fopen(argv[1], "r+b");
   if( f==0 ){
     fprintf(stderr, "cannot open \"%s\" for reading and writing\n", argv[1]);
-    exit(1);
+     return 1;
   }
   got = fread(buf, 1, sizeof(buf), f);
   if( got!=sizeof(buf) ) goto not_valid_db;
@@ -67,9 +67,9 @@ int main(int argc, const char** argv){
 
 not_valid_db:
   fprintf(stderr,"not a valid database: %s\n", argv[1]);
-  exit(1);
+  return 1;
 
 usage_error:
   fprintf(stderr,"Usage: %s DATABASE N\n", argv[0]);
-  exit(1);
+  return 1;
 }

@@ -56,6 +56,11 @@ static void checkSpacing(const char *zFile, unsigned flags){
   }
 }
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_check_spacing_main(cnt, arr)
+#endif
+
 int main(int argc, const char **argv){
   int i;
   unsigned flags = WSEOL_OK;

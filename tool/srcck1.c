@@ -140,6 +140,11 @@ static unsigned int findAllSideEffects(const char *z){
   return nErr;
 }
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_srcck1_main(cnt, arr)
+#endif
+
 int main(int argc, const char **argv){
   char *z;
   unsigned int nErr = 0;

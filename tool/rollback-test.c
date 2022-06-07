@@ -72,6 +72,11 @@ static void runSql(sqlite3 *db, const char *zSql){
   }
 }
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_rollback_test_main(cnt, arr)
+#endif
+
 int main(int argc, const char **argv){
   sqlite3 *db;
   int i;

@@ -25,7 +25,7 @@
 ** Extra command-line arguments:
 */
 int nExtra;
-char **azExtra;
+const char **azExtra;
 
 /*
 ** Look for a command-line argument.
@@ -815,7 +815,12 @@ static void usage(const char *argv0){
   exit(1);
 }
 
-int main(int argc, char **argv){
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_fts3view_main(cnt, arr)
+#endif
+
+int main(int argc, const char **argv){
   sqlite3 *db;
   int rc;
   const char *zTab;
