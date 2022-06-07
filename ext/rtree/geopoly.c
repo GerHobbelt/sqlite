@@ -866,7 +866,7 @@ static void geopolyWithinFunc(
   sqlite3_free(p2);
 }
 
-/* Objects used by the overlap algorihm. */
+/* Objects used by the overlap algorithm. */
 typedef struct GeoEvent GeoEvent;
 typedef struct GeoSegment GeoSegment;
 typedef struct GeoOverlap GeoOverlap;
@@ -1262,7 +1262,9 @@ static int geopolyInit(
   pSql = sqlite3_str_new(db);
   sqlite3_str_appendf(pSql, "CREATE TABLE x(_shape");
   pRtree->nAux = 1;         /* Add one for _shape */
+#ifdef SQLITE_ENABLE_GEOPOLY
   pRtree->nAuxNotNull = 1;  /* The _shape column is always not-null */
+#endif
   for(ii=3; ii<argc; ii++){
     pRtree->nAux++;
     sqlite3_str_appendf(pSql, ",%s", argv[ii]);
