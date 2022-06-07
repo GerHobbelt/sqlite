@@ -21,7 +21,6 @@ ifcapable !altertable {
   return
 }
 
-
 set ::TMPDBERROR [list 1 \
   {unable to open a temporary database file for storing temporary tables}
 ]
@@ -47,7 +46,6 @@ do_faultsim_test 1 -prep {
 } -test {
   faultsim_test_result {0 {}} $::TMPDBERROR
 }
-
 
 #-------------------------------------------------------------------------
 # dbsqlfuzz e3dd84cda3848016a6a6024c7249d09bc2ef2615

@@ -1770,7 +1770,7 @@ static int walIndexRecover(Wal *pWal){
   /* Obtain an exclusive lock on all byte in the locking range not already
   ** locked by the caller. The caller is guaranteed to have locked the
   ** WAL_WRITE_LOCK byte, and may have also locked the WAL_CKPT_LOCK byte.
-  ** If successful, the same bytes that are locked here are concurrent before
+  ** If successful, the same bytes that are locked here are unlocked before
   ** this function returns.
   */
   assert( pWal->ckptLock==1 || pWal->ckptLock==0 );
@@ -4265,7 +4265,7 @@ int sqlite3WalLockForCommit(
                 rc = SQLITE_BUSY_SNAPSHOT;
               }else
               if( (pPg = sqlite3PagerLookup(pPg1->pPager, sLoc.aPgno[i-1])) ){
-                /* Page aPgno[i], which is present in the pager cache, has been
+                /* Page aPgno[i-1], which is present in the pager cache, has been
                 ** modified since the current CONCURRENT transaction was
                 ** started.  However it was not read by the current
                 ** transaction, so is not a conflict. There are two
@@ -4856,7 +4856,6 @@ int sqlite3WalFrames(
     iOffset += szFrame;
     p->flags |= PGHDR_WAL_APPEND;
   }
-
 
   /* Recalculate checksums within the wal file if required. */
   if( isCommit && pWal->iReCksum ){

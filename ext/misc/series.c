@@ -86,7 +86,7 @@ struct series_cursor {
   int isDesc;                /* True to count down rather than up */
   sqlite3_int64 iRowid;      /* The rowid */
   sqlite3_int64 iValue;      /* Current value ("value") */
-  sqlite3_int64 mnValue;     /* Mimimum value ("start") */
+  sqlite3_int64 mnValue;     /* Minimum value ("start") */
   sqlite3_int64 mxValue;     /* Maximum value ("stop") */
   sqlite3_int64 iStep;       /* Increment ("step") */
 };
