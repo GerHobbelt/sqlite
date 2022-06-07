@@ -90,6 +90,7 @@ struct VLogFile {
   VLogLog *pLog;                  /* The log file for this file */
 };
 
+#undef REALVFS(p)
 #define REALVFS(p) (((VLogVfs*)(p))->pVfs)
 
 /*

@@ -140,6 +140,7 @@ struct VStatFile {
   unsigned char eFiletype;        /* What type of file is this */
 };
 
+#undef REALVFS(p)
 #define REALVFS(p) (((VStatVfs*)(p))->pVfs)
 
 /*
