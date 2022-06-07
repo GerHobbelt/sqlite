@@ -3664,6 +3664,7 @@ static int whereLoopAddVirtualOne(
         *pbIn = 1; assert( (mExclude & WO_IN)==0 );
       }
 
+      assert( pbRetryLimit || !isLimitTerm(pTerm) );
       if( isLimitTerm(pTerm) && *pbIn ){
         /* If there is an IN(...) term handled as an == (separate call to
         ** xFilter for each value on the RHS of the IN) and a LIMIT or
@@ -4137,7 +4138,9 @@ static int whereLoopAddAll(WhereLoopBuilder *pBuilder){
   SrcItem *pEnd = &pTabList->a[pWInfo->nLevel];
   sqlite3 *db = pWInfo->pParse->db;
   int rc = SQLITE_OK;
+  int bFirstPastRJ = 0;
   WhereLoop *pNew;
+
 
   /* Loop over the tables in the join, from left to right */
   pNew = pBuilder->pNew;
@@ -4148,10 +4151,13 @@ static int whereLoopAddAll(WhereLoopBuilder *pBuilder){
     pNew->iTab = iTab;
     pBuilder->iPlanLimit += SQLITE_QUERY_PLANNER_LIMIT_INCR;
     pNew->maskSelf = sqlite3WhereGetMask(&pWInfo->sMaskSet, pItem->iCursor);
-    if( (pItem->fg.jointype & (JT_OUTER|JT_CROSS))!=0 ){
-      /* This condition is true when pItem is the FROM clause term on the
-      ** right-hand-side of a OUTER or CROSS JOIN.  */
+    if( bFirstPastRJ || (pItem->fg.jointype & (JT_OUTER|JT_CROSS))!=0 ){
+      /* Add prerequisites to prevent reordering of FROM clause terms
+      ** across CROSS joins and outer joins.  The bFirstPastRJ boolean
+      ** prevents the right operand of a RIGHT JOIN from being swapped with
+      ** other elements even further to the right. */
       mPrereq |= mPrior;
+      bFirstPastRJ = (pItem->fg.jointype & JT_RIGHT)!=0;
     }
 #ifndef SQLITE_OMIT_VIRTUALTABLE
     if( IsVirtual(pItem->pTab) ){
@@ -5938,7 +5944,7 @@ WhereInfo *sqlite3WhereBegin(
       if( pSrc->fg.isCorrelated ){
         sqlite3VdbeAddOp2(v, OP_Gosub, pSrc->regReturn, pSrc->addrFillSub);
       }else{
-        int iOnce = sqlite3VdbeAddOp0(v, OP_Once);
+        int iOnce = sqlite3VdbeAddOp0(v, OP_Once);  VdbeCoverage(v);
         sqlite3VdbeAddOp2(v, OP_Gosub, pSrc->regReturn, pSrc->addrFillSub);
         sqlite3VdbeJumpHere(v, iOnce);
       }

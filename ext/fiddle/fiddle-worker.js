@@ -38,19 +38,30 @@
     layer. The data property is the string of the output, noting
     that the emscripten binding emits these one line at a time. Thus,
     if a C-side puts() emits multiple lines in a single call, the JS
-    side will see that as multiple calls.
+    side will see that as multiple calls. Example:
+
+    {type:'stdout', data: 'Hi, world.'}
 
   - module: Status text. This is intended to alert the main thread
     about module loading status so that, e.g., the main thread can
     update a progress widget and DTRT when the module is finished
-    loading and available for work. The status text is mostly in some
-    undocumented(?) format emited by the emscripten generated
-    module-loading code, encoding progress info within it.
+    loading and available for work. Status messages come in the form
+    
+    {type:'module', data:{
+        type:'status',
+        data: {text:string|null, step:1-based-integer}
+    }
+
+    with an incrementing step value for each subsequent message. When
+    the module loading is complete, a message with a text value of
+    null is posted.
 
   - working: data='start'|'end'. Indicates that work is about to be
     sent to the module or has just completed. This can be used, e.g.,
     to disable UI elements which should not be activated while work
-    is pending.
+    is pending. Example:
+
+    {type:'working', data:'start'}
 
   Main-to-Worker types:
 
@@ -60,7 +71,9 @@
     it starts and a 'working' event (data='end') when it finished. If
     called while work is currently being executed it emits stderr
     message instead of doing actual work, as the underlying db cannot
-    handle concurrent tasks.
+    handle concurrent tasks. Example:
+
+    {type:'shellExec', data: 'select * from sqlite_master'}
 
   - More TBD as the higher-level db layer develops.
 */
@@ -75,78 +88,208 @@
   annoying.
 */
 "use strict";
-
-const wMsg = (type,data)=>postMessage({type, data});
-
-self.onerror = function(/*message, source, lineno, colno, error*/) {
-    const err = arguments[4];
-    if(err && 'ExitStatus'==err.name){
-        /* This is relevant for the sqlite3 shell binding but not the
-           lower-level binding. */
-        Module._isDead = true;
-        Module.printErr("FATAL ERROR:", err.message);
-        Module.printErr("Restarting the app requires reloading the page.");
-        wMsg('error', err);
-    }
-    Module.setStatus('Exception thrown, see JavaScript console');
-    Module.setStatus = function(text) {
-        console.error('[post-exception status]', text);
+(function(){
+    /**
+       Posts a message in the form {type,data} unless passed more than 2
+       args, in which case it posts {type, data:[arg1...argN]}.
+    */
+    const wMsg = function(type,data){
+        postMessage({
+            type,
+            data: arguments.length<3
+                ? data
+                : Array.prototype.slice.call(arguments,1)
+        });
     };
-};
 
-self.Module = {
-/* ^^^ cannot declare that const because fiddle-module.js
-   (auto-generated) includes a decl for it and runs in this scope. */
-    preRun: [],
-    postRun: [],
-    //onRuntimeInitialized: function(){},
-    print: function(text){wMsg('stdout', Array.prototype.slice.call(arguments));},
-    printErr: function(text){wMsg('stderr', Array.prototype.slice.call(arguments));},
-    setStatus: function f(text){wMsg('module',{type:'status',data:text});},
-    totalDependencies: 0,
-    monitorRunDependencies: function(left) {
-        this.totalDependencies = Math.max(this.totalDependencies, left);
-        this.setStatus(left
-                       ? ('Preparing... (' + (this.totalDependencies-left)
-                          + '/' + this.totalDependencies + ')')
-                       : 'All downloads complete.');
-    }
-};
+    const stdout = function(){wMsg('stdout', Array.prototype.slice.call(arguments));};
+    const stderr = function(){wMsg('stderr', Array.prototype.slice.call(arguments));};
 
-const shellExec = function f(sql){
-    if(!f._) f._ = Module.cwrap('fiddle_exec', null, ['string']);
-    if(Module._isDead){
-        wMsg('stderr', "shell module has exit()ed. Cannot run SQL.");
-        return;
-    }
-    wMsg('working','start');
-    try {
-        if(f._running) wMsg('stderr','Cannot run multiple commands concurrently.');
-        else{
-            f._running = true;
-            f._(sql);
+    self.onerror = function(/*message, source, lineno, colno, error*/) {
+        const err = arguments[4];
+        if(err && 'ExitStatus'==err.name){
+            /* This is relevant for the sqlite3 shell binding but not the
+               lower-level binding. */
+            fiddleModule.isDead = true;
+            stderr("FATAL ERROR:", err.message);
+            stderr("Restarting the app requires reloading the page.");
+            wMsg('error', err);
         }
-    } finally {
-        wMsg('working','end');
-        delete f._running;
-    }
-};
-
-self.onmessage = function(ev){
-    ev = ev.data;
-    //console.debug("worker: onmessage.data",ev);
-    switch(ev.type){
-        case 'shellExec': shellExec(ev.data); return;
+        fiddleModule.setStatus('Exception thrown, see JavaScript console');
+        fiddleModule.setStatus = function(text) {
+            console.error('[post-exception status]', text);
+        };
     };
-    console.warn("Unknown fiddle-worker message type:",ev);
-};
-self.Module.setStatus('Downloading...');
-importScripts('fiddle-module.js')
-/* loads the wasm module and notifies, via Module.setStatus() and
-   Module.onRuntimeInitialized(), when it's done loading.  The latter
-   is called _before_ the final call to Module.setStatus(). */;
 
-Module["onRuntimeInitialized"] = function onRuntimeInitialized() {
-    //console.log('onRuntimeInitialized');
-    //wMsg('module','done');
-};
+    const Sqlite3Shell = {
+        /** Returns the name of the currently-opened db. */
+        dbFilename: function f(){
+            if(!f._) f._ = fiddleModule.cwrap('fiddle_db_filename', "string", ['string']);
+            return f._();
+        },
+        /**
+           Runs the given text through the shell as if it had been typed
+           in by a user. Fires a working/start event before it starts and
+           working/end event when it finishes.
+        */
+        exec: function f(sql){
+            if(!f._) f._ = fiddleModule.cwrap('fiddle_exec', null, ['string']);
+            if(fiddleModule.isDead){
+                wMsg('stderr', "shell module has exit()ed. Cannot run SQL.");
+                return;
+            }
+            wMsg('working','start');
+            try {
+                if(f._running){
+                    wMsg('stderr','Cannot run multiple commands concurrently.');
+                }else{
+                    f._running = true;
+                    f._(sql);
+                }
+            } finally {
+                delete f._running;
+                wMsg('working','end');
+            }
+        },
+        /* Interrupt can't work: this Worker is tied up working, so won't get the
+           interrupt event which would be needed to perform the interrupt. */
+        interrupt: function f(){
+            if(!f._) f._ = fiddleModule.cwrap('fiddle_interrupt', null);
+            wMsg('stdout',"Requesting interrupt.");
+            f._();
+        }
+    };
+
+    self.onmessage = function f(ev){
+        ev = ev.data;
+        if(!f.cache){
+            f.cache = {
+                prevFilename: null
+            };
+        }
+        //console.debug("worker: onmessage.data",ev);
+        switch(ev.type){
+            case 'shellExec': Sqlite3Shell.exec(ev.data); return;
+            case 'interrupt': Sqlite3Shell.interrupt(); return;
+                /** Triggers the export of the current db. Fires an
+                    event in the form:
+
+                    {type:'db-export',
+                    data:{
+                    filename: name of db,
+                    buffer: contents of the db file (Uint8Array),
+                    error: on error, a message string and no buffer property.
+                    }
+                    }
+                */
+            case 'db-export': {
+                const fn = Sqlite3Shell.dbFilename();
+                wMsg('stdout',"Exporting",fn+".");
+                const fn2 = fn ? fn.split(/[/\\]/).pop() : null;
+                try{
+                    if(!fn2) throw new Error("DB appears to be closed.");
+                    wMsg('db-export',{
+                        filename: fn2,
+                        buffer: fiddleModule.FS.readFile(fn, {encoding:"binary"})
+                    });
+                }catch(e){
+                    /* Post a failure message so that UI elements disabled
+                       during the export can be re-enabled. */
+                    wMsg('db-export',{
+                        filename: fn,
+                        error: e.message
+                    });
+                }
+                return;
+            }
+            case 'open': {
+                /* Expects: {
+                   buffer: ArrayBuffer | Uint8Array,
+                   filename: for logging/informational purposes only
+                   } */
+                const opt = ev.data;
+                let buffer = opt.buffer;
+                if(buffer instanceof Uint8Array){
+                }else if(buffer instanceof ArrayBuffer){
+                    buffer = new Uint8Array(buffer);
+                }else{
+                    wMsg('stderr',"'open' expects {buffer:Uint8Array} containing an uploaded db.");
+                    return;
+                }
+                const fn = (
+                    opt.filename
+                        ? opt.filename.split(/[/\\]/).pop().replace('"','_')
+                        : ("db-"+((Math.random() * 10000000) | 0)+
+                           "-"+((Math.random() * 10000000) | 0)+".sqlite3")
+                );
+                /* We cannot delete the existing db file until the new one
+                   is installed, which means that we risk overflowing our
+                   quota (if any) by having both the previous and current
+                   db briefly installed in the virtual filesystem. */
+                fiddleModule.FS.createDataFile("/", fn, buffer, true, true);
+                const oldName = Sqlite3Shell.dbFilename();
+                Sqlite3Shell.exec('.open "/'+fn+'"');
+                if(oldName !== fn){
+                    fiddleModule.FS.unlink(oldName);
+                }
+                wMsg('stdout',"Replaced DB with",fn+".");
+                return;
+            }
+        };
+        console.warn("Unknown fiddle-worker message type:",ev);
+    };
+   
+    /**
+       emscripten module for use with build mode -sMODULARIZE.
+    */
+    const fiddleModule = {
+        print: stdout,
+        printErr: stderr,
+        /**
+           Intercepts status updates from the emscripting module init
+           and fires worker events with a type of 'status' and a
+           payload of:
+
+           {
+           text: string | null, // null at end of load process
+           step: integer // starts at 1, increments 1 per call
+           }
+
+           We have no way of knowing in advance how many steps will
+           be processed/posted, so creating a "percentage done" view is
+           not really practical. One can be approximated by giving it a
+           current value of message.step and max value of message.step+1,
+           though.
+
+           When work is finished, a message with a text value of null is
+           submitted.
+
+           After a message with text==null is posted, the module may later
+           post messages about fatal problems, e.g. an exit() being
+           triggered, so it is recommended that UI elements for posting
+           status messages not be outright removed from the DOM when
+           text==null, and that they instead be hidden until/unless
+           text!=null.
+        */
+        setStatus: function f(text){
+            if(!f.last) f.last = { step: 0, text: '' };
+            else if(text === f.last.text) return;
+            f.last.text = text;
+            wMsg('module',{
+                type:'status',
+                data:{step: ++f.last.step, text: text||null}
+            });
+        }
+    };
+
+    importScripts('fiddle-module.js');
+    /**
+       initFiddleModule() is installed via fiddle-module.js due to
+       building with:
+
+       emcc ... -sMODULARIZE=1 -sEXPORT_NAME=initFiddleModule
+    */
+    initFiddleModule(fiddleModule).then(function(thisModule){
+        wMsg('fiddle-ready');
+    });
+})();
