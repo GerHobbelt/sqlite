@@ -4932,8 +4932,8 @@ int sqlite3VListNameToNum(VList*,const char*,int);
 ** file.
 */
 int sqlite3PutVarint(unsigned char*, u64);
-u8 sqlite3GetVarint(const unsigned char *, u64 *);
-u8 sqlite3GetVarint32(const unsigned char *, u32 *);
+int sqlite3GetVarint(const unsigned char *, u64 *);
+int sqlite3GetVarint32(const unsigned char *, u32 *);
 int sqlite3VarintLen(u64 v);
 
 /*

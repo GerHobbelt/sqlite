@@ -51,7 +51,7 @@ static void compressFunc(
   const unsigned char *pIn;
   unsigned char *pOut;
   unsigned int nIn;
-  unsigned long int nOut;
+  size_t nOut;
   unsigned char x[8];
   int rc;
   int i, j;
@@ -87,7 +87,7 @@ static void uncompressFunc(
   const unsigned char *pIn;
   unsigned char *pOut;
   unsigned int nIn;
-  unsigned long int nOut;
+  size_t nOut;
   int rc;
   int i;
 
