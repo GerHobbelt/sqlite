@@ -7784,7 +7784,7 @@ DISPATCHABLE_COMMAND( seeargs ? 0 0 azArg nArg p ){
   return rc;
 }
 
-CONDITION_COMMAND(archive (!defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_HAVE_ZLIB)));
+CONDITION_COMMAND(archive (!defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_HAVE_ZLIB)) );
 /*****************
  * The .archive command
  */
@@ -8095,11 +8095,10 @@ DISPATCHABLE_COMMAND( dbconfig 3 1 3 ){
   }   
   return 0;
 }
-#if !defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_ENABLE_DBPAGE_VTAB)
+CONDITION_COMMAND(dbinfo (!defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_ENABLE_DBPAGE_VTAB)) );
 DISPATCHABLE_COMMAND( dbinfo 3 1 2 ){
   return shell_dbinfo_command(p, nArg, azArg);
 }
-#endif
 
 /*****************
  * The .dump, .echo and .eqp commands
@@ -9745,7 +9744,7 @@ DISPATCHABLE_COMMAND( prompt ? 1 3 ){
 /*****************
  * The .read, .recover and .restore commands
  */
-CONDITION_COMMAND( recover !defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_ENABLE_DBPAGE_VTAB) );
+CONDITION_COMMAND( recover (!defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_ENABLE_DBPAGE_VTAB)) );
 COLLECT_HELP_TEXT[
   ".read FILE               Read input from FILE",
   "   If FILE begins with \"|\", it is a command that generates the input.",
@@ -11074,7 +11073,7 @@ DISPATCHABLE_COMMAND( indices 3 1 2 ){
 /*****************
  * The .unmodule command
  */
-CONDITION_COMMAND( unmodule defined(SQLITE_DEBUG) && !defined(SQLITE_OMIT_VIRTUALTABLE) );
+CONDITION_COMMAND( unmodule (defined(SQLITE_DEBUG) && !defined(SQLITE_OMIT_VIRTUALTABLE)) );
 COLLECT_HELP_TEXT[
   ".unmodule NAME ...       Unregister virtual table modules",
   "    --allexcept             Unregister everything except those named",
