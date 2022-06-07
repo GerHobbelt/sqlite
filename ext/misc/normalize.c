@@ -244,7 +244,9 @@ static const unsigned char sqlite3CtypeMap[256] = {
 /*
 ** Ignore testcase() macros
 */
+#ifndef testcase
 #define testcase(X)
+#endif
 
 /*
 ** Token values
@@ -644,7 +646,8 @@ char *sqlite3_normalize(const char *zSql){
 ** run sqlite3_normalize() over the text of all files named on the command-
 ** line and show the result on standard output.
 */
-#ifdef SQLITE_NORMALIZE_CLI
+#if defined( SQLITE_NORMALIZE_CLI ) || defined( BUILD_MONOLITHIC )
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -681,7 +684,12 @@ static void normalizeFile(char *zIn){
 ** The main routine for "sql_normalize".  Read files named on the
 ** command-line and run the text of each through sqlite3_normalize().
 */
-int main(int argc, char **argv){
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_normalize_main(cnt, arr)
+#endif
+
+int main(int argc, const char **argv){
   int i;
   FILE *in;
   char *zBuf = 0;
@@ -699,7 +707,7 @@ int main(int argc, char **argv){
     zBuf = sqlite3_realloc64(zBuf, sz+1);
     if( zBuf==0 ){
       fprintf(stderr, "failed to malloc for %lld bytes\n", sz);
-      exit(1);
+	  return EXIT_FAILURE;
     }
     got = fread(zBuf, 1, sz, in);
     fclose(in);
@@ -712,5 +720,7 @@ int main(int argc, char **argv){
     }
   }
   sqlite3_free(zBuf);
+  return EXIT_SUCCESS;
 }
+
 #endif /* SQLITE_NORMALIZE_CLI */

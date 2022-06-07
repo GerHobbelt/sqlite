@@ -60,6 +60,7 @@ typedef UINT16_TYPE u16;           /* 2-byte unsigned integer */
 #if defined(SQLITE_COVERAGE_TEST) || defined(SQLITE_MUTATION_TEST)
 # define SQLITE_OMIT_AUXILIARY_SAFETY_CHECKS 1
 #endif
+#ifndef ALWAYS
 #if defined(SQLITE_OMIT_AUXILIARY_SAFETY_CHECKS)
 # define ALWAYS(X)      (1)
 # define NEVER(X)       (0)
@@ -69,6 +70,7 @@ typedef UINT16_TYPE u16;           /* 2-byte unsigned integer */
 #else
 # define ALWAYS(X)      (X)
 # define NEVER(X)       (X)
+#endif
 #endif
 
 #endif   /* SQLITE_AMALGAMATION */

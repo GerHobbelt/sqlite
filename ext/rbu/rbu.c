@@ -22,7 +22,7 @@
 /*
 ** Print a usage message and exit.
 */
-void usage(const char *zArgv0){
+static int usage(const char *zArgv0){
   fprintf(stderr, 
 "Usage: %s ?OPTIONS? TARGET-DB RBU-DB\n"
 "\n"
@@ -51,15 +51,15 @@ void usage(const char *zArgv0){
 "  target db.\n"
 "\n"
 , zArgv0);
-  exit(1);
+  return EXIT_FAILURE;
 }
 
-void report_default_vfs(){
+static void report_default_vfs(void){
   sqlite3_vfs *pVfs = sqlite3_vfs_find(0);
   fprintf(stdout, "default vfs is \"%s\"\n", pVfs ? pVfs->zName : "NULL");
 }
 
-void report_rbu_vfs(sqlite3rbu *pRbu){
+static void report_rbu_vfs(sqlite3rbu *pRbu){
   sqlite3 *db = sqlite3rbu_db(pRbu, 0);
   if( db ){
     char *zName = 0;
@@ -73,7 +73,12 @@ void report_rbu_vfs(sqlite3rbu *pRbu){
   }
 }
 
-int main(int argc, char **argv){
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_rbu_main(cnt, arr)
+#endif
+
+int main(int argc, const char **argv){
   int i;
   const char *zTarget;            /* Target database to apply RBU to */
   const char *zRbu;               /* Database containing RBU */
@@ -88,7 +93,7 @@ int main(int argc, char **argv){
   sqlite3_int64 nProgress = 0;
   int nArgc = argc-2;
 
-  if( argc<3 ) usage(argv[0]);
+  if( argc<3 ) return usage(argv[0]);
   for(i=1; i<nArgc; i++){
     const char *zArg = argv[i];
     int nArg = strlen(zArg);
@@ -107,7 +112,7 @@ int main(int argc, char **argv){
       i++;
       nStatStep = atoi(argv[i]);
     }else{
-      usage(argv[0]);
+      return usage(argv[0]);
     }
   }
 
