@@ -445,4 +445,76 @@ do_execsql_test join8-14020 {
   - 2 4
 }
 
+# 2022-05-30
+# https://sqlite.org/forum/forumpost/3902c7b833
+#
+reset_db
+do_execsql_test join8-15000 {
+  CREATE TABLE t1(x INT);
+  CREATE TABLE t2(y INT);
+  CREATE TABLE t3(z INT);
+  INSERT INTO t1 VALUES(10);
+  INSERT INTO t3 VALUES(20),(30);
+}
+do_execsql_test join8-15010 {
+  SELECT * FROM t1 LEFT JOIN t2 ON true JOIN t3 ON t2.y IS NOT NULL;
+} {}
+do_execsql_test join8-15020 {
+  SELECT * FROM t1 LEFT JOIN t2 ON true JOIN t3 ON t2.y IS NOT NULL
+   WHERE (t3.z!=400 AND t3.z!=500 AND t3.z!=600);
+} {}
+do_execsql_test join8-15100 {
+  PRAGMA automatic_index = 0;
+  CREATE TABLE t4(x TEXT);
+  CREATE TABLE t5(y TEXT);
+  CREATE TABLE t6(z TEXT);
+  INSERT INTO t4 VALUES('a'), ('b');
+  INSERT INTO t5 VALUES('b'), ('c');
+  INSERT INTO t6 VALUES('a'), ('d');
+} {}
+db null -
+do_execsql_test join8-15110 {
+  SELECT * FROM t4 LEFT JOIN t5 ON x=y LEFT JOIN t6 ON (x=z) ORDER BY +x;
+} {a - a b b -}
+do_execsql_test join8-15120 {
+  SELECT * FROM t4 LEFT JOIN t5 ON x=y LEFT JOIN t6 ON (x=z)
+   WHERE t5.y!='x' AND t4.x!='x';
+} {b b -}
+
+# 2022-05-31
+# https://sqlite.org/forum/forumpost/c2554d560b
+reset_db
+do_execsql_test join8-16000 {
+  CREATE TABLE t1(a TEXT);
+  CREATE TABLE t2(b TEXT);
+  CREATE TABLE t3(c TEXT);
+  INSERT INTO t2(b) VALUES ('x');
+  INSERT INTO t3(c) VALUES ('y'), ('z');
+} {}
+db null -
+do_execsql_test join8-16010 {
+  SELECT * FROM t1 RIGHT JOIN t2 ON true LEFT JOIN t3 ON a<>'';
+} {- x -}
+do_execsql_test join8-16020 {
+  SELECT * FROM t1 RIGHT JOIN t2 ON true LEFT JOIN t3 ON a<>'' WHERE c IS NULL;
+} {- x -}
+do_execsql_test join8-16020 {
+  SELECT * FROM t1 RIGHT JOIN t2 ON true JOIN t3 ON a<>'' WHERE c IS NULL;
+} {}
+do_execsql_test join8-16030 {
+  SELECT * FROM t1 RIGHT JOIN t2 ON true JOIN t3 ON a<>'';
+} {}
+do_execsql_test join8-16040 {
+  SELECT * FROM t1 RIGHT JOIN t2 ON true LEFT JOIN t3 ON a<>'' WHERE c<>'';
+} {}
+do_execsql_test join8-16050 {
+  SELECT * FROM t1 RIGHT JOIN t2 ON true LEFT JOIN t3 ON a<>'' WHERE c IS NOT NULL;
+} {}
+do_execsql_test join8-16060 {
+  SELECT * FROM t1 RIGHT JOIN t2 ON true JOIN t3 ON a<>'' WHERE c<>'';
+} {}
+do_execsql_test join8-16070 {
+  SELECT * FROM t1 RIGHT JOIN t2 ON true JOIN t3 ON a<>'' WHERE c IS NOT NULL;
+} {}
+
 finish_test
