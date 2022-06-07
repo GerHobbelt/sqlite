@@ -1429,7 +1429,7 @@ static void btreeParseCellPtrNoPayload(
 #ifndef SQLITE_DEBUG
   UNUSED_PARAMETER(pPage);
 #endif
-  pInfo->nSize = 4 + getVarint(&pCell[4], (u64*)&pInfo->nKey);
+  pInfo->nSize = 4 + getVarint(&pCell[4], &pInfo->nKey);
   pInfo->nPayload = 0;
   pInfo->nLocal = 0;
   pInfo->pPayload = 0;
@@ -1468,7 +1468,7 @@ static void btreeParseCellPtr(
 
   /* The next block of code is equivalent to:
   **
-  **     pIter += getVarint(pIter, (u64*)&pInfo->nKey);
+  **     pIter += getVarint(pIter, &pInfo->nKey);
   **
   ** The code is inlined and the loop is unrolled for performance.
   ** This routine is a high-runner.
@@ -6114,7 +6114,7 @@ int sqlite3BtreeTableMoveto(
           }
         }
       }
-      getVarint(pCell, (u64*)&nCellKey);
+      getVarint(pCell, &nCellKey);
       if( nCellKey<intKey ){
         lwr = idx+1;
         if( lwr>upr ){ c = -1; break; }

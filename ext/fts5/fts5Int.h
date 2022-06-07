@@ -540,10 +540,10 @@ int sqlite3Fts5IndexLoadConfig(Fts5Index *p);
 */
 int sqlite3Fts5GetVarint32(const unsigned char *p, u32 *v);
 int sqlite3Fts5GetVarintLen(u32 iVal);
-u8 sqlite3Fts5GetVarint(const unsigned char*, u64*);
-int sqlite3Fts5PutVarint(unsigned char *p, u64 v);
+u8 sqlite3Fts5GetVarint(const unsigned char*, sqlite_uint64 *);
+int sqlite3Fts5PutVarint(unsigned char *p, sqlite_uint64 v);
 
-#define fts5GetVarint32(a,b) sqlite3Fts5GetVarint32(a,(u32*)&b)
+#define fts5GetVarint32(a,b) sqlite3Fts5GetVarint32((a),&(b))
 #define fts5GetVarint    sqlite3Fts5GetVarint
 
 #define fts5FastGetVarint32(a, iOff, nVal) {      \

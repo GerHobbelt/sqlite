@@ -4942,9 +4942,9 @@ int sqlite3VarintLen(u64 v);
 ** the procedure for larger varints.
 */
 #define getVarint32(A,B)  \
-  (u8)((*(A)<(u8)0x80)?((B)=(u32)*(A)),1:sqlite3GetVarint32((A),(u32 *)&(B)))
+  (u8)((*(A)<(u8)0x80)?((B)=(u32)*(A)),1:sqlite3GetVarint32((A),&(B)))
 #define getVarint32NR(A,B) \
-  B=(u32)*(A);if(B>=0x80)sqlite3GetVarint32((A),(u32*)&(B))
+  B=(u32)*(A);if(B>=0x80)sqlite3GetVarint32((A),&(B))
 #define putVarint32(A,B)  \
   (u8)(((u32)(B)<(u32)0x80)?(*(A)=(unsigned char)(B)),1:\
   sqlite3PutVarint((A),(B)))

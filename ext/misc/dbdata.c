@@ -357,7 +357,7 @@ static int dbdataLoadPage(
 /*
 ** Read a varint.  Put the value in *pVal and return the number of bytes.
 */
-static int dbdataGetVarint(const u8 *z, sqlite3_int64 *pVal){
+static int dbdataGetVarint(const u8 *z, sqlite_uint64 *pVal){
   sqlite3_int64 v = 0;
   int i;
   for(i=0; i<8; i++){

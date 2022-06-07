@@ -1337,7 +1337,7 @@ static int fts5DlidxLvlNext(Fts5DlidxLvl *pLvl){
     assert( pLvl->bEof==0 );
     pLvl->iOff = 1;
     pLvl->iOff += fts5GetVarint32(&pData->p[1], pLvl->iLeafPgno);
-    pLvl->iOff += fts5GetVarint(&pData->p[pLvl->iOff], (u64*)&pLvl->iRowid);
+    pLvl->iOff += fts5GetVarint(&pData->p[pLvl->iOff], &pLvl->iRowid);
     pLvl->iFirstOff = pLvl->iOff;
   }else{
     int iOff;
@@ -1348,7 +1348,7 @@ static int fts5DlidxLvlNext(Fts5DlidxLvl *pLvl){
     if( iOff<pData->nn ){
       i64 iVal;
       pLvl->iLeafPgno += (iOff - pLvl->iOff) + 1;
-      iOff += fts5GetVarint(&pData->p[iOff], (u64*)&iVal);
+      iOff += fts5GetVarint(&pData->p[iOff], &iVal);
       pLvl->iRowid += iVal;
       pLvl->iOff = iOff;
     }else{
@@ -1455,7 +1455,7 @@ static int fts5DlidxLvlPrev(Fts5DlidxLvl *pLvl){
       if( (a[iOff-1] & 0x80)==0 ) break;
     }
 
-    fts5GetVarint(&a[iOff], (u64*)&iVal);
+    fts5GetVarint(&a[iOff], &iVal);
     pLvl->iRowid -= iVal;
     pLvl->iLeafPgno--;
 
@@ -1681,7 +1681,7 @@ static void fts5SegIterLoadRowid(Fts5Index *p, Fts5SegIter *pIter){
     iOff = 4;
     a = pIter->pLeaf->p;
   }
-  iOff += sqlite3Fts5GetVarint(&a[iOff], (u64*)&pIter->iRowid);
+  iOff += sqlite3Fts5GetVarint(&a[iOff], &pIter->iRowid);
   pIter->iLeafOffset = iOff;
 }
 
@@ -1890,7 +1890,7 @@ static void fts5SegIterReverseNewPage(Fts5Index *p, Fts5SegIter *pIter){
 
       if( pIter->pLeaf ){
         u8 *a = &pIter->pLeaf->p[pIter->iLeafOffset];
-        pIter->iLeafOffset += fts5GetVarint(a, (u64*)&pIter->iRowid);
+        pIter->iLeafOffset += fts5GetVarint(a, &pIter->iRowid);
         break;
       }else{
         fts5DataRelease(pNew);
@@ -1978,7 +1978,7 @@ static void fts5SegIterNext_None(
   if( iOff<pIter->iEndofDoclist ){
     /* Next entry is on the current page */
     i64 iDelta;
-    iOff += sqlite3Fts5GetVarint(&pIter->pLeaf->p[iOff], (u64*)&iDelta);
+    iOff += sqlite3Fts5GetVarint(&pIter->pLeaf->p[iOff], &iDelta);
     pIter->iLeafOffset = iOff;
     pIter->iRowid += iDelta;
   }else if( (pIter->flags & FTS5_SEGITER_ONETERM)==0 ){
@@ -2001,7 +2001,7 @@ static void fts5SegIterNext_None(
       pIter->pLeaf->szLeaf = nList;
       pIter->iEndofDoclist = nList;
       sqlite3Fts5BufferSet(&p->rc,&pIter->term, (int)strlen(zTerm), (u8*)zTerm);
-      pIter->iLeafOffset = fts5GetVarint(pList, (u64*)&pIter->iRowid);
+      pIter->iLeafOffset = fts5GetVarint(pList, &pIter->iRowid);
     }
 
     if( pbNewTerm ) *pbNewTerm = 1;
@@ -2082,7 +2082,7 @@ static void fts5SegIterNext(
       pIter->iEndofDoclist = nList+1;
       sqlite3Fts5BufferSet(&p->rc, &pIter->term, (int)strlen(zTerm),
           (u8*)zTerm);
-      pIter->iLeafOffset = fts5GetVarint(pList, (u64*)&pIter->iRowid);
+      pIter->iLeafOffset = fts5GetVarint(pList, &pIter->iRowid);
       *pbNewTerm = 1;
     }
   }else{
@@ -2094,7 +2094,7 @@ static void fts5SegIterNext(
       if( pLeaf==0 ) break;
       ASSERT_SZLEAF_OK(pLeaf);
       if( (iOff = fts5LeafFirstRowidOff(pLeaf)) && iOff<pLeaf->szLeaf ){
-        iOff += sqlite3Fts5GetVarint(&pLeaf->p[iOff], (u64*)&pIter->iRowid);
+        iOff += sqlite3Fts5GetVarint(&pLeaf->p[iOff], &pIter->iRowid);
         pIter->iLeafOffset = iOff;
 
         if( pLeaf->nn>pLeaf->szLeaf ){
@@ -2226,7 +2226,7 @@ static void fts5SegIterReverse(Fts5Index *p, Fts5SegIter *pIter){
       p->rc = FTS5_CORRUPT;
       return;
     }
-    iOff += fts5GetVarint(&pLast->p[iOff], (u64*)&pIter->iRowid);
+    iOff += fts5GetVarint(&pLast->p[iOff], &pIter->iRowid);
     pIter->iLeafOffset = iOff;
 
     if( fts5LeafIsTermless(pLast) ){
@@ -2549,7 +2549,7 @@ static void fts5SegIterHashInit(
     sqlite3Fts5BufferSet(&p->rc, &pIter->term, n, z);
     pLeaf->nn = pLeaf->szLeaf = nList;
     pIter->pLeaf = pLeaf;
-    pIter->iLeafOffset = fts5GetVarint(pLeaf->p, (u64*)&pIter->iRowid);
+    pIter->iLeafOffset = fts5GetVarint(pLeaf->p, &pIter->iRowid);
     pIter->iEndofDoclist = pLeaf->nn;
 
     if( flags & FTS5INDEX_QUERY_DESC ){
@@ -2749,7 +2749,7 @@ static void fts5SegIterGotoPage(
       if( iOff<4 || iOff>=n ){
         p->rc = FTS5_CORRUPT;
       }else{
-        iOff += fts5GetVarint(&a[iOff], (u64*)&pIter->iRowid);
+        iOff += fts5GetVarint(&a[iOff], &pIter->iRowid);
         pIter->iLeafOffset = iOff;
         fts5SegIterLoadNPos(p, pIter);
       }
@@ -3563,7 +3563,7 @@ static void fts5MultiIterNew2(
     pIter->flags = FTS5_SEGITER_ONETERM;
     if( pData->szLeaf>0 ){
       pIter->pLeaf = pData;
-      pIter->iLeafOffset = fts5GetVarint(pData->p, (u64*)&pIter->iRowid);
+      pIter->iLeafOffset = fts5GetVarint(pData->p, &pIter->iRowid);
       pIter->iEndofDoclist = pData->nn;
       pNew->aFirst[1].iFirst = 1;
       if( bDesc ){
@@ -3865,8 +3865,8 @@ static i64 fts5DlidxExtractFirstRowid(Fts5Buffer *pBuf){
   i64 iRowid;
   int iOff;
 
-  iOff = 1 + fts5GetVarint(&pBuf->p[1], (u64*)&iRowid);
-  fts5GetVarint(&pBuf->p[iOff], (u64*)&iRowid);
+  iOff = 1 + fts5GetVarint(&pBuf->p[1], &iRowid);
+  fts5GetVarint(&pBuf->p[iOff], &iRowid);
   return iRowid;
 }
 
@@ -4112,8 +4112,8 @@ static void fts5WriteAppendPoslistData(
     int nReq = p->pConfig->pgsz - pPage->buf.n - pPage->pgidx.n;
     int nCopy = 0;
     while( nCopy<nReq ){
-      i64 dummy;
-      nCopy += fts5GetVarint(&a[nCopy], (u64*)&dummy);
+	  sqlite_uint64 dummy;
+      nCopy += fts5GetVarint(&a[nCopy], &dummy);
     }
     fts5BufferAppendBlob(&p->rc, &pPage->buf, nCopy, a);
     a += nCopy;
@@ -4886,7 +4886,7 @@ static void fts5DoclistIterNext(Fts5DoclistIter *pIter){
   }else{
     i64 iDelta;
 
-    p += fts5GetVarint(p, (u64*)&iDelta);
+    p += fts5GetVarint(p, &iDelta);
     pIter->iRowid += iDelta;
 
     /* Read position list size */
@@ -5715,9 +5715,9 @@ int sqlite3Fts5IndexGetAverages(Fts5Index *p, i64 *pnRow, i64 *anSize){
   if( p->rc==SQLITE_OK && pData->nn ){
     int i = 0;
     int iCol;
-    i += fts5GetVarint(&pData->p[i], (u64*)pnRow);
+    i += fts5GetVarint(&pData->p[i], pnRow);
     for(iCol=0; i<pData->nn && iCol<nCol; iCol++){
-      i += fts5GetVarint(&pData->p[i], (u64*)&anSize[iCol]);
+      i += fts5GetVarint(&pData->p[i], &anSize[iCol]);
     }
   }
 
@@ -6181,7 +6181,7 @@ static void fts5IndexIntegrityCheckSegment(
           if( iRowidOff>=pLeaf->szLeaf ){
             p->rc = FTS5_CORRUPT;
           }else{
-            fts5GetVarint(&pLeaf->p[iRowidOff], (u64*)&iRowid);
+            fts5GetVarint(&pLeaf->p[iRowidOff], &iRowid);
             if( iRowid!=fts5DlidxIterRowid(pDlidx) ) p->rc = FTS5_CORRUPT;
           }
           fts5DataRelease(pLeaf);
@@ -6465,7 +6465,7 @@ static int fts5DecodeDoclist(int *pRc, Fts5Buffer *pBuf, const u8 *a, int n){
   int iOff = 0;
 
   if( n>0 ){
-    iOff = sqlite3Fts5GetVarint(a, (u64*)&iDocid);
+    iOff = sqlite3Fts5GetVarint(a, &iDocid);
     sqlite3Fts5BufferAppendPrintf(pRc, pBuf, " id=%lld", iDocid);
   }
   while( iOff<n ){
@@ -6476,7 +6476,7 @@ static int fts5DecodeDoclist(int *pRc, Fts5Buffer *pBuf, const u8 *a, int n){
     iOff += fts5DecodePoslist(pRc, pBuf, &a[iOff], MIN(n-iOff, nPos));
     if( iOff<n ){
       i64 iDelta;
-      iOff += sqlite3Fts5GetVarint(&a[iOff], (u64*)&iDelta);
+      iOff += sqlite3Fts5GetVarint(&a[iOff], &iDelta);
       iDocid += iDelta;
       sqlite3Fts5BufferAppendPrintf(pRc, pBuf, " id=%lld", iDocid);
     }

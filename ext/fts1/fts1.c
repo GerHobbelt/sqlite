@@ -7,6 +7,7 @@
         && !defined(SQLITE_ENABLE_BROKEN_FTS1)
 #error fts1 has a design flaw and has been deprecated.
 #endif
+
 /* The flaw is that fts1 uses the content table's unaliased rowid as
 ** the unique docid.  fts1 embeds the rowid in the index it builds,
 ** and expects the rowid to not change.  The SQLite VACUUM operation
@@ -111,7 +112,7 @@ static void append(StringBuffer *sb, const char *zFrom){
 /* Write a 64-bit variable-length integer to memory starting at p[0].
  * The length of data written will be between 1 and VARINT_MAX bytes.
  * The number of bytes written is returned. */
-static int putVarint(char *p, sqlite_int64 v){
+static int putVarint(char *p, sqlite_uint64 v){
   unsigned char *q = (unsigned char *) p;
   sqlite_uint64 vu = v;
   do{
@@ -126,7 +127,7 @@ static int putVarint(char *p, sqlite_int64 v){
 /* Read a 64-bit variable-length integer from memory starting at p[0].
  * Return the number of bytes read, or 0 on error.
  * The value is stored in *v. */
-static int getVarint(const char *p, sqlite_int64 *v){
+static int getVarint(const char *p, sqlite_uint64 *v){
   const unsigned char *q = (const unsigned char *) p;
   sqlite_uint64 x = 0, y = 1;
   while( (*q & 0x80) == 0x80 ){
@@ -138,14 +139,14 @@ static int getVarint(const char *p, sqlite_int64 *v){
     }
   }
   x += y * (*q++);
-  *v = (sqlite_int64) x;
+  *v = x;
   return (int) (q - (unsigned char *)p);
 }
 
-static int getVarint32(const char *p, int *pi){
- sqlite_int64 i;
+static int getVarint32(const char *p, unsigned int *pi){
+ sqlite_uint64 i;
  int ret = getVarint(p, &i);
- *pi = (int) i;
+ *pi = (unsigned int) i;
  assert( *pi==i );
  return ret;
 }

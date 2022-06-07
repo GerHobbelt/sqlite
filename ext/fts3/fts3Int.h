@@ -582,11 +582,11 @@ int sqlite3Fts3Incrmerge(Fts3Table*,int,int);
 
 /* fts3.c */
 void sqlite3Fts3ErrMsg(char**,const char*,...);
-int sqlite3Fts3PutVarint(char *, sqlite3_int64);
-int sqlite3Fts3GetVarint(const char *, sqlite_int64 *);
+int sqlite3Fts3PutVarint(char *, sqlite_uint64);
+int sqlite3Fts3GetVarint(const char *, sqlite_uint64 *);
 int sqlite3Fts3GetVarintU(const char *, sqlite_uint64 *);
-int sqlite3Fts3GetVarintBounded(const char*,const char*,sqlite3_int64*);
-int sqlite3Fts3GetVarint32(const char *, int *);
+int sqlite3Fts3GetVarintBounded(const char*,const char*, sqlite_uint64*);
+int sqlite3Fts3GetVarint32(const char *, unsigned int *);
 int sqlite3Fts3VarintLen(sqlite3_uint64);
 void sqlite3Fts3Dequote(char *);
 void sqlite3Fts3DoclistPrev(int,char*,int,char**,sqlite3_int64*,int*,u8*);

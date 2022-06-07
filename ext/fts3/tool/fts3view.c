@@ -134,7 +134,7 @@ static void showSchema(sqlite3 *db, const char *zTab){
 ** Return the number of bytes read, or 0 on error.
 ** The value is stored in *v.
 */
-int getVarint(const unsigned char *p, sqlite_int64 *v){
+int getVarint(const unsigned char *p, sqlite_uint64 *v){
   const unsigned char *q = p;
   sqlite_uint64 x = 0, y = 1;
   while( (*q&0x80)==0x80 && q-(unsigned char *)p<9 ){
@@ -142,7 +142,7 @@ int getVarint(const unsigned char *p, sqlite_int64 *v){
     y <<= 7;
   }
   x += y * (*q++);
-  *v = (sqlite_int64) x;
+  *v = x;
   return (int) (q - (unsigned char *)p);
 }
 

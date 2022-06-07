@@ -334,7 +334,7 @@ int sqlite3_fts3_may_be_corrupt = 1;
 ** The length of data written will be between 1 and FTS3_VARINT_MAX bytes.
 ** The number of bytes written is returned.
 */
-int sqlite3Fts3PutVarint(char *p, sqlite_int64 v){
+int sqlite3Fts3PutVarint(char *p, sqlite_uint64 v){
   unsigned char *q = (unsigned char *) p;
   sqlite_uint64 vu = v;
   do{
@@ -380,8 +380,8 @@ int sqlite3Fts3GetVarintU(const char *pBuf, sqlite_uint64 *v){
 ** Return the number of bytes read, or 0 on error.
 ** The value is stored in *v.
 */
-int sqlite3Fts3GetVarint(const char *pBuf, sqlite_int64 *v){
-  return sqlite3Fts3GetVarintU(pBuf, (sqlite3_uint64*)v);
+int sqlite3Fts3GetVarint(const char *pBuf, sqlite_uint64 *v){
+  return sqlite3Fts3GetVarintU(pBuf, v);
 }
 
 /* 
@@ -393,15 +393,15 @@ int sqlite3Fts3GetVarint(const char *pBuf, sqlite_int64 *v){
 int sqlite3Fts3GetVarintBounded(
   const char *pBuf,
   const char *pEnd,
-  sqlite_int64 *v
+  sqlite_uint64 *v
 ){
   const unsigned char *p = (const unsigned char*)pBuf;
   const unsigned char *pStart = p;
   const unsigned char *pX = (const unsigned char*)pEnd;
-  u64 b = 0;
+  sqlite_uint64 b = 0;
   int shift;
   for(shift=0; shift<=63; shift+=7){
-    u64 c = p<pX ? *p : 0;
+	sqlite_uint64 c = p<pX ? *p : 0;
     p++;
     b += (c&0x7F) << shift;
     if( (c & 0x80)==0 ) break;
@@ -414,7 +414,7 @@ int sqlite3Fts3GetVarintBounded(
 ** Similar to sqlite3Fts3GetVarint(), except that the output is truncated to 
 ** a non-negative 32-bit integer before it is returned.
 */
-int sqlite3Fts3GetVarint32(const char *p, int *pi){
+int sqlite3Fts3GetVarint32(const char *p, unsigned int *pi){
   const unsigned char *ptr = (const unsigned char*)p;
   u32 a;
 
@@ -429,7 +429,7 @@ int sqlite3Fts3GetVarint32(const char *p, int *pi){
   GETVARINT_STEP(a, ptr, 14, 0x3FFF,   0x200000, *pi, 3);
   GETVARINT_STEP(a, ptr, 21, 0x1FFFFF, 0x10000000, *pi, 4);
   a = (a & 0x0FFFFFFF );
-  *pi = (int)(a | ((u32)(*ptr & 0x07) << 28));
+  *pi = (a | ((u32)(*ptr & 0x07) << 28));
   assert( 0==(a & 0x80000000) );
   assert( *pi>=0 );
   return 5;

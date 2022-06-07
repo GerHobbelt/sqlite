@@ -99,7 +99,7 @@ int sqlite3Fts5GetVarint32(const unsigned char *p, u32 *v){
 ** Read a 64-bit variable-length integer from memory starting at p[0].
 ** Return the number of bytes read.  The value is stored in *v.
 */
-u8 sqlite3Fts5GetVarint(const unsigned char *p, u64 *v){
+u8 sqlite3Fts5GetVarint(const unsigned char *p, sqlite_uint64 *v){
   u32 a,b,s;
 
   a = *p;
