@@ -1949,8 +1949,12 @@ static int safeModeAuth(
   UNUSED_PARAMETER(zA4);
   switch( op ){
     case SQLITE_ATTACH: {
+#ifndef SQLITE_SHELL_WASM_MODE
+      /* In WASM builds the filesystem is a virtual sandbox, so
+      ** there's no harm in using ATTACH. */
       if ( failIfSafeMode(p, "cannot run ATTACH in safe mode") )
         return SQLITE_ERROR;
+#endif
       break;
     }
     case SQLITE_FUNCTION: {
@@ -5729,6 +5733,7 @@ static unsigned int get4byteInt(unsigned char *a){
   return (a[0]<<24) + (a[1]<<16) + (a[2]<<8) + a[3];
 }
 
+#if !defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_ENABLE_DBPAGE_VTAB)
 /*
 ** Implementation of the ".dbinfo" command.
 **
@@ -5825,6 +5830,8 @@ static int shell_dbinfo_command(ShellState *p, int nArg, char **azArg){
   utf8_printf(p->out, "%-20s %u\n", "data version", iDataVersion);
   return 0;
 }
+#endif /* !defined(SQLITE_OMIT_VIRTUALTABLE)
+          && defined(SQLITE_ENABLE_DBPAGE_VTAB) */
 
 /*
 ** Print the current sqlite3_errmsg() value to stderr and return 1.
@@ -8088,9 +8095,11 @@ DISPATCHABLE_COMMAND( dbconfig 3 1 3 ){
   }   
   return 0;
 }
+#if !defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_ENABLE_DBPAGE_VTAB)
 DISPATCHABLE_COMMAND( dbinfo 3 1 2 ){
   return shell_dbinfo_command(p, nArg, azArg);
 }
+#endif
 
 /*****************
  * The .dump, .echo and .eqp commands
