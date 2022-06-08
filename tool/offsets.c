@@ -99,7 +99,7 @@ static void ofstRootAndColumn(
   sqlite3_free(zSql);
   if( p->zErr ) goto rootAndColumn_exit;
   while( sqlite3_step(pStmt)==SQLITE_ROW ){
-    const char *zCol = sqlite3_column_text(pStmt, 1);
+    const char *zCol = (const char *)sqlite3_column_text(pStmt, 1);
     if( strlen(zCol)==strlen(zColumn)
      && sqlite3_strnicmp(zCol, zColumn, strlen(zCol))==0
     ){

@@ -13050,7 +13050,7 @@ shell_bail:
 #ifndef SQLITE_SHELL_WASM_MODE
   /* In WASM mode we have to leave the db state in place so that
   ** client code can "push" SQL into it after this call returns. */
-  free(azCmd);
+  free((void *)azCmd);
   set_table_name(&data, 0);
   if( data.db ){
     session_close_all(&data, -1);
