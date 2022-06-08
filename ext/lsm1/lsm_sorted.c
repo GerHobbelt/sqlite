@@ -3975,7 +3975,7 @@ static int mergeWorkerWrite(
     bFirst = 1;
   }
   pPg = pMW->pPage;
-  assert(rc == LSM_OK ? !!pPg : TRUE);
+  assert(rc == LSM_OK ? !!pPg : 1);
   if( pPg ){
     aData = fsPageData(pPg, &nData);
 	assert(aData);
