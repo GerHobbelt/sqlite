@@ -134,7 +134,7 @@ static void showSchema(sqlite3 *db, const char *zTab){
 ** Return the number of bytes read, or 0 on error.
 ** The value is stored in *v.
 */
-int getVarint(const unsigned char *p, sqlite_int64 *v){
+int getVarint(const unsigned char *p, sqlite_uint64 *v){
   const unsigned char *q = p;
   sqlite_uint64 x = 0, y = 1;
   while( (*q&0x80)==0x80 && q-(unsigned char *)p<9 ){
@@ -142,7 +142,7 @@ int getVarint(const unsigned char *p, sqlite_int64 *v){
     y <<= 7;
   }
   x += y * (*q++);
-  *v = (sqlite_int64) x;
+  *v = x;
   return (int) (q - (unsigned char *)p);
 }
 
@@ -165,7 +165,7 @@ static void showStat(sqlite3 *db, const char *zTab){
         int i = 0;
         sqlite3_int64 v;
         while( i<len ){
-          i += getVarint(x, &v);
+          i += getVarintI(x, &v);
           printf(" %lld", v);
         }
         printf("\n");
@@ -558,20 +558,20 @@ static void decodeSegment(
   int cnt = 0;
   char zTerm[1000];
 
-  i += getVarint(aData, &n);
+  i += getVarintI(aData, &n);
   iHeight = (int)n;
   printf("height: %d\n", iHeight);
   if( iHeight>0 ){
-    i += getVarint(aData+i, &iChild);
+    i += getVarintI(aData+i, &iChild);
     printf("left-child: %lld\n", iChild);
   }
   while( i<nData ){
     if( (cnt++)>0 ){
-      i += getVarint(aData+i, &iPrefix);
+      i += getVarintI(aData+i, &iPrefix);
     }else{
       iPrefix = 0;
     }
-    i += getVarint(aData+i, &nTerm);
+    i += getVarintI(aData+i, &nTerm);
     if( iPrefix+nTerm+1 >= sizeof(zTerm) ){
       fprintf(stderr, "term to long\n");
       exit(1);
@@ -580,7 +580,7 @@ static void decodeSegment(
     zTerm[iPrefix+nTerm] = 0;
     i += nTerm;
     if( iHeight==0 ){
-      i += getVarint(aData+i, &iDocsz);
+      i += getVarintI(aData+i, &iDocsz);
       printf("term: %-25s doclist %7lld bytes offset %lld\n", zTerm, iDocsz, i);
       i += iDocsz;
     }else{
@@ -713,14 +713,14 @@ static void decodeDoclist(
   int i = 0;
 
   while( i<nData ){
-    i += getVarint(aData+i, &iDocid);
+    i += getVarintI(aData+i, &iDocid);
     printf("docid %lld col0", iDocid+iPrevDocid);
     iPrevDocid += iDocid;
     iPrevPos = 0;
     while( 1 ){
-      i += getVarint(aData+i, &iPos);
+      i += getVarintI(aData+i, &iPos);
       if( iPos==1 ){
-        i += getVarint(aData+i, &iCol);
+        i += getVarintI(aData+i, &iCol);
         printf(" col%lld", iCol);
         iPrevPos = 0;
       }else if( iPos==0 ){

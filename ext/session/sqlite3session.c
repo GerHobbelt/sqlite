@@ -328,7 +328,7 @@ static int sessionVarintLen(int iVal){
 ** bytes read.
 */
 static int sessionVarintGet(u8 *aBuf, int *piVal){
-  return getVarint32(aBuf, *piVal);
+  return getVarint32(aBuf, *((u32 *)piVal));
 }
 
 /* Load an unaligned and unsigned 32-bit integer */

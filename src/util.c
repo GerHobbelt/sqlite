@@ -1001,7 +1001,7 @@ int sqlite3PutVarint(unsigned char *p, u64 v){
 ** Read a 64-bit variable-length integer from memory starting at p[0].
 ** Return the number of bytes read.  The value is stored in *v.
 */
-u8 sqlite3GetVarint(const unsigned char *p, u64 *v){
+int sqlite3GetVarint(const unsigned char *p, u64 *v){
   u32 a,b,s;
 
   if( ((signed char*)p)[0]>=0 ){
@@ -1162,7 +1162,7 @@ u8 sqlite3GetVarint(const unsigned char *p, u64 *v){
 ** single-byte case.  All code should use the MACRO version as 
 ** this function assumes the single-byte case has already been handled.
 */
-u8 sqlite3GetVarint32(const unsigned char *p, u32 *v){
+int sqlite3GetVarint32(const unsigned char *p, u32 *v){
   u32 a,b;
 
   /* The 1-byte case.  Overwhelmingly the most common.  Handled inline
