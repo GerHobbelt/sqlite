@@ -2299,7 +2299,7 @@ static void fts5LeafSeek(
   assert( p->rc==SQLITE_OK );
 
   iPgidx = (u32)pIter->pLeaf->szLeaf;
-  iPgidx += fts5GetVarint32(&a[iPgidx], iTermOff);
+  iPgidx += fts5GetVarint32U(&a[iPgidx], iTermOff);
   iOff = iTermOff;
   if( iOff>n ){
     p->rc = FTS5_CORRUPT;
@@ -2309,7 +2309,7 @@ static void fts5LeafSeek(
   while( 1 ){
 
     /* Figure out how many new bytes are in this term */
-    fts5FastGetVarint32(a, iOff, nNew);
+    fts5FastGetVarint32U(a, iOff, nNew);
     if( nKeep<nMatch ){
       goto search_failed;
     }
@@ -2318,7 +2318,7 @@ static void fts5LeafSeek(
     if( nKeep==nMatch ){
       u32 nCmp;
       u32 i;
-      nCmp = (u32)MIN(nNew, nTerm-nMatch);
+      nCmp = MIN(nNew, nTerm-nMatch);
       for(i=0; i<nCmp; i++){
         if( a[iOff+i]!=pTerm[nMatch+i] ) break;
       }
@@ -2340,7 +2340,7 @@ static void fts5LeafSeek(
       break;
     }
 
-    iPgidx += fts5GetVarint32(&a[iPgidx], nKeep);
+    iPgidx += fts5GetVarint32U(&a[iPgidx], nKeep);
     iTermOff += nKeep;
     iOff = iTermOff;
 
@@ -2350,7 +2350,7 @@ static void fts5LeafSeek(
     }
 
     /* Read the nKeep field of the next term. */
-    fts5FastGetVarint32(a, iOff, nKeep);
+    fts5FastGetVarint32U(a, iOff, nKeep);
   }
 
  search_failed:
@@ -2365,7 +2365,7 @@ static void fts5LeafSeek(
       a = pIter->pLeaf->p;
       if( fts5LeafIsTermless(pIter->pLeaf)==0 ){
         iPgidx = (u32)pIter->pLeaf->szLeaf;
-        iPgidx += fts5GetVarint32(&pIter->pLeaf->p[iPgidx], iOff);
+        iPgidx += fts5GetVarint32U(&pIter->pLeaf->p[iPgidx], iOff);
         if( iOff<4 || (i64)iOff>=pIter->pLeaf->szLeaf ){
           p->rc = FTS5_CORRUPT;
           return;
@@ -2373,7 +2373,7 @@ static void fts5LeafSeek(
           nKeep = 0;
           iTermOff = iOff;
           n = (u32)pIter->pLeaf->nn;
-          iOff += fts5GetVarint32(&a[iOff], nNew);
+          iOff += fts5GetVarint32U(&a[iOff], nNew);
           break;
         }
       }
@@ -4549,7 +4549,7 @@ struct Fts5FlushCtx {
 */
 static int fts5PoslistPrefix(const u8 *aBuf, int nMax){
   int ret;
-  u32 dummy;
+  int dummy;
   ret = fts5GetVarint32(aBuf, dummy);
   if( ret<nMax ){
     while( 1 ){

@@ -131,9 +131,9 @@ typedef unsigned int u32;
 /*
 ** Show a usage message on stderr then quit.
 */
-static void usage(const char *argv0){
+static int usage(const char *argv0){
   fprintf(stderr, "Usage: %s FILENAME ?SEED N?\n", argv0);
-  exit(1);
+  return EXIT_FAILURE;
 }
 
 /*
@@ -1206,7 +1206,7 @@ int main(int argc, char **argv){
   int rc;
   u8 *pBuf = 0;
 
-  if( argc!=4 && argc!=2 ) usage(argv[0]);
+  if( argc!=4 && argc!=2 ) return usage(argv[0]);
   zInput = argv[1];
 
   fuzzReadFile(zInput, &nChangeset, &pChangeset);

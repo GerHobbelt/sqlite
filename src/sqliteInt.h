@@ -3122,6 +3122,7 @@ struct SrcItem {
     unsigned isCte :1;         /* This is a CTE */
     unsigned notCte :1;        /* This item may not match a CTE */
     unsigned isUsing :1;       /* u3.pUsing is valid */
+    unsigned isOn :1;          /* u3.pOn was once valid and non-NULL */
     unsigned isSynthUsing :1;  /* u3.pUsing is synthensized from NATURAL */
     unsigned isNestedFrom :1;  /* pSelect is a SF_NestedFrom subquery */
   } fg;
@@ -4945,12 +4946,17 @@ int sqlite3VarintLen(u64 v);
   (u8)((*(A)<(u8)0x80)?((B)=(u32)*(A)),1:sqlite3GetVarint32((A),&(B)))
 #define getVarint32NR(A,B) \
   B=(u32)*(A);if(B>=0x80)sqlite3GetVarint32((A),&(B))
+#define getVarint32NRI(A,B) \
+  B=(u32)*(A);if(B>=0x80)sqlite3GetVarint32((A),&(B))
 #define putVarint32(A,B)  \
   (u8)(((u32)(B)<(u32)0x80)?(*(A)=(unsigned char)(B)),1:\
   sqlite3PutVarint((A),(B)))
 #define getVarint    sqlite3GetVarint
 #define putVarint    sqlite3PutVarint
 
+static inline int getVarintI(const unsigned char *p, i64 *v) {
+	return sqlite3GetVarint(p, (u64 *)v);
+}
 
 const char *sqlite3IndexAffinityStr(sqlite3*, Index*);
 void sqlite3TableAffinity(Vdbe*, Table*, int);

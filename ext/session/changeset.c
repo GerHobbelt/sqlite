@@ -40,14 +40,14 @@ static int usage(const char *argv0){
 /*
 ** Read the content of a disk file into an in-memory buffer
 */
-static void readFile(const char *zFilename, int *pSz, void **ppBuf){
+static int readFile(const char *zFilename, int *pSz, void **ppBuf){
   FILE *f;
   sqlite3_int64 sz;
   void *pBuf;
   f = fopen(zFilename, "rb");
   if( f==0 ){
     fprintf(stderr, "cannot open \"%s\" for reading\n", zFilename);
-    exit(1);
+	return EXIT_FAILURE;
   }
   fseek(f, 0, SEEK_END);
   sz = ftell(f);
@@ -56,18 +56,19 @@ static void readFile(const char *zFilename, int *pSz, void **ppBuf){
   if( pBuf==0 ){
     fprintf(stderr, "cannot allocate %d to hold content of \"%s\"\n",
             (int)sz, zFilename);
-    exit(1);
+	return EXIT_FAILURE;
   }
   if( sz>0 ){
     if( fread(pBuf, (size_t)sz, 1, f)!=1 ){
       fprintf(stderr, "cannot read all %d bytes of \"%s\"\n",
               (int)sz, zFilename);
-      exit(1);
+	  return EXIT_FAILURE;
     }
     fclose(f);
   }
   *pSz = (int)sz;
   *ppBuf = pBuf;
+  return EXIT_SUCCESS;
 }
 
 /* Array for converting from half-bytes (nybbles) into ASCII hex
@@ -179,14 +180,15 @@ static int conflictCallback(
 
 
 #if defined(BUILD_MONOLITHIC)
-#define main(cnt, arr)      sqlite_ext_session_main(cnt, arr)
+#define main(cnt, arr)      sqlite_ext_session_changeset_main(cnt, arr)
 #endif
 
 int main(int argc, char **argv){
   int sz, rc;
   void *pBuf = 0;
   if( argc<3 ) return usage(argv[0]);
-  readFile(argv[1], &sz, &pBuf);
+  rc = readFile(argv[1], &sz, &pBuf);
+  if (rc != EXIT_SUCCESS) return rc;
 
   /* changeset FILENAME apply DB
   ** Apply the changeset in FILENAME to the database file DB
@@ -199,7 +201,7 @@ int main(int argc, char **argv){
       fprintf(stderr, "unable to open database file \"%s\": %s\n",
               argv[3], sqlite3_errmsg(db));
       sqlite3_close(db);
-      exit(1);
+	  return EXIT_FAILURE;
     }
     sqlite3_exec(db, "BEGIN", 0, 0, 0);
     nConflict = 0;
@@ -235,9 +237,10 @@ int main(int argc, char **argv){
     out = fopen(zOut, "wb");
     if( out==0 ){
       fprintf(stderr, "cannot open \"%s\" for writing\n", zOut);
-      exit(1);
+	  return EXIT_FAILURE;
     }
-    readFile(argv[3], &szB, &pB);
+    rc = readFile(argv[3], &szB, &pB);
+	if (rc != EXIT_SUCCESS) return rc;
     rc = sqlite3changeset_concat(sz, pBuf, szB, pB, &szOut, &pOutBuf);
     if( rc!=SQLITE_OK ){
       fprintf(stderr, "sqlite3changeset_concat() returns %d\n", rc);
@@ -260,7 +263,7 @@ int main(int argc, char **argv){
     rc = sqlite3changeset_start(&pIter, sz, pBuf);
     if( rc!=SQLITE_OK ){
       fprintf(stderr, "sqlite3changeset_start() returns %d\n", rc);
-      exit(1);
+	  return EXIT_FAILURE;
     }
     while( sqlite3changeset_next(pIter)==SQLITE_ROW ){
       int op, bIndirect, nCol;
@@ -306,7 +309,7 @@ int main(int argc, char **argv){
     out = fopen(zOut, "wb");
     if( out==0 ){
       fprintf(stderr, "cannot open \"%s\" for writing\n", zOut);
-      exit(1);
+	  return EXIT_FAILURE;
     }
     rc = sqlite3changeset_invert(sz, pBuf, &szOut, &pOutBuf);
     if( rc!=SQLITE_OK ){
@@ -330,7 +333,7 @@ int main(int argc, char **argv){
     rc = sqlite3changeset_start(&pIter, sz, pBuf);
     if( rc!=SQLITE_OK ){
       fprintf(stderr, "sqlite3changeset_start() returns %d\n", rc);
-      exit(1);
+	  return EXIT_FAILURE;
     }
     printf("BEGIN;\n");
     while( sqlite3changeset_next(pIter)==SQLITE_ROW ){

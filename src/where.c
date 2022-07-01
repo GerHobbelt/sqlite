@@ -682,6 +682,7 @@ static void translateColumnToCopy(
       pOp->p1 = pOp->p2 + iRegister;
       pOp->p2 = pOp->p3;
       pOp->p3 = 0;
+      pOp->p5 = 2;  /* Cause the MEM_Subtype flag to be cleared */
     }else if( pOp->opcode==OP_Rowid ){
       pOp->opcode = OP_Sequence;
       pOp->p1 = iAutoidxCur;
@@ -756,14 +757,17 @@ static int termCanDriveIndex(
   char aff;
   if( pTerm->leftCursor!=pSrc->iCursor ) return 0;
   if( (pTerm->eOperator & (WO_EQ|WO_IS))==0 ) return 0;
-  if( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ))!=0
-   && !ExprHasProperty(pTerm->pExpr, EP_OuterON)
-   && (pTerm->eOperator & WO_IS)
-  ){
-    /* Cannot use an IS term from the WHERE clause as an index driver for
-    ** the RHS of a LEFT JOIN or for the LHS of a RIGHT JOIN. Such a term
-    ** can only be used if it is from the ON clause.  */
-    return 0;
+  assert( (pSrc->fg.jointype & JT_RIGHT)==0 );
+  if( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))!=0 ){
+    testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_LEFT );
+    testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_LTORJ );
+    testcase( ExprHasProperty(pTerm->pExpr, EP_OuterON) )
+    testcase( ExprHasProperty(pTerm->pExpr, EP_InnerON) );
+    if( !ExprHasProperty(pTerm->pExpr, EP_OuterON|EP_InnerON)
+     || pTerm->pExpr->w.iJoin != pSrc->iCursor
+    ){
+      return 0;  /* See tag-20191211-001 */
+    }
   }
   if( (pTerm->prereqRight & notReady)!=0 ) return 0;
   assert( (pTerm->eOperator & (WO_OR|WO_AND))==0 );
@@ -2847,6 +2851,9 @@ static int whereLoopAddBtreeIndex(
     ** for an example of a WHERE clause constraints that may not be used on
     ** the right table of a RIGHT JOIN because the constraint implies a
     ** not-NULL condition on the left table of the RIGHT JOIN.
+    **
+    ** 2022-06-10: The same condition applies to termCanDriveIndex() above.
+    ** https://sqlite.org/forum/forumpost/51e6959f61
     */
     if( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))!=0 ){
       testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_LEFT );
@@ -3210,15 +3217,18 @@ static int indexMightHelpWithOrderBy(
 */
 static int whereUsablePartialIndex(
   int iTab,             /* The table for which we want an index */
-  int isLeft,           /* True if iTab is the right table of a LEFT JOIN */
+  u8 jointype,          /* The JT_* flags on the join */
   WhereClause *pWC,     /* The WHERE clause of the query */
   Expr *pWhere          /* The WHERE clause from the partial index */
 ){
   int i;
   WhereTerm *pTerm;
-  Parse *pParse = pWC->pWInfo->pParse;
+  Parse *pParse;
+
+  if( jointype & JT_LTORJ ) return 0;
+  pParse = pWC->pWInfo->pParse;
   while( pWhere->op==TK_AND ){
-    if( !whereUsablePartialIndex(iTab,isLeft,pWC,pWhere->pLeft) ) return 0;
+    if( !whereUsablePartialIndex(iTab,jointype,pWC,pWhere->pLeft) ) return 0;
     pWhere = pWhere->pRight;
   }
   if( pParse->db->flags & SQLITE_EnableQPSG ) pParse = 0;
@@ -3226,7 +3236,7 @@ static int whereUsablePartialIndex(
     Expr *pExpr;
     pExpr = pTerm->pExpr;
     if( (!ExprHasProperty(pExpr, EP_OuterON) || pExpr->w.iJoin==iTab)
-     && (isLeft==0 || ExprHasProperty(pExpr, EP_OuterON))
+     && ((jointype & JT_OUTER)==0 || ExprHasProperty(pExpr, EP_OuterON))
      && sqlite3ExprImpliesExpr(pParse, pExpr, pWhere, iTab)
      && (pTerm->wtFlags & TERM_VNULL)==0
     ){
@@ -3392,9 +3402,8 @@ static int whereLoopAddBtree(
   for(; rc==SQLITE_OK && pProbe; 
       pProbe=(pSrc->fg.isIndexedBy ? 0 : pProbe->pNext), iSortIdx++
   ){
-    int isLeft = (pSrc->fg.jointype & JT_OUTER)!=0;
     if( pProbe->pPartIdxWhere!=0
-     && !whereUsablePartialIndex(pSrc->iCursor, isLeft, pWC,
+     && !whereUsablePartialIndex(pSrc->iCursor, pSrc->fg.jointype, pWC,
                                  pProbe->pPartIdxWhere)
     ){
       testcase( pNew->iTab!=pSrc->iCursor );  /* See ticket [98d973b8f5] */
@@ -4171,11 +4180,21 @@ static int whereLoopAddAll(WhereLoopBuilder *pBuilder){
     pNew->iTab = iTab;
     pBuilder->iPlanLimit += SQLITE_QUERY_PLANNER_LIMIT_INCR;
     pNew->maskSelf = sqlite3WhereGetMask(&pWInfo->sMaskSet, pItem->iCursor);
-    if( bFirstPastRJ || (pItem->fg.jointype & (JT_OUTER|JT_CROSS))!=0 ){
+    if( bFirstPastRJ 
+     || (pItem->fg.jointype & (JT_OUTER|JT_CROSS|JT_LTORJ))!=0
+    ){
       /* Add prerequisites to prevent reordering of FROM clause terms
       ** across CROSS joins and outer joins.  The bFirstPastRJ boolean
       ** prevents the right operand of a RIGHT JOIN from being swapped with
-      ** other elements even further to the right. */
+      ** other elements even further to the right.
+      **
+      ** The JT_LTORJ term prevents any FROM-clause term reordering for terms
+      ** to the left of a RIGHT JOIN.  This is conservative.  Relaxing this
+      ** constraint somewhat to prevent terms from crossing from the right
+      ** side of a LEFT JOIN over to the left side when they are on the
+      ** left side of a RIGHT JOIN would be sufficient for all known failure
+      ** cases.  FIX ME: Implement this optimization.
+      */
       mPrereq |= mPrior;
       bFirstPastRJ = (pItem->fg.jointype & JT_RIGHT)!=0;
     }
@@ -5070,7 +5089,11 @@ static int whereShortCut(WhereLoopBuilder *pBuilder){
   pItem = pWInfo->pTabList->a;
   pTab = pItem->pTab;
   if( IsVirtual(pTab) ) return 0;
-  if( pItem->fg.isIndexedBy ) return 0;
+  if( pItem->fg.isIndexedBy || pItem->fg.notIndexed ){
+    testcase( pItem->fg.isIndexedBy );
+    testcase( pItem->fg.notIndexed );
+    return 0;
+  }
   iCur = pItem->iCursor;
   pWC = &pWInfo->sWC;
   pLoop = pBuilder->pNew;
@@ -5243,7 +5266,7 @@ static SQLITE_NOINLINE Bitmask whereOmitNoopJoin(
     WhereLoop *pLoop;
     pLoop = pWInfo->a[i].pWLoop;
     pItem = &pWInfo->pTabList->a[pLoop->iTab];
-    if( (pItem->fg.jointype & JT_LEFT)==0 ) continue;
+    if( (pItem->fg.jointype & (JT_LEFT|JT_RIGHT))!=JT_LEFT ) continue;
     if( (pWInfo->wctrlFlags & WHERE_WANT_DISTINCT)==0
      && (pLoop->wsFlags & WHERE_ONEROW)==0
     ){
@@ -5575,7 +5598,7 @@ WhereInfo *sqlite3WhereBegin(
   /* Analyze all of the subexpressions. */
   sqlite3WhereExprAnalyze(pTabList, &pWInfo->sWC);
   sqlite3WhereAddLimit(&pWInfo->sWC, pLimit);
-  if( db->mallocFailed ) goto whereBeginError;
+  if( pParse->nErr ) goto whereBeginError;
 
   /* Special case: WHERE terms that do not refer to any tables in the join
   ** (constant expressions). Evaluate each such term, and jump over all the

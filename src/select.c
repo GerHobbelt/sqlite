@@ -424,20 +424,27 @@ void sqlite3SetJoinExpr(Expr *p, int iTable, u32 joinFlag){
   } 
 }
 
-/* Undo the work of sqlite3SetJoinExpr(). In the expression p, convert every
-** term that is marked with EP_OuterON and w.iJoin==iTable into
-** an ordinary term that omits the EP_OuterON mark.
+/* Undo the work of sqlite3SetJoinExpr().  This is used when a LEFT JOIN
+** is simplified into an ordinary JOIN, and when an ON expression is
+** "pushed down" into the WHERE clause of a subquery.
 **
-** This happens when a LEFT JOIN is simplified into an ordinary JOIN.
+** Convert every term that is marked with EP_OuterON and w.iJoin==iTable into
+** an ordinary term that omits the EP_OuterON mark.  Or if iTable<0, then
+** just clear every EP_OuterON and EP_InnerON mark from the expression tree.
+**
+** If nullable is true, that means that Expr p might evaluate to NULL even
+** if it is a reference to a NOT NULL column.  This can happen, for example,
+** if the table that p references is on the left side of a RIGHT JOIN.
+** If nullable is true, then take care to not remove the EP_CanBeNull bit.
+** See forum thread https://sqlite.org/forum/forumpost/b40696f50145d21c
 */
-static void unsetJoinExpr(Expr *p, int iTable){
+static void unsetJoinExpr(Expr *p, int iTable, int nullable){
   while( p ){
-    if( ExprHasProperty(p, EP_OuterON)
-     && (iTable<0 || p->w.iJoin==iTable) ){
-      ExprClearProperty(p, EP_OuterON);
-      ExprSetProperty(p, EP_InnerON);
+    if( iTable<0 || (ExprHasProperty(p, EP_OuterON) && p->w.iJoin==iTable) ){
+      ExprClearProperty(p, EP_OuterON|EP_InnerON);
+      if( iTable>=0 ) ExprSetProperty(p, EP_InnerON);
     }
-    if( p->op==TK_COLUMN && p->iTable==iTable ){
+    if( p->op==TK_COLUMN && p->iTable==iTable && !nullable ){
       ExprClearProperty(p, EP_CanBeNull);
     }
     if( p->op==TK_FUNCTION ){
@@ -445,11 +452,11 @@ static void unsetJoinExpr(Expr *p, int iTable){
       if( p->x.pList ){
         int i;
         for(i=0; i<p->x.pList->nExpr; i++){
-          unsetJoinExpr(p->x.pList->a[i].pExpr, iTable);
+          unsetJoinExpr(p->x.pList->a[i].pExpr, iTable, nullable);
         }
       }
     }
-    unsetJoinExpr(p->pLeft, iTable);
+    unsetJoinExpr(p->pLeft, iTable, nullable);
     p = p->pRight;
   } 
 }
@@ -610,6 +617,7 @@ static int sqlite3ProcessJoin(Parse *pParse, Select *p){
       sqlite3SetJoinExpr(pRight->u3.pOn, pRight->iCursor, joinType);
       p->pWhere = sqlite3ExprAnd(pParse, p->pWhere, pRight->u3.pOn);
       pRight->u3.pOn = 0;
+      pRight->fg.isOn = 1;
     }
   }
   return 0;
@@ -4062,7 +4070,8 @@ static void renumberCursors(
 **        (3a) the subquery may not be a join and
 **        (3b) the FROM clause of the subquery may not contain a virtual
 **             table and
-**        (3c) the outer query may not be an aggregate.
+**        (3c) The outer query may not have a GROUP BY.  (This limitation is
+**             due to how TK_IF_NULL_ROW works.  FIX ME!)
 **        (3d) the outer query may not be DISTINCT.
 **        See also (26) for restrictions on RIGHT JOIN.
 **
@@ -4171,6 +4180,11 @@ static void renumberCursors(
 **
 **  (28)  The subquery is not a MATERIALIZED CTE.
 **
+**  (29)  Either the subquery is not the right-hand operand of a join with an
+**        ON or USING clause nor the right-hand operand of a NATURAL JOIN, or
+**        the right-most table within the FROM clause of the subquery
+**        is not part of an outer join.
+**
 **
 ** In this routine, the "p" parameter is a pointer to the outer query.
 ** The subquery is p->pSrc->a[iFrom].  isAgg is true if the outer query
@@ -4262,18 +4276,13 @@ static int flattenSubquery(
   **
   ** which is not at all the same thing.
   **
-  ** If the subquery is the right operand of a LEFT JOIN, then the outer
-  ** query cannot be an aggregate. (3c)  This is an artifact of the way
-  ** aggregates are processed - there is no mechanism to determine if
-  ** the LEFT JOIN table should be all-NULL.
-  **
   ** See also tickets #306, #350, and #3300.
   */
   if( (pSubitem->fg.jointype & (JT_OUTER|JT_LTORJ))!=0 ){
     if( pSubSrc->nSrc>1                        /* (3a) */
-     || isAgg                                  /* (3b) */
-     || IsVirtual(pSubSrc->a[0].pTab)          /* (3c) */
+     || IsVirtual(pSubSrc->a[0].pTab)          /* (3b) */
      || (p->selFlags & SF_Distinct)!=0         /* (3d) */
+     || (p->pGroupBy!=0)                       /* (3c) */
      || (pSubitem->fg.jointype & JT_RIGHT)!=0  /* (26) */
     ){
       return 0;
@@ -4296,6 +4305,35 @@ static int flattenSubquery(
   }
   if( pSubitem->fg.isCte && pSubitem->u2.pCteUse->eM10d==M10d_Yes ){
     return 0;       /* (28) */
+  }
+
+  /* Restriction (29): 
+  **
+  ** We do not want two constraints on the same term of the flattened
+  ** query where one constraint has EP_InnerON and the other is EP_OuterON.
+  ** To prevent this, one or the other of the following conditions must be
+  ** false:
+  **
+  **   (29a)  The right-most entry in the FROM clause of the subquery
+  **          must not be part of an outer join.
+  **
+  **   (29b)  The subquery itself must not be the right operand of a 
+  **          NATURAL join or a join that as an ON or USING clause.
+  **
+  ** These conditions are sufficient to keep an EP_OuterON from being
+  ** flattened into an EP_InnerON.  Restrictions (3a) and (27) prevent
+  ** an EP_InnerON from being flattened into an EP_OuterON.
+  */
+  if( pSubSrc->nSrc>=2
+   && (pSubSrc->a[pSubSrc->nSrc-1].fg.jointype & JT_OUTER)!=0
+  ){
+    if( (pSubitem->fg.jointype & JT_NATURAL)!=0
+     || pSubitem->fg.isUsing
+     || NEVER(pSubitem->u3.pOn!=0) /* ON clause already shifted into WHERE */
+     || pSubitem->fg.isOn
+    ){
+      return 0;
+    }
   }
 
   /* Restriction (17): If the sub-query is a compound SELECT, then it must
@@ -4627,6 +4665,8 @@ struct WhereConst {
   int nConst;      /* Number for COLUMN=CONSTANT terms */
   int nChng;       /* Number of times a constant is propagated */
   int bHasAffBlob; /* At least one column in apExpr[] as affinity BLOB */
+  u32 mExcludeOn;  /* Which ON expressions to exclude from considertion.
+                   ** Either EP_OuterON or EP_InnerON|EP_OuterON */
   Expr **apExpr;   /* [i*2] is COLUMN and [i*2+1] is VALUE */
 };
 
@@ -4689,7 +4729,11 @@ static void constInsert(
 static void findConstInWhere(WhereConst *pConst, Expr *pExpr){
   Expr *pRight, *pLeft;
   if( NEVER(pExpr==0) ) return;
-  if( ExprHasProperty(pExpr, EP_OuterON) ) return;
+  if( ExprHasProperty(pExpr, pConst->mExcludeOn) ){
+    testcase( ExprHasProperty(pExpr, EP_OuterON) );
+    testcase( ExprHasProperty(pExpr, EP_InnerON) );
+    return;
+  }
   if( pExpr->op==TK_AND ){
     findConstInWhere(pConst, pExpr->pRight);
     findConstInWhere(pConst, pExpr->pLeft);
@@ -4725,9 +4769,10 @@ static int propagateConstantExprRewriteOne(
   int i;
   if( pConst->pOomFault[0] ) return WRC_Prune;
   if( pExpr->op!=TK_COLUMN ) return WRC_Continue;
-  if( ExprHasProperty(pExpr, EP_FixedCol|EP_OuterON) ){
+  if( ExprHasProperty(pExpr, EP_FixedCol|pConst->mExcludeOn) ){
     testcase( ExprHasProperty(pExpr, EP_FixedCol) );
     testcase( ExprHasProperty(pExpr, EP_OuterON) );
+    testcase( ExprHasProperty(pExpr, EP_InnerON) );
     return WRC_Continue;
   }
   for(i=0; i<pConst->nConst; i++){
@@ -4851,6 +4896,17 @@ static int propagateConstants(
     x.nChng = 0;
     x.apExpr = 0;
     x.bHasAffBlob = 0;
+    if( ALWAYS(p->pSrc!=0)
+     && p->pSrc->nSrc>0
+     && (p->pSrc->a[0].fg.jointype & JT_LTORJ)!=0
+    ){
+      /* Do not propagate constants on any ON clause if there is a
+      ** RIGHT JOIN anywhere in the query */
+      x.mExcludeOn = EP_InnerON | EP_OuterON;
+    }else{
+      /* Do not propagate constants through the ON clause of a LEFT JOIN */
+      x.mExcludeOn = EP_OuterON;
+    }
     findConstInWhere(&x, p->pWhere);
     if( x.nConst ){
       memset(&w, 0, sizeof(w));
@@ -5030,7 +5086,7 @@ static int pushDownWhereTerms(
     while( pSubq ){
       SubstContext x;
       pNew = sqlite3ExprDup(pParse->db, pWhere, 0);
-      unsetJoinExpr(pNew, -1);
+      unsetJoinExpr(pNew, -1, 1);
       x.pParse = pParse;
       x.iTable = pSrc->iCursor;
       x.iNewTable = pSrc->iCursor;
@@ -6714,7 +6770,9 @@ int sqlite3Select(
       SELECTTRACE(0x100,pParse,p,
                 ("LEFT-JOIN simplifies to JOIN on term %d\n",i));
       pItem->fg.jointype &= ~(JT_LEFT|JT_OUTER);
-      unsetJoinExpr(p->pWhere, pItem->iCursor);
+      assert( pItem->iCursor>=0 );
+      unsetJoinExpr(p->pWhere, pItem->iCursor,
+                    pTabList->a[0].fg.jointype & JT_LTORJ);
     }
 
     /* No futher action if this term of the FROM clause is no a subquery */
@@ -6934,7 +6992,7 @@ int sqlite3Select(
 
     /* Generate code to implement the subquery
     **
-    ** The subquery is implemented as a co-routine all of the following are
+    ** The subquery is implemented as a co-routine if all of the following are
     ** true:
     **
     **    (1)  the subquery is guaranteed to be the outer loop (so that
