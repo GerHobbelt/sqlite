@@ -1,5 +1,5 @@
-C Fix\sa\smissing\sdependency\sfor\sjson.lo\sin\sMakefile.in
-D 2022-06-27T11:28:25.255
+C In\sthe\ssqlite_stmt\svirtual\stable,\sadd\stwo\sALWAYS()\smacros\son\sbranches\sthat\nhave\sbeen\scome\salways\strue\sdue\sto\sthe\s[84a91c255e3d7772]\soptimization.
+D 2022-07-01T12:09:23.007
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -344,7 +344,7 @@ F ext/misc/shathree.c 7b17615869a495659f1569ada1d8d3d21b4a24614f2746d93cc87ef7c0
 F ext/misc/showauth.c 732578f0fe4ce42d577e1c86dc89dd14a006ab52
 F ext/misc/spellfix.c 94df9bbfa514a563c1484f684a2df3d128a2f7209a84ca3ca100c68a0163e29f
 F ext/misc/sqlar.c 0ace5d3c10fe736dc584bf1159a36b8e2e60fab309d310cd8a0eecd9036621b6
-F ext/misc/stmt.c 35063044a388ead95557e4b84b89c1b93accc2f1c6ddea3f9710e8486a7af94a
+F ext/misc/stmt.c f30f4539cbad76424779d9380e0abb7099d58b3fe8ebea075b9ab1c2e37fdb7f
 F ext/misc/templatevtab.c 8a16a91a5ceaccfcbd6aaaa56d46828806e460dd194965b3f77bf38f14b942c4
 F ext/misc/totype.c fa4aedeb07f66169005dffa8de3b0a2b621779fd44f85c103228a42afa71853b
 F ext/misc/uint.c 053fed3bce2e89583afcd4bf804d75d659879bbcedac74d0fa9ed548839a030b
@@ -645,7 +645,7 @@ F src/vacuum.c bb346170b0b54c6683bba4a5983aea40485597fdf605c87ec8bc2e199fe88cd8
 F src/vdbe.c 1266f3a4744224253dd74f0080014be8056b062c6f2f6a81e229fa0d306d4102
 F src/vdbe.h 07641758ca8b4f4c6d81ea667ea167c541e6ece21f5574da11e3d21ec37e2662
 F src/vdbeInt.h 2cad0aeeb106371ed0e0946bab89f60627087068847afc2451c05056961c18da
-F src/vdbeapi.c 602610f1252d59cd69742f78a1e2f6fbae40a4b407f5506a6a7b869b0df08ff2
+F src/vdbeapi.c d68267db6e6641994e17c70670c40fd67ceb2352e42188815ed8c05d4d6502cb
 F src/vdbeaux.c 328b866880e67526300aa2361c5e50beb3d97dd8746db37dd4aa0135aea60e4d
 F src/vdbeblob.c 5e61ce31aca17db8fb60395407457a8c1c7fb471dde405e0cd675974611dcfcd
 F src/vdbemem.c 5ebf05c0182addedb1607ade848e1c83cef40981df94d1abfab0c59288c6064f
@@ -1244,7 +1244,7 @@ F test/memjournal2.test 89a4e0d1084170a281efa4d54c2677599f986f44227f98f7dfae2828
 F test/memleak.test 10b9c6c57e19fc68c32941495e9ba1c50123f6e2
 F test/memsubsys1.test 9e7555a22173b8f1c96c281ce289b338fcba2abe8b157f8798ca195bbf1d347e
 F test/memsubsys2.test 3e4a8d0c05fd3e5fa92017c64666730a520c7e08
-F test/merge1.test 0ade470d77b689c4a64dc7f736527fcd893140bcafa70af8f7b98523cfb83f16
+F test/merge1.test 2de6d6ef8d25402764b1aab49d8f9d7f89208c89a6674e437f76de4c812157b8
 F test/minmax.test fe638b55d77d2375531a8f549b338eafcd9adfbd2f72df37ed77d9b26ca0a71a
 F test/minmax2.test cf9311babb6f0518d04e42fd6a42c619531c4309a9dd790a2c4e9b3bc595e0de
 F test/minmax3.test cc1e8b010136db0d01a6f2a29ba5a9f321034354
@@ -1978,8 +1978,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P 58caa50a410b7eb0e68658ea1e606d75ea85cdae04e864270c932246ba990b5e
-R 75e666d95bc19960088c32e5514624f5
+P 8a6913b66cc5af354497044ccb849eb80d00d0799362475f1537a6999196895e
+R 0132953ad5eb3607684a7cdb93b4dba2
 U drh
-Z 7850a40777a5511a9d66baab30b628c4
+Z 1ada44b67514c0a05c379e55481beb34
 # Remove this line to create a well-formed Fossil manifest.
