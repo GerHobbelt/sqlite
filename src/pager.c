@@ -5566,8 +5566,6 @@ static int getPageNormal(
   assert( assert_pager_state(pPager) );
   assert( pPager->hasHeldSharedLock==1 );
 
-  if( pgno==0 ) return SQLITE_CORRUPT_BKPT;
-
 #ifndef SQLITE_OMIT_CONCURRENT
   /* If this is an CONCURRENT transaction and the page being read was
   ** present in the database file when the transaction was opened,
@@ -5610,7 +5608,7 @@ static int getPageNormal(
     ** (*) obsolete.  Was: maximum page number is 2^31
     ** (2) Never try to fetch the locking page
     */
-    if( pgno==PAGER_SJ_PGNO(pPager) ){
+    if( pgno==0 || pgno==PAGER_SJ_PGNO(pPager) ){
       rc = SQLITE_CORRUPT_BKPT;
       goto pager_acquire_err;
     }

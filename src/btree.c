@@ -2554,9 +2554,7 @@ getAndInitPage_error1:
     pCur->pPage = pCur->apPage[pCur->iPage];
   }
   testcase( pgno==0 );
-  assert( pgno!=0 || rc==SQLITE_CORRUPT 
-                  || rc==SQLITE_IOERR_NOMEM
-                  || rc==SQLITE_NOMEM );
+  assert( pgno!=0 || rc!=SQLITE_OK );
   return rc;
 }
 
@@ -7487,12 +7485,6 @@ static void dropCell(MemPage *pPage, int idx, int sz, int *pRC){
   assert( pPage->pBt->usableSize > (u32)(ptr-data) );
   pc = get2byte(ptr);
   hdr = pPage->hdrOffset;
-#if 0  /* Not required.  Omit for efficiency */
-  if( pc<hdr+pPage->nCell*2 ){
-    *pRC = SQLITE_CORRUPT_BKPT;
-    return;
-  }
-#endif
   testcase( pc==(u32)get2byte(&data[hdr+5]) );
   testcase( pc+sz==pPage->pBt->usableSize );
   if( pc+sz > pPage->pBt->usableSize ){
