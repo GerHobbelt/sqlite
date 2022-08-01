@@ -12500,7 +12500,7 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
   char **argv;
 #endif
 #ifdef SQLITE_DEBUG
-  sqlite3_uint64 mem_main_enter = sqlite3_memory_used();
+  sqlite3_int64 mem_main_enter = sqlite3_memory_used();
 #endif
 #ifdef SQLITE_SHELL_WASM_MODE
 #  define data shellState
