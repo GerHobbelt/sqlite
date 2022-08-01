@@ -3900,6 +3900,7 @@ int sqlite3WalFindFrame(
   int iApp = walidxGetFile(&pWal->hdr);
   int rc = SQLITE_OK;
   u32 iRead = 0;                  /* If !=0, WAL frame to return data from */
+  u32 iLast = pWal->hdr.mxFrame;  /* Last page in WAL for this reader */
 
   /* This routine is only be called from within a read transaction. Or,
   ** sometimes, as part of a rollback that occurs after an error reaquiring
@@ -3924,8 +3925,14 @@ int sqlite3WalFindFrame(
   }
 #endif
 
-  /* Return early if read-lock 0 is held. */
-  if( (pWal->readLock==0 && pWal->bShmUnreliable==0) ){
+
+  /* If the "last page" field of the wal-index header snapshot is 0, then
+  ** no data will be read from the wal under any circumstances. Return early
+  ** in this case as an optimization.  Likewise, if pWal->readLock==0, 
+  ** then the WAL is ignored by the reader so return early, as if the 
+  ** WAL were empty.
+  */
+  if( iLast==0 || (pWal->readLock==0 && pWal->bShmUnreliable==0) ){
     assert( !bWal2 );
     *piRead = 0;
     return SQLITE_OK;
