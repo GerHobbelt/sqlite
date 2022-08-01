@@ -38,6 +38,16 @@
 #endif
 
 /*
+** Use -DSQLITE_SHELL_WASM_WEB_MODE to build for Emscripten targeting
+** web browser use. We do not automatically do that using
+** ifdef(__EMSCRIPTEN__) because it should be possible to build the
+** shell with Emscripten for use in shell-based WASM/WASI runtime
+** environments. The browser-mode build has much different user input
+** requirements and the "wasm web" build rewires the user input
+** subsystem to account for that.
+*/
+
+/*
 ** Warning pragmas copied from msvc.h in the core.
 */
 #if defined(_MSC_VER)
@@ -264,9 +274,9 @@ static void setTextMode(FILE *file, int isOutput){
 ** things.
 */
 #ifdef __EMSCRIPTEN__
-#define SQLITE_SHELL_WASM_MODE
+#define SQLITE_SHELL_WASM_WEB_MODE
 #else
-#undef SQLITE_SHELL_WASM_MODE
+#undef SQLITE_SHELL_WASM_WEB_MODE
 #endif
 
 static const char **azHelp;
@@ -771,7 +781,7 @@ static char *local_getline(char *zLine, FILE *in){
 ** be freed by the caller or else passed back into this routine via the
 ** zPrior argument for reuse.
 */
-#ifndef SQLITE_SHELL_WASM_MODE
+#ifndef SQLITE_SHELL_WASM_WEB_MODE
 static char *one_input_line(FILE *in, char *zPrior, int isContinuation){
   char *zPrompt;
   char *zResult;
@@ -791,7 +801,7 @@ static char *one_input_line(FILE *in, char *zPrior, int isContinuation){
   }
   return zResult;
 }
-#endif /* !SQLITE_SHELL_WASM_MODE */
+#endif /* !SQLITE_SHELL_WASM_WEB_MODE */
 
 /*
 ** Return the value of a hexadecimal digit.  Return -1 if the input
@@ -1096,7 +1106,7 @@ INCLUDE ../ext/misc/decimal.c
 INCLUDE ../ext/misc/ieee754.c
 INCLUDE ../ext/misc/series.c
 INCLUDE ../ext/misc/regexp.c
-#ifndef SQLITE_SHELL_WASM_MODE
+#ifndef SQLITE_SHELL_WASM_WEB_MODE
 INCLUDE ../ext/misc/fileio.c
 INCLUDE ../ext/misc/completion.c
 INCLUDE ../ext/misc/appendvfs.c
@@ -1232,7 +1242,7 @@ struct ShellState {
   char *zNonce;          /* Nonce for temporary safe-mode suspension */
   EQPGraph sGraph;       /* Information for the graphical EXPLAIN QUERY PLAN */
   ExpertInfo expert;     /* Valid if previous command was ".expert OPT..." */
-#ifdef SQLITE_SHELL_WASM_MODE
+#ifdef SQLITE_SHELL_WASM_WEB_MODE
   struct {
     const char * zInput; /* Input string from wasm/JS proxy */
     const char * zPos;   /* Cursor pos into zInput */
@@ -1240,7 +1250,7 @@ struct ShellState {
 #endif
 };
 
-#ifdef SQLITE_SHELL_WASM_MODE
+#ifdef SQLITE_SHELL_WASM_WEB_MODE
 static ShellState shellState;
 #endif
 
@@ -1949,7 +1959,7 @@ static int safeModeAuth(
   UNUSED_PARAMETER(zA4);
   switch( op ){
     case SQLITE_ATTACH: {
-#ifndef SQLITE_SHELL_WASM_MODE
+#ifndef SQLITE_SHELL_WASM_WEB_MODE
       /* In WASM builds the filesystem is a virtual sandbox, so
       ** there's no harm in using ATTACH. */
       if ( failIfSafeMode(p, "cannot run ATTACH in safe mode") )
@@ -4934,7 +4944,7 @@ static void open_db(ShellState *p, int openFlags){
     sqlite3_regexp_init(p->db, 0, 0);
     sqlite3_ieee_init(p->db, 0, 0);
     sqlite3_series_init(p->db, 0, 0);
-#ifndef SQLITE_SHELL_WASM_MODE
+#ifndef SQLITE_SHELL_WASM_WEB_MODE
     sqlite3_fileio_init(p->db, 0, 0);
     sqlite3_completion_init(p->db, 0, 0);
 #endif
@@ -7922,7 +7932,7 @@ DISPATCHABLE_COMMAND( changes 3 2 2 ){
   return 0;
 }
 DISPATCHABLE_COMMAND( check 3 0 0 ){
-#ifndef SQLITE_SHELL_WASM_MODE
+#ifndef SQLITE_SHELL_WASM_WEB_MODE
   /* Cancel output redirection, if it is currently set (by .testcase)
   ** Then read the content of the testcase-out.txt file and compare against
   ** azArg[1].  If there are differences, report an error and exit.
@@ -7947,14 +7957,14 @@ DISPATCHABLE_COMMAND( check 3 0 0 ){
   }
   sqlite3_free(zRes);
   return rc;
-#endif /* !defined(SQLITE_SHELL_WASM_MODE) */
+#endif /* !defined(SQLITE_SHELL_WASM_WEB_MODE) */
 }
 DISPATCHABLE_COMMAND( clone ? 2 2 ){
-#ifndef SQLITE_SHELL_WASM_MODE
+#ifndef SQLITE_SHELL_WASM_WEB_MODE
   if( p->bSafeMode ) return SHELL_FORBIDDEN_OP;
   tryToClone(p, azArg[1]);
   return 0;
-#endif /* !defined(SQLITE_SHELL_WASM_MODE) */
+#endif /* !defined(SQLITE_SHELL_WASM_WEB_MODE) */
 }
 DISPATCHABLE_COMMAND( connection ? 1 4 ){
   if( nArg==1 ){
@@ -9445,7 +9455,7 @@ DISPATCHABLE_COMMAND( open 3 1 0 ){
   /* Check for command-line arguments */
   for(iName=1; iName<nArg; iName++){
     const char *z = azArg[iName];
-#ifndef SQLITE_SHELL_WASM_MODE
+#ifndef SQLITE_SHELL_WASM_WEB_MODE
     if( optionMatch(z,"new") ){
       newFlag = 1;
 #ifdef SQLITE_HAVE_ZLIB
@@ -9467,7 +9477,7 @@ DISPATCHABLE_COMMAND( open 3 1 0 ){
       p->szMax = integerValue(azArg[++iName]);
 #endif /* SQLITE_OMIT_DESERIALIZE */
       }else
-#endif /* !SQLITE_SHELL_WASM_MODE */
+#endif /* !SQLITE_SHELL_WASM_WEB_MODE */
       if( z[0]=='-' ){
       *pzErr = shellMPrintf(0,"unknown option: %s\n", z);
       return SHELL_INVALID_ARGS;
@@ -9493,7 +9503,7 @@ DISPATCHABLE_COMMAND( open 3 1 0 ){
   /* If a filename is specified, try to open it first */
   if( zFN || p->openMode==SHELL_OPEN_HEXDB ){
     if( newFlag && zFN && !p->bSafeMode ) shellDeleteFile(zFN);
-#ifndef SQLITE_SHELL_WASM_MODE
+#ifndef SQLITE_SHELL_WASM_WEB_MODE
     if( p->bSafeMode
         && p->openMode!=SHELL_OPEN_HEXDB
         && zFN
@@ -10809,7 +10819,7 @@ DISPATCHABLE_COMMAND( selftest 4 0 0 ){
   utf8_printf(p->out, "%d errors out of %d tests\n", nErr, nTest);
   return rc > 0;
 }
-#if !defined(SQLITE_NOHAVE_SYSTEM) && !defined(SQLITE_SHELL_WASM_MODE)
+#if !defined(SQLITE_NOHAVE_SYSTEM) && !defined(SQLITE_SHELL_WASM_WEB_MODE)
 static int shellOut(char *azArg[], int nArg, ShellState *p, char **pzErr){
   char *zCmd;
   int i, x;
@@ -10826,7 +10836,7 @@ static int shellOut(char *azArg[], int nArg, ShellState *p, char **pzErr){
   if( x ) raw_printf(STD_ERR, "%s command returns %d\n", azArg[0], x);
   return 0;
 }
-#endif /* !defined(SQLITE_NOHAVE_SYSTEM) && !defined(SQLITE_SHELL_WASM_MODE) */
+#endif /* !defined(SQLITE_NOHAVE_SYSTEM) && !defined(SQLITE_SHELL_WASM_WEB_MODE) */
 DISPATCHABLE_COMMAND( shell ? 2 0 ){
   return shellOut(azArg, nArg, p, pzErr);
 }
@@ -12022,7 +12032,7 @@ static void echo_group_input(ShellState *p, const char *zDo){
   if( ShellHasFlag(p, SHFLG_Echo) ) utf8_printf(p->out, "%s\n", zDo);
 }
 
-#ifdef SQLITE_SHELL_WASM_MODE
+#ifdef SQLITE_SHELL_WASM_WEB_MODE
 /*
 ** Alternate one_input_line() impl for wasm mode. This is not in the primary impl
 ** because we need the global shellState and cannot access it from that function
@@ -12053,7 +12063,7 @@ static char *one_input_line(FILE *in, char *zPrior, int isContinuation){
   zLine[nZ] = 0;
   return zLine;
 }
-#endif /* SQLITE_SHELL_WASM_MODE */
+#endif /* SQLITE_SHELL_WASM_WEB_MODE */
 
 /*
 ** Read input from *in and process it.  If *in==0 then input
@@ -12472,7 +12482,7 @@ static const char *cmdline_option_value(int argc, const char **argv, int i){
 #  endif
 #endif
 
-#ifdef SQLITE_SHELL_WASM_MODE
+#ifdef SQLITE_SHELL_WASM_WEB_MODE
 # define SHELL_MAIN fiddle_main
 #endif
 
@@ -12502,7 +12512,7 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
 #ifdef SQLITE_DEBUG
   sqlite3_int64 mem_main_enter = sqlite3_memory_used();
 #endif
-#ifdef SQLITE_SHELL_WASM_MODE
+#ifdef SQLITE_SHELL_WASM_WEB_MODE
 #  define data shellState
 #else
   ShellState data;
@@ -12521,7 +12531,7 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
 #endif
   setBinaryMode(STD_IN, 0);
   setvbuf(STD_ERR, 0, _IONBF, 0); /* Make sure stderr is unbuffered */
-#ifdef SQLITE_SHELL_WASM_MODE
+#ifdef SQLITE_SHELL_WASM_WEB_MODE
   stdin_is_interactive = 0;
   stdout_is_console = 1;
 #else
@@ -12784,7 +12794,7 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
 #endif
   }
   data.out = STD_OUT;
-#ifndef SQLITE_SHELL_WASM_MODE
+#ifndef SQLITE_SHELL_WASM_WEB_MODE
   sqlite3_appendvfs_init(0,0,0);
 #endif
 
@@ -13047,7 +13057,7 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
 shell_bail:
   (void)0;
 
-#ifndef SQLITE_SHELL_WASM_MODE
+#ifndef SQLITE_SHELL_WASM_WEB_MODE
   /* In WASM mode we have to leave the db state in place so that
   ** client code can "push" SQL into it after this call returns. */
   free((void *)azCmd);
@@ -13097,12 +13107,12 @@ shell_bail:
                 (unsigned int)(sqlite3_memory_used()-mem_main_enter));
   }
 #endif
-#endif /* !SQLITE_SHELL_WASM_MODE */
+#endif /* !SQLITE_SHELL_WASM_WEB_MODE */
   return rc;
 }
 
 
-#ifdef SQLITE_SHELL_WASM_MODE
+#ifdef SQLITE_SHELL_WASM_WEB_MODE
 /* Only for emcc experimentation purposes. */
 int fiddle_experiment(int a,int b){
    return a + b;
@@ -13224,4 +13234,4 @@ void fiddle_exec(const char * zSql){
     memset(&shellState.wasm, 0, sizeof(shellState.wasm));
   }
 }
-#endif /* SQLITE_SHELL_WASM_MODE */
+#endif /* SQLITE_SHELL_WASM_WEB_MODE */
