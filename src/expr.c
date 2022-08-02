@@ -1270,8 +1270,9 @@ void sqlite3ClearOnOrUsing(sqlite3 *db, OnOrUsing *p){
 ** pExpr to the pParse->pConstExpr list with a register number of 0.
 */
 void sqlite3ExprDeferredDelete(Parse *pParse, Expr *pExpr){
-  pParse->pConstExpr = 
-      sqlite3ExprListAppend(pParse, pParse->pConstExpr, pExpr);
+  sqlite3ParserAddCleanup(pParse,
+    (void(*)(sqlite3*,void*))sqlite3ExprDelete,
+    pExpr);
 }
 
 /* Invoke sqlite3RenameExprUnmap() and sqlite3ExprDelete() on the
@@ -4207,7 +4208,6 @@ expr_code_doover:
       int n;
       const char *z;
       char *zBlob;
-      if( pParse->nErr ) return target;
       assert( !ExprHasProperty(pExpr, EP_IntValue) );
       assert( pExpr->u.zToken[0]=='x' || pExpr->u.zToken[0]=='X' );
       assert( pExpr->u.zToken[1]=='\'' );
@@ -4670,6 +4670,21 @@ expr_code_doover:
     case TK_IF_NULL_ROW: {
       int addrINR;
       u8 okConstFactor = pParse->okConstFactor;
+      AggInfo *pAggInfo = pExpr->pAggInfo;
+      if( pAggInfo ){
+        assert( pExpr->iAgg>=0 && pExpr->iAgg<pAggInfo->nColumn );
+        if( !pAggInfo->directMode ){
+          inReg = pAggInfo->aCol[pExpr->iAgg].iMem;
+          break;
+        }
+        if( pExpr->pAggInfo->useSortingIdx ){
+          sqlite3VdbeAddOp3(v, OP_Column, pAggInfo->sortingIdxPTab,
+                            pAggInfo->aCol[pExpr->iAgg].iSorterColumn,
+                            target);
+          inReg = target;
+          break;
+        }
+      }
       addrINR = sqlite3VdbeAddOp1(v, OP_IfNullRow, pExpr->iTable);
       /* Temporarily disable factoring of constant expressions, since
       ** even though expressions may appear to be constant, they are not
@@ -6175,10 +6190,12 @@ static int analyzeAggregate(Walker *pWalker, Expr *pExpr){
 
   assert( pNC->ncFlags & NC_UAggInfo );
   switch( pExpr->op ){
+    case TK_IF_NULL_ROW:
     case TK_AGG_COLUMN:
     case TK_COLUMN: {
       testcase( pExpr->op==TK_AGG_COLUMN );
       testcase( pExpr->op==TK_COLUMN );
+      testcase( pExpr->op==TK_IF_NULL_ROW );
       /* Check to see if the column is in one of the tables in the FROM
       ** clause of the aggregate query */
       if( ALWAYS(pSrcList!=0) ){
@@ -6237,7 +6254,9 @@ static int analyzeAggregate(Walker *pWalker, Expr *pExpr){
             */
             ExprSetVVAProperty(pExpr, EP_NoReduce);
             pExpr->pAggInfo = pAggInfo;
-            pExpr->op = TK_AGG_COLUMN;
+            if( pExpr->op==TK_COLUMN ){
+              pExpr->op = TK_AGG_COLUMN;
+            }
             pExpr->iAgg = (i16)k;
             break;
           } /* endif pExpr->iTable==pItem->iCursor */
