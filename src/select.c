@@ -2227,7 +2227,7 @@ int sqlite3ColumnsFromExprList(
         if( zName[j]==':' ) nName = j;
       }
       zName = sqlite3MPrintf(db, "%.*z:%u", nName, zName, ++cnt);
-      if( cnt>3 ) sqlite3_randomness(sizeof(cnt), &cnt);
+      if( cnt>3 ) sqlite3FastRandomness(&db->sPrng, sizeof(cnt), &cnt);
     }
     pCol->zCnName = zName;
     pCol->hName = sqlite3StrIHash(zName);
@@ -2324,8 +2324,10 @@ Table *sqlite3ResultSetOfSelect(Parse *pParse, Select *pSelect, char aff){
   u64 savedFlags;
 
   savedFlags = db->flags;
-  db->flags &= ~(u64)SQLITE_FullColNames;
-  db->flags |= SQLITE_ShortColNames;
+  if( (db->flags & SQLITE_FullColNames)!=0 ){
+    db->flags &= ~(u64)SQLITE_FullColNames;
+    db->flags |= SQLITE_ShortColNames;
+  }
   sqlite3SelectPrep(pParse, pSelect, 0);
   db->flags = savedFlags;
   if( pParse->nErr ) return 0;

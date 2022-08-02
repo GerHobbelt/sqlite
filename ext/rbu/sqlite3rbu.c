@@ -4184,7 +4184,7 @@ sqlite3rbu *sqlite3rbu_vacuum(
 ){
   if( zTarget==0 ){ return rbuMisuseError(); }
   if( zState ){
-    int n = strlen(zState);
+    size_t n = strlen(zState);
     if( n>=7 && 0==memcmp("-vactmp", &zState[n-7], 7) ){
       return rbuMisuseError();
     }

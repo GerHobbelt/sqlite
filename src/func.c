@@ -523,8 +523,9 @@ static void randomFunc(
   sqlite3_value **NotUsed2
 ){
   sqlite_int64 r;
+  sqlite3 *db = sqlite3_context_db_handle(context);
   UNUSED_PARAMETER2(NotUsed, NotUsed2);
-  sqlite3_randomness(sizeof(r), &r);
+  sqlite3FastRandomness(&db->sPrng, sizeof(r), &r);
   if( r<0 ){
     /* We need to prevent a random number of 0x8000000000000000 
     ** (or -9223372036854775808) since when you do abs() of that
@@ -550,6 +551,7 @@ static void randomBlob(
 ){
   sqlite3_int64 n;
   unsigned char *p;
+  sqlite3 *db = sqlite3_context_db_handle(context);
   assert( argc==1 );
   UNUSED_PARAMETER(argc);
   n = sqlite3_value_int64(argv[0]);
@@ -558,7 +560,7 @@ static void randomBlob(
   }
   p = contextMalloc(context, n);
   if( p ){
-    sqlite3_randomness(n, p);
+    sqlite3FastRandomness(&db->sPrng, n, p);
     sqlite3_result_blob(context, (char*)p, n, sqlite3_free);
   }
 }
@@ -1492,6 +1494,82 @@ static void soundexFunc(
 }
 #endif /* SQLITE_SOUNDEX */
 
+#ifndef SQLITE_OMIT_FLOATING_POINT
+/*
+** Implementation of the ieee754() function
+*/
+static void ieee754func(
+  sqlite3_context *context,
+  int argc,
+  sqlite3_value **argv
+){
+  if( argc==1 ){
+    sqlite3_int64 m, a;
+    double r;
+    int e;
+    int isNeg;
+    char zResult[100];
+    assert( sizeof(m)==sizeof(r) );
+    if( sqlite3_value_type(argv[0])!=SQLITE_FLOAT ) return;
+    r = sqlite3_value_double(argv[0]);
+    if( r<0.0 ){
+      isNeg = 1;
+      r = -r;
+    }else{
+      isNeg = 0;
+    }
+    memcpy(&a,&r,sizeof(a));
+    if( a==0 ){
+      e = 0;
+      m = 0;
+    }else{
+      e = a>>52;
+      m = a & ((((sqlite3_int64)1)<<52)-1);
+      m |= ((sqlite3_int64)1)<<52;
+      while( e<1075 && m>0 && (m&1)==0 ){
+        m >>= 1;
+        e++;
+      }
+      if( isNeg ) m = -m;
+    }
+    sqlite3_snprintf(sizeof(zResult), zResult, "ieee754(%lld,%d)",
+                     m, e-1075);
+    sqlite3_result_text(context, zResult, -1, SQLITE_TRANSIENT);
+  }else if( argc==2 ){
+    sqlite3_int64 m, e, a;
+    double r;
+    int isNeg = 0;
+    m = sqlite3_value_int64(argv[0]);
+    e = sqlite3_value_int64(argv[1]);
+    if( m<0 ){
+      isNeg = 1;
+      m = -m;
+      if( m<0 ) return;
+    }else if( m==0 && e>1000 && e<1000 ){
+      sqlite3_result_double(context, 0.0);
+      return;
+    }
+    while( (m>>32)&0xffe00000 ){
+      m >>= 1;
+      e++;
+    }
+    while( m!=0 && ((m>>32)&0xfff00000)==0 ){
+      m <<= 1;
+      e--;
+    }
+    e += 1075;
+    if( e<0 ) e = m = 0;
+    if( e>0x7ff ) e = 0x7ff;
+    a = m & ((((sqlite3_int64)1)<<52)-1);
+    a |= e<<52;
+    if( isNeg ) a |= ((sqlite3_uint64)1)<<63;
+    memcpy(&r, &a, sizeof(r));
+    sqlite3_result_double(context, r);
+  }
+}
+
+#endif /* SQLITE_OMIT_FLOATING_POINT */
+
 #ifndef SQLITE_OMIT_LOAD_EXTENSION
 /*
 ** A function that loads a shared-library extension then returns NULL.
@@ -2270,6 +2348,8 @@ void sqlite3RegisterBuiltinFunctions(void){
 #ifndef SQLITE_OMIT_FLOATING_POINT
     FUNCTION(round,              1, 0, 0, roundFunc        ),
     FUNCTION(round,              2, 0, 0, roundFunc        ),
+    FUNCTION(ieee754,            1, 0, 0, ieee754func      ),
+    FUNCTION(ieee754,            2, 0, 0, ieee754func      ),
 #endif
     FUNCTION(upper,              1, 0, 0, upperFunc        ),
     FUNCTION(lower,              1, 0, 0, lowerFunc        ),

@@ -793,7 +793,7 @@ fi
 AC_SUBST(USE_GCOV)
 
 #########
-# Enable/disabled amalagamation line macros
+# Enable/disabled amalgamation line macros
 ########
 AMALGAMATION_LINE_MACROS=--linemacros=0
 if test "${amalgamation_line_macros}" = "yes" ; then

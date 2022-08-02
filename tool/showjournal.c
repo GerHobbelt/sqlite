@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "monolithic_examples.h"
+
 /*
 ** state information
 */
@@ -104,7 +106,13 @@ static void print_page(int iOfst){
   free(aData);
 }
 
-int main(int argc, char **argv){
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_showjournal_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   int nPage, cnt;
   int iOfst;
   if( argc!=2 ){

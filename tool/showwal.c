@@ -20,6 +20,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "monolithic_examples.h"
+
 
 static int pagesize = 1024;     /* Size of a database page */
 static int fd = -1;             /* File descriptor for reading the WAL file */
@@ -234,7 +236,7 @@ static void print_oneline_frame(int iFrame, Cksum *pCksum){
   s0 = getInt32(aData+16);
   s1 = getInt32(aData+20);
   fprintf(stdout, "Frame %4d: %6d %6d 0x%08x,%08x 0x%08x,%08x %s\n",
-          iFrame, 
+          iFrame,
           getInt32(aData),
           getInt32(aData+4),
           getInt32(aData+8),
@@ -509,10 +511,16 @@ static void decode_btree_page(
       printf(" %03x: %.64s\n", i, &zMap[i]);
     }
     free(zMap);
-  }  
+  }
 }
 
-int main(int argc, char **argv){
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_showwal_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   struct stat sbuf;
   unsigned char zPgSz[4];
   if( argc<2 ){

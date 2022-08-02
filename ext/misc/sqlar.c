@@ -16,7 +16,7 @@
 */
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1
-#include <zlib.h>
+#include <zlib-ng.h>
 #include <assert.h>
 
 /*
@@ -43,7 +43,7 @@ static void sqlarCompressFunc(
   if( sqlite3_value_type(argv[0])==SQLITE_BLOB ){
     const Bytef *pData = sqlite3_value_blob(argv[0]);
     uLong nData = sqlite3_value_bytes(argv[0]);
-    uLongf nOut = compressBound(nData);
+    size_t nOut = zng_compressBound(nData);
     Bytef *pOut;
 
     pOut = (Bytef*)sqlite3_malloc(nOut);
@@ -51,7 +51,7 @@ static void sqlarCompressFunc(
       sqlite3_result_error_nomem(context);
       return;
     }else{
-      if( Z_OK!=compress(pOut, &nOut, pData, nData) ){
+      if( Z_OK!=zng_compress(pOut, &nOut, pData, nData) ){
         sqlite3_result_error(context, "error in compress()", -1);
       }else if( nOut<nData ){
         sqlite3_result_blob(context, pOut, nOut, SQLITE_TRANSIENT);
@@ -81,7 +81,7 @@ static void sqlarUncompressFunc(
   sqlite3_value **argv
 ){
   uLong nData;
-  uLongf sz;
+  size_t sz;
 
   assert( argc==2 );
   sz = sqlite3_value_int(argv[1]);
@@ -91,7 +91,7 @@ static void sqlarUncompressFunc(
   }else{
     const Bytef *pData= sqlite3_value_blob(argv[0]);
     Bytef *pOut = sqlite3_malloc(sz);
-    if( Z_OK!=uncompress(pOut, &sz, pData, nData) ){
+    if( Z_OK!=zng_uncompress(pOut, &sz, pData, nData) ){
       sqlite3_result_error(context, "error in uncompress()", -1);
     }else{
       sqlite3_result_blob(context, pOut, sz, SQLITE_TRANSIENT);

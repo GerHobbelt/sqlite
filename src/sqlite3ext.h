@@ -280,7 +280,7 @@ struct sqlite3_api_routines {
   /* Version 3.12.0 and later */
   int (*system_errno)(sqlite3*);
   /* Version 3.14.0 and later */
-  int (*trace_v2)(sqlite3*,unsigned,int(*)(unsigned,void*,void*,void*),void*);
+  int (*trace_v2)(sqlite3*,unsigned,void(*)(unsigned int,void*,void*,void*),void*);
   char *(*expanded_sql)(sqlite3_stmt*);
   /* Version 3.18.0 and later */
   void (*set_last_insert_rowid)(sqlite3*,sqlite3_int64);
@@ -356,6 +356,7 @@ struct sqlite3_api_routines {
                      sqlite3_int64,sqlite3_int64,unsigned);
   unsigned char *(*serialize)(sqlite3*,const char *,sqlite3_int64*,
                               unsigned int);
+  const char *(*db_name)(sqlite3*,int);
 };
 
 /*
@@ -674,10 +675,12 @@ typedef int (*sqlite3_loadext_entry)(
 #define sqlite3_vtab_in                sqlite3_api->vtab_in
 #define sqlite3_vtab_in_first          sqlite3_api->vtab_in_first
 #define sqlite3_vtab_in_next           sqlite3_api->vtab_in_next
+/* Version 3.39.0 and later */
 #ifndef SQLITE_OMIT_DESERIALIZE
 #define sqlite3_deserialize            sqlite3_api->deserialize
 #define sqlite3_serialize              sqlite3_api->serialize
 #endif
+#define sqlite3_db_name                sqlite3_api->db_name
 #endif /* !defined(SQLITE_CORE) && !defined(SQLITE_OMIT_LOAD_EXTENSION) */
 
 #if !defined(SQLITE_CORE) && !defined(SQLITE_OMIT_LOAD_EXTENSION)

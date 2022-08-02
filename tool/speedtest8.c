@@ -37,11 +37,13 @@
 
 #include "sqlite3.h"
 
-/* 
-** hwtime.h contains inline assembler code for implementing 
+/*
+** hwtime.h contains inline assembler code for implementing
 ** high-performance timing routines.
 */
 #include "hwtime.h"
+
+#include "monolithic_examples.h"
 
 /*
 ** Timers
@@ -58,7 +60,7 @@ static void prepareAndRun(sqlite3 *db, const char *zSql, int bQuiet){
   const char *stmtTail;
   sqlite_uint64 iStart, iElapse;
   int rc;
-  
+
   if (!bQuiet){
     printf("***************************************************************\n");
   }
@@ -90,7 +92,13 @@ static void prepareAndRun(sqlite3 *db, const char *zSql, int bQuiet){
   }
 }
 
-int main(int argc, char **argv){
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_speedtest8_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   sqlite3 *db;
   int rc;
   int nSql;
@@ -135,24 +143,24 @@ int main(int argc, char **argv){
     if( argc>4 && (strcmp(argv[1], "-priority")==0) ){
 #if defined(_MSC_VER)
       int new_priority = atoi(argv[2]);
-      if(!SetPriorityClass(GetCurrentProcess(), 
-        (new_priority<=-5) ? HIGH_PRIORITY_CLASS : 
-        (new_priority<=0)  ? ABOVE_NORMAL_PRIORITY_CLASS : 
-        (new_priority==0)  ? NORMAL_PRIORITY_CLASS : 
-        (new_priority<5)   ? BELOW_NORMAL_PRIORITY_CLASS : 
+      if(!SetPriorityClass(GetCurrentProcess(),
+        (new_priority<=-5) ? HIGH_PRIORITY_CLASS :
+        (new_priority<=0)  ? ABOVE_NORMAL_PRIORITY_CLASS :
+        (new_priority==0)  ? NORMAL_PRIORITY_CLASS :
+        (new_priority<5)   ? BELOW_NORMAL_PRIORITY_CLASS :
         IDLE_PRIORITY_CLASS)){
-        printf ("error setting priority\n"); 
-        exit(2); 
+        printf ("error setting priority\n");
+        exit(2);
       }
 #else
       struct sched_param myParam;
       sched_getparam(0, &myParam);
-      printf ("Current process priority is %d.\n", (int)myParam.sched_priority); 
+      printf ("Current process priority is %d.\n", (int)myParam.sched_priority);
       myParam.sched_priority = atoi(argv[2]);
-      printf ("Setting process priority to %d.\n", (int)myParam.sched_priority); 
+      printf ("Setting process priority to %d.\n", (int)myParam.sched_priority);
       if (sched_setparam (0, &myParam) != 0){
-        printf ("error setting priority\n"); 
-        exit(2); 
+        printf ("error setting priority\n");
+        exit(2);
       }
 #endif
       argv += 2;

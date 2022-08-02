@@ -5,6 +5,9 @@
 #include "sqlite3.h"
 #include <stdio.h>
 
+#include "monolithic_examples.h"
+
+
 static const struct {
   int eCode;
   char *zName;
@@ -28,7 +31,13 @@ static int maxLimit(sqlite3 *db, int eCode){
   return sqlite3_limit(db, eCode, iOrig);
 }
 
-int main(int argc, char **argv){
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_max_limits_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   sqlite3 *db;
   int j, rc;
   rc = sqlite3_open(":memory:", &db);
@@ -37,5 +46,6 @@ int main(int argc, char **argv){
       printf("%-35s %10d\n", aLimit[j].zName, maxLimit(db, aLimit[j].eCode));
     }
     sqlite3_close(db);
-  } 
+  }
+  return 0;
 }

@@ -433,6 +433,7 @@ TESTSRC = \
   $(TOP)/ext/fts3/fts3_term.c \
   $(TOP)/ext/fts3/fts3_test.c  \
   $(TOP)/ext/session/test_session.c \
+  $(TOP)/ext/session/sqlite3changebatch.c \
   $(TOP)/ext/rbu/test_rbu.c 
 
 # Statically linked extensions
@@ -441,6 +442,7 @@ TESTSRC += \
   $(TOP)/ext/expert/sqlite3expert.c \
   $(TOP)/ext/expert/test_expert.c \
   $(TOP)/ext/misc/amatch.c \
+  $(TOP)/ext/misc/bgckpt.c \
   $(TOP)/ext/misc/appendvfs.c \
   $(TOP)/ext/misc/carray.c \
   $(TOP)/ext/misc/cksumvfs.c \
@@ -1104,7 +1106,7 @@ SHELL_SRC = \
         $(TOP)/src/test_windirent.c
 
 shell.c:	$(SHELL_SRC) $(TOP)/tool/mkshellc.tcl
-	$(TCLSH_CMD) $(TOP)/tool/mkshellc.tcl >shell.c
+	$(TCLSH_CMD) $(TOP)/tool/mkshellc.tcl $(AMALGAMATION_LINE_MACROS) >shell.c
 
 
 
@@ -1440,6 +1442,26 @@ threadtest5: sqlite3.c $(TOP)/test/threadtest5.c
 releasetest:
 	$(TCLSH_CMD) $(TOP)/test/releasetest.tcl
 
+AMALGAMATIONS_SRC = \
+			$(TOP)/src/pragma.h    \
+			sqlite3ext.h           \
+			sqlite3.c              \
+			sqlite3.h              \
+			shell.c                \
+			sqlite3rc.h            \
+			keywordhash.h          \
+			fts5parse.h            \
+			fts5.c                 \
+			sqlite3_analyzer.c     \
+			sqltclsh.c             \
+			sqlite3_checker.c      \
+			sqlite3-all.c
+
+$(TOP)/src/pragma.h: $(TOP)/tool/mkpragmatab.tcl
+	$(TCLSH_CMD) $(TOP)/tool/mkpragmatab.tcl
+
+amalgamation:	$(AMALGAMATIONS_SRC)
+
 # Standard install and cleanup targets
 #
 lib_install:	libsqlite3.la
@@ -1476,9 +1498,13 @@ clean:
 	rm -f LogEst$(TEXE) fts3view$(TEXE) rollback-test$(TEXE) showdb$(TEXE)
 	rm -f showjournal$(TEXE) showstat4$(TEXE) showwal$(TEXE) speedtest1$(TEXE)
 	rm -f wordcount$(TEXE) changeset$(TEXE)
+	rm -f mksourceid$(BEXE)
 	rm -f sqlite3.dll sqlite3.lib sqlite3.exp sqlite3.def
 	rm -f sqlite3.c
+	rm -f sqlite3-*.c
+	rm -f sqlite3_checker.c sqltclsh.c
 	rm -f sqlite3rc.h
+	rm -f sqlite3session.h
 	rm -f shell.c sqlite3ext.h
 	rm -f sqlite3_analyzer$(TEXE) sqlite3_analyzer.c
 	rm -f sqlite-*-output.vsix
@@ -1512,3 +1538,43 @@ sqlite3.def: $(REAL_LIBOBJ)
 sqlite3.dll: $(REAL_LIBOBJ) sqlite3.def
 	$(TCC) -shared -o $@ sqlite3.def \
 		-Wl,"--strip-all" $(REAL_LIBOBJ)
+
+
+#
+# fiddle/wasm section
+#
+fiddle_dir = ext/fiddle
+fiddle_dir_abs = $(TOP)/$(fiddle_dir)
+# ^^^ some emcc opts require absolute paths
+fiddle_html = $(fiddle_dir)/fiddle.html
+fiddle_module_js = $(fiddle_dir)/fiddle-module.js
+fiddle_generated = $(fiddle_module_js) \
+                   $(fiddle_dir)/fiddle-module.wasm
+sqlite3_wasm_js = $(fiddle_dir)/sqlite3.js
+sqlite3_wasm = $(fiddle_dir)/sqlite3.wasm
+sqlite3_wasm_generated = $(sqlite3_wasm) $(sqlite3_wasm_js)
+clean-wasm:
+	rm -f $(fiddle_generated) $(sqlite3_wasm_generated)
+clean: clean-wasm
+#emcc_opt = -O0
+#emcc_opt = -O1
+#emcc_opt = -O2
+#emcc_opt = -O3
+emcc_opt = -Oz
+emcc_flags = $(emcc_opt) -I. $(SHELL_OPT)
+$(fiddle_module_js): Makefile sqlite3.c shell.c \
+    $(fiddle_dir)/EXPORTED_RUNTIME_METHODS $(fiddle_dir)/EXPORTED_FUNCTIONS.fiddle
+	emcc -o $@ $(emcc_flags) \
+        -sEXPORTED_RUNTIME_METHODS=@$(fiddle_dir_abs)/EXPORTED_RUNTIME_METHODS \
+        -sEXPORTED_FUNCTIONS=@$(fiddle_dir_abs)/EXPORTED_FUNCTIONS.fiddle \
+        sqlite3.c shell.c
+$(sqlite3_wasm_js): Makefile sqlite3.c \
+    $(fiddle_dir)/EXPORTED_RUNTIME_METHODS $(fiddle_dir)/EXPORTED_FUNCTIONS.sqlite3
+	emcc -o $@ $(emcc_flags) \
+        -sEXPORTED_RUNTIME_METHODS=@$(fiddle_dir_abs)/EXPORTED_RUNTIME_METHODS \
+        -sEXPORTED_FUNCTIONS=@$(fiddle_dir_abs)/EXPORTED_FUNCTIONS.sqlite3 \
+        --no-entry \
+        sqlite3.c
+fiddle: $(fiddle_module_js)
+sqlite3-wasm: $(sqlite3_wasm_js)
+wasm: fiddle sqlite3-wasm

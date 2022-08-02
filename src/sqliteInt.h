@@ -203,7 +203,7 @@
 ** autoconf-based build
 */
 #if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
-#include "config.h"
+#include "sqlite3_config.h"
 #define SQLITECONFIG_H 1
 #endif
 
@@ -1178,6 +1178,7 @@ typedef struct DbFixer DbFixer;
 typedef struct Schema Schema;
 typedef struct Expr Expr;
 typedef struct ExprList ExprList;
+typedef struct FastPrng FastPrng;
 typedef struct FKey FKey;
 typedef struct FuncDestructor FuncDestructor;
 typedef struct FuncDef FuncDef;
@@ -1300,6 +1301,14 @@ typedef int VList;
 #ifndef SQLITE_DEFAULT_WAL_SYNCHRONOUS
 # define SQLITE_DEFAULT_WAL_SYNCHRONOUS SQLITE_DEFAULT_SYNCHRONOUS
 #endif
+
+/*
+** State of a simple PRNG used for the per-connection and per-pager
+** pseudo-random number generators.
+*/
+struct FastPrng {
+  unsigned int x, y;
+};
 
 /*
 ** Each database file to be accessed by the system is an instance
@@ -1547,6 +1556,7 @@ struct sqlite3 {
   u32 dbOptFlags;               /* Flags to enable/disable optimizations */
   u8 enc;                       /* Text encoding */
   u8 autoCommit;                /* The auto-commit flag. */
+  u8 eConcurrent;               /* CONCURRENT_* value */
   u8 temp_store;                /* 1: file 2: memory 0: default */
   u8 mallocFailed;              /* True if we have seen a malloc failure */
   u8 bBenignMalloc;             /* Do not require OOMs if true */
@@ -1559,7 +1569,9 @@ struct sqlite3 {
   u8 noSharedCache;             /* True if no shared-cache backends */
   u8 nSqlExec;                  /* Number of pending OP_SqlExec opcodes */
   u8 eOpenState;                /* Current condition of the connection */
+  LogEst iSortCost;             /* Extra cost applied to sorting */
   int nextPagesize;             /* Pagesize after VACUUM if >0 */
+  FastPrng sPrng;               /* State of the per-connection PRNG */
   i64 nChange;                  /* Value returned by sqlite3_changes() */
   i64 nTotalChange;             /* Value returned by sqlite3_total_changes() */
   int aLimit[SQLITE_N_LIMIT];   /* Limits */
@@ -1581,8 +1593,8 @@ struct sqlite3 {
   int nExtension;               /* Number of loaded extensions */
   void **aExtension;            /* Array of shared library handles */
   union {
-    void (*xLegacy)(void*,const char*);   /* mTrace==SQLITE_TRACE_LEGACY */
-    int (*xV2)(u32,void*,void*,void*);    /* All other mTrace values */
+    void (*xLegacy)(void* pArg,const char* info);                              /* mTrace==SQLITE_TRACE_LEGACY : Legacy trace function */
+    void (*xV2)(unsigned int mask,void* pArg,void* vdbe_or_db,void* info);     /* All other mTrace values */
   } trace;
   void *pTraceArg;                        /* Argument to the trace function */
 #ifndef SQLITE_OMIT_DEPRECATED
@@ -1670,6 +1682,13 @@ struct sqlite3 {
 };
 
 /*
+** Candidate values for sqlite3.eConcurrent
+*/
+#define CONCURRENT_NONE   0
+#define CONCURRENT_OPEN   1
+#define CONCURRENT_SCHEMA 2
+
+/*
 ** A macro to discover the encoding of a database.
 */
 #define SCHEMA_ENC(db) ((db)->aDb[0].pSchema->enc)
@@ -1729,6 +1748,7 @@ struct sqlite3 {
                                           /*   the count using a callback. */
 #define SQLITE_CorruptRdOnly  HI(0x00002) /* Prohibit writes due to error */
 
+#define SQLITE_NoopUpdate     0x01000000  /* UPDATE operations are no-ops */
 /* Flags used only if debugging */
 #ifdef SQLITE_DEBUG
 #define SQLITE_SqlTrace       HI(0x0100000) /* Debug print SQL as it executes */
@@ -1782,6 +1802,7 @@ struct sqlite3 {
 #define SQLITE_ReleaseReg     0x00400000 /* Use OP_ReleaseReg for testing */
 #define SQLITE_FlttnUnionAll  0x00800000 /* Disable the UNION ALL flattener */
    /* TH3 expects this value  ^^^^^^^^^^ See flatten04.test */
+#define SQLITE_SortIfFaster   0x01000000 /* ORDER BY using sorter if faster */
 #define SQLITE_AllOpts        0xffffffff /* All optimizations */
 
 /*
@@ -4744,6 +4765,8 @@ Vdbe *sqlite3GetVdbe(Parse*);
 void sqlite3PrngSaveState(void);
 void sqlite3PrngRestoreState(void);
 #endif
+void sqlite3FastPrngInit(FastPrng*);
+void sqlite3FastRandomness(FastPrng*, int N, void *P);
 void sqlite3RollbackAll(sqlite3*,int);
 void sqlite3CodeVerifySchema(Parse*, int);
 void sqlite3CodeVerifyNamedSchema(Parse*, const char *zDb);

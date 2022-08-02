@@ -32,7 +32,7 @@
 ** The exit status is non-zero if any test fails.
 */
 
-/* 
+/*
 ** The "Set Error Line" macro.
 */
 #define SEL(e) ((e)->iLine = ((e)->rc ? (e)->iLine : __LINE__))
@@ -49,7 +49,7 @@
 #define execsql(x,y,...)        (SEL(x), (void)execsql_i64_x(x,y,__VA_ARGS__))
 #define sql_script_printf(x,y,z,...) (                \
     SEL(x), sql_script_printf_x(x,y,z,__VA_ARGS__)    \
-) 
+)
 
 /* Thread functions */
 #define launch_thread(w,x,y,z)     (SEL(w), launch_thread_x(w,x,y,z))
@@ -85,8 +85,8 @@
 # include <assert.h>
 # include <process.h>
 # include <windows.h>
-# include <sys/types.h> 
-# include <sys/stat.h> 
+# include <sys/types.h>
+# include <sys/stat.h>
 # include <errno.h>
 # include <fcntl.h>
 # include <io.h>
@@ -95,8 +95,8 @@
 # include <stdio.h>
 # include <pthread.h>
 # include <assert.h>
-# include <sys/types.h> 
-# include <sys/stat.h> 
+# include <sys/types.h>
+# include <sys/stat.h>
 # include <string.h>
 # include <fcntl.h>
 # include <errno.h>
@@ -280,7 +280,7 @@ static void MD5Init(MD5Context *ctx){
  * Update context to reflect the concatenation of another buffer full
  * of bytes.
  */
-static 
+static
 void MD5Update(MD5Context *ctx, const unsigned char *buf, unsigned int len){
   uint32 t;
 
@@ -326,7 +326,7 @@ void MD5Update(MD5Context *ctx, const unsigned char *buf, unsigned int len){
 }
 
 /*
- * Final wrapup - pad to 64-byte boundary with the bit pattern 
+ * Final wrapup - pad to 64-byte boundary with the bit pattern
  * 1 0* (64-bit count of bits processed, MSB-first)
  */
 static void MD5Final(unsigned char digest[16], MD5Context *ctx){
@@ -502,8 +502,8 @@ static void system_error(Error *pErr, int iSys){
 }
 
 static void sqlite_error(
-  Error *pErr, 
-  Sqlite *pDb, 
+  Error *pErr,
+  Sqlite *pDb,
   const char *zFunc
 ){
   pErr->rc = sqlite3_errcode(pDb->db);
@@ -930,7 +930,7 @@ static void filecopy_x(
   }
 }
 
-/* 
+/*
 ** Used by setstoptime() and timetostop().
 */
 static double timelimit = 0.0;
@@ -1086,7 +1086,7 @@ static char *walthread2_thread(int iTid, void *pArg){
     journal_exists = (filesize(&err, "test.db-journal") >= 0);
     wal_exists = (filesize(&err, "test.db-wal") >= 0);
     if( (journal_exists+wal_exists)!=1 ){
-      test_error(&err, "File system looks incorrect (%d, %d)", 
+      test_error(&err, "File system looks incorrect (%d, %d)",
           journal_exists, wal_exists
       );
     }
@@ -1143,7 +1143,7 @@ static char *walthread3_thread(int iTid, void *pArg){
 
     sum1 = execsql_i64(&err, &db, "SELECT sum(cnt) FROM t1");
     sum2 = execsql_i64(&err, &db, "SELECT sum(sum1) FROM t1");
-    execsql_i64(&err, &db, 
+    execsql_i64(&err, &db,
         "INSERT INTO t1 VALUES(:iNextWrite, :iSum1, :iSum2)",
         &iNextWrite, &sum1, &sum2
     );
@@ -1164,7 +1164,7 @@ static void walthread3(int nMs){
   int i;
 
   opendb(&err, &db, "test.db", 1);
-  sql_script(&err, &db, 
+  sql_script(&err, &db,
       "PRAGMA journal_mode = WAL;"
       "CREATE TABLE t1(cnt PRIMARY KEY, sum1, sum2);"
       "CREATE INDEX i1 ON t1(sum1);"
@@ -1222,7 +1222,7 @@ static void walthread4(int nMs){
   Threadset threads = {0};
 
   opendb(&err, &db, "test.db", 1);
-  sql_script(&err, &db, 
+  sql_script(&err, &db,
       "PRAGMA journal_mode = WAL;"
       "CREATE TABLE t1(a INTEGER PRIMARY KEY, b UNIQUE);"
   );
@@ -1255,7 +1255,7 @@ static void walthread5(int nMs){
   Threadset threads = {0};
 
   opendb(&err, &db, "test.db", 1);
-  sql_script(&err, &db, 
+  sql_script(&err, &db,
       "PRAGMA wal_autocheckpoint = 0;"
       "PRAGMA page_size = 1024;"
       "PRAGMA journal_mode = WAL;"
@@ -1453,7 +1453,7 @@ static void dynamic_triggers(int nMs){
   Threadset threads = {0};
 
   opendb(&err, &db, "test.db", 1);
-  sql_script(&err, &db, 
+  sql_script(&err, &db,
       "PRAGMA page_size = 1024;"
       "PRAGMA journal_mode = WAL;"
       "CREATE TABLE t1(x, y);"
@@ -1494,7 +1494,14 @@ static void dynamic_triggers(int nMs){
 #include "tt3_stress.c"
 #include "tt3_shared.c"
 
-int main(int argc, char **argv){
+#include "tt3_bcwal2.c"
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_threadtest3_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   struct ThreadTest {
     void (*xTest)(int);   /* Routine for running this test */
     const char *zTest;    /* Name of this test */
@@ -1505,7 +1512,7 @@ int main(int argc, char **argv){
     { walthread3, "walthread3", 20000 },
     { walthread4, "walthread4", 20000 },
     { walthread5, "walthread5",  1000 },
-    
+
     { cgt_pager_1,      "cgt_pager_1", 0 },
     { dynamic_triggers, "dynamic_triggers", 20000 },
 
@@ -1518,6 +1525,8 @@ int main(int argc, char **argv){
     { stress1,             "stress1", 10000 },
     { stress2,             "stress2", 60000 },
     { shared1,             "shared1", 10000 },
+
+    { bcwal2_1,            "bcwal2_1", 100000 },
   };
   static char *substArgv[] = { 0, "*", 0 };
   int i, iArg;
@@ -1530,7 +1539,7 @@ int main(int argc, char **argv){
   }
 
   /* Loop through the command-line arguments to ensure that each argument
-  ** selects at least one test. If not, assume there is a typo on the 
+  ** selects at least one test. If not, assume there is a typo on the
   ** command-line and bail out with the usage message.  */
   for(iArg=1; iArg<argc; iArg++){
     const char *zArg = argv[iArg];
@@ -1553,7 +1562,7 @@ int main(int argc, char **argv){
     for(i=0; i<sizeof(aTest)/sizeof(aTest[0]); i++){
       if( sqlite3_strglob(zArg, aTest[i].zTest)==0 ) break;
     }
-    if( i>=sizeof(aTest)/sizeof(aTest[0]) ) goto usage;   
+    if( i>=sizeof(aTest)/sizeof(aTest[0]) ) goto usage;
   }
 
   for(iArg=1; iArg<argc; iArg++){

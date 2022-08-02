@@ -16,31 +16,33 @@
 ** testing only.
 */
 #include <stdio.h>
+#if !defined(_WIN32) && !defined(_WIN64)
 #include <unistd.h>
+#endif
 #include <pthread.h>
 #include <string.h>
 #include <stdlib.h>
-#include "sqlite.h"
+#include "sqlite3.h"
 
 /*
 ** Name of the database
 */
 #define DB_FILE "test.db"
 
-/* 
+/*
 ** When this variable becomes non-zero, all threads stop
 ** what they are doing.
 */
 volatile int all_stop = 0;
 
-/* 
+/*
 ** Callback from the integrity check.  If the result is anything other
 ** than "ok" it means the integrity check has failed.  Set the "all_stop"
 ** global variable to stop all other activity.  Print the error message
 ** or print OK if the string "ok" is seen.
 */
-int check_callback(void *pid, int argc, char **argv, char **notUsed2){
-  int id = (int)pid;
+int check_callback(void *pid, int argc, const char** argv, char **notUsed2){
+  int id = (int)(intptr_t)pid;
   if( strcmp(argv[0],"ok") ){
     all_stop = 1;
     fprintf(stderr,"%d: %s\n", id, argv[0]);
@@ -54,7 +56,7 @@ int check_callback(void *pid, int argc, char **argv, char **notUsed2){
 ** Do an integrity check on the database.  If the first integrity check
 ** fails, try it a second time.
 */
-int integrity_check(sqlite *db, int id){
+int integrity_check(sqlite3 *db, int id){
   int rc;
   if( all_stop ) return 0;
   /* fprintf(stderr,"%d: CHECK\n", id); */
@@ -72,8 +74,8 @@ int integrity_check(sqlite *db, int id){
 ** This is the worker thread
 */
 void *worker(void *workerArg){
-  sqlite *db;
-  int id = (int)workerArg;
+  sqlite3 *db;
+  int id = (int)(intptr_t)workerArg;
   int rc;
   int cnt = 0;
   fprintf(stderr, "Starting worker %d\n", id);
@@ -92,11 +94,16 @@ void *worker(void *workerArg){
   return 0;
 }
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_threadtest2_main(cnt, arr)
+#endif
+
 /*
 ** Initialize the database and start the threads
 */
-int main(int argc, char **argv){
-  sqlite *db;
+int main(int argc, const char** argv){
+  sqlite3 *db;
   int i, rc;
   pthread_t aThread[5];
 
@@ -105,7 +112,7 @@ int main(int argc, char **argv){
     unlink(DB_FILE);
     unlink(zJournal);
     sqlite3_free(zJournal);
-  }  
+  }
   sqlite3_open(DB_FILE, &db);
   if( db==0 ){
     fprintf(stderr,"unable to initialize database\n");
@@ -118,7 +125,7 @@ int main(int argc, char **argv){
   }
   sqlite3_close(db);
   for(i=0; i<sizeof(aThread)/sizeof(aThread[0]); i++){
-    pthread_create(&aThread[i], 0, worker, (void*)i);
+    pthread_create(&aThread[i], 0, worker, (void*)(intptr_t)i);
   }
   for(i=0; i<sizeof(aThread)/sizeof(aThread[i]); i++){
     pthread_join(aThread[i], 0);

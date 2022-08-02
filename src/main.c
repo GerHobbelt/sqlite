@@ -2153,10 +2153,10 @@ void *sqlite3_trace(sqlite3 *db, void(*xTrace)(void*,const char*), void *pArg){
 /* Register a trace callback using the version-2 interface.
 */
 int sqlite3_trace_v2(
-  sqlite3 *db,                               /* Trace this connection */
-  unsigned mTrace,                           /* Mask of events to be traced */
-  int(*xTrace)(unsigned,void*,void*,void*),  /* Callback to invoke */
-  void *pArg                                 /* Context */
+  sqlite3 *db,                                    /* Trace this connection */
+  unsigned mTrace,                                /* Mask of events to be traced */
+  void(*xTrace)(unsigned int,void*,void*,void*),  /* Callback to invoke */
+  void *pArg                                      /* Context */
 ){
 #ifdef SQLITE_ENABLE_API_ARMOR
   if( !sqlite3SafetyCheckOk(db) ){
@@ -3242,7 +3242,7 @@ static int openDatabase(
   db->aDb = db->aDbStatic;
   db->lookaside.bDisable = 1;
   db->lookaside.sz = 0;
-
+  sqlite3FastPrngInit(&db->sPrng);
   assert( sizeof(db->aLimit)==sizeof(aHardLimit) );
   memcpy(db->aLimit, aHardLimit, sizeof(db->aLimit));
   db->aLimit[SQLITE_LIMIT_WORKER_THREADS] = SQLITE_DEFAULT_WORKER_THREADS;
@@ -4627,6 +4627,24 @@ Btree *sqlite3DbNameToBtree(sqlite3 *db, const char *zDbName){
 }
 
 /*
+** Return the name of the N-th database schema.  Return NULL if N is out
+** of range.
+*/
+const char *sqlite3_db_name(sqlite3 *db, int N){
+#ifdef SQLITE_ENABLE_API_ARMOR
+  if( !sqlite3SafetyCheckOk(db) ){
+    (void)SQLITE_MISUSE_BKPT;
+    return 0;
+  }
+#endif
+  if( N<0 || N>=db->nDb ){
+    return 0;
+  }else{
+    return db->aDb[N].zDbSName;
+  }
+}
+
+/*
 ** Return the filename of the database associated with a database
 ** connection.
 */
@@ -4791,6 +4809,35 @@ void sqlite3_snapshot_free(sqlite3_snapshot *pSnapshot){
 }
 #endif /* SQLITE_ENABLE_SNAPSHOT */
 
+SQLITE_EXPERIMENTAL int sqlite3_wal_info(
+  sqlite3 *db, const char *zDb, 
+  unsigned int *pnPrior, unsigned int *pnFrame
+){
+  int rc = SQLITE_OK;
+
+#ifndef SQLITE_OMIT_WAL
+  Btree *pBt;
+  int iDb;
+
+#ifdef SQLITE_ENABLE_API_ARMOR
+  if( !sqlite3SafetyCheckOk(db) ){
+    return SQLITE_MISUSE_BKPT;
+  }
+#endif
+
+  sqlite3_mutex_enter(db->mutex);
+  iDb = sqlite3FindDbName(db, zDb);
+  if( iDb<0 ){
+    return SQLITE_ERROR;
+  }
+  pBt = db->aDb[iDb].pBt;
+  rc = sqlite3PagerWalInfo(sqlite3BtreePager(pBt), pnPrior, pnFrame);
+  sqlite3_mutex_leave(db->mutex);
+#endif   /* SQLITE_OMIT_WAL */
+
+  return rc;
+}
+
 #ifndef SQLITE_OMIT_COMPILEOPTION_DIAGS
 /*
 ** Given the name of a compile-time option, return true if that option
@@ -4804,7 +4851,7 @@ int sqlite3_compileoption_used(const char *zOptName){
   int nOpt;
   const char **azCompileOpt;
  
-#if SQLITE_ENABLE_API_ARMOR
+#ifdef SQLITE_ENABLE_API_ARMOR
   if( zOptName==0 ){
     (void)SQLITE_MISUSE_BKPT;
     return 0;

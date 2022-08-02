@@ -56,7 +56,7 @@ static void checkSpacing(const char *zFile, unsigned flags){
   }
 }
 
-int main(int argc, char **argv){
+int main(int argc, const char **argv){
   int i;
   unsigned flags = WSEOL_OK;
   for(i=1; i<argc; i++){

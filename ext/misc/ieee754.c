@@ -31,6 +31,9 @@
 **     ieee754(2, 0)            ->     2.0
 **     ieee754(181, -2)         ->     45.25
 **
+**     ieee754(4503599627370496,972)  ->   +Inf
+**     ieee754(4503599627370496,972)  ->   -Inf
+**
 ** Two additional functions break apart the one-argument ieee754()
 ** result into separate integer values:
 **

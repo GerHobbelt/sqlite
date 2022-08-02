@@ -1586,7 +1586,7 @@ static void showHelp(void){
   );
 }
 
-int main(int argc, char **argv){
+int main(int argc, const char **argv){
   sqlite3_int64 iBegin;        /* Start time of this program */
   int quietFlag = 0;           /* True if --quiet or -q */
   int verboseFlag = 0;         /* True if --verbose or -v */

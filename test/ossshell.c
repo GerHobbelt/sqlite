@@ -35,7 +35,7 @@ extern void ossfuzz_set_debug_flags(unsigned);
 ** Read files named on the command-line and invoke the fuzzer for
 ** each one.
 */
-int main(int argc, char **argv){
+int main(int argc, const char **argv){
   FILE *in;
   int i;
   int nErr = 0;

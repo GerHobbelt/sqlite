@@ -19,6 +19,9 @@
 #include <assert.h>
 #include <stdlib.h>
 
+#include "monolithic_examples.h"
+
+
 /*
 ** Compute signature for a block of content.
 **
@@ -26,7 +29,7 @@
 ** the entire block.
 **
 ** For blocks of more than 16 bytes, the signature is a hex dump of the
-** first 8 bytes followed by a 64-bit has of the entire block.
+** first 8 bytes followed by a 64-bit hash of the entire block.
 */
 static void vlogSignature(unsigned char *p, int n, char *zCksum){
   unsigned int s0 = 0, s1 = 0;
@@ -34,7 +37,7 @@ static void vlogSignature(unsigned char *p, int n, char *zCksum){
   int i;
   if( n<=16 ){
     for(i=0; i<n; i++) sprintf(zCksum+i*2, "%02x", p[i]);
-  }else{ 
+  }else{
     pI = (unsigned int*)p;
     for(i=0; i<n-7; i+=8){
       s0 += pI[0] + s1;
@@ -82,10 +85,16 @@ endComputeSigs:
   fclose(in);
 }
 
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_pagesig_main(cnt, arr)
+#endif
+
 /*
 ** Find page signatures for all named files.
 */
-int main(int argc, char **argv){
+int main(int argc, const char** argv){
   int i;
   for(i=1; i<argc; i++) computeSigs(argv[i]);
   return 0;

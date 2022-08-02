@@ -60,7 +60,7 @@ int rename_all_columns_of_table(
     }
   }
   sqlite3_finalize(pStmt);
-  return SQLITE_OK; 
+  return SQLITE_OK;
 }
 
 /* Rename all tables and their columns in the main database
@@ -115,12 +115,12 @@ int rename_all_tables(
 **   (6) Run pragma integrity_check again
 **   (7) Rollback the transaction
 */
-int main(int argc, char **argv){
+int main(int argc, const char **argv){
   sqlite3 *db;
   int rc;
   sqlite3_str *pConvert;
   sqlite3_str *pUndo;
-  char *zDbName;
+  const char *zDbName;
   char *zSql1, *zSql2;
   if( argc!=2 ){
     fprintf(stderr, "Usage: %s DATABASE\n", argv[0]);
@@ -146,5 +146,5 @@ int main(int argc, char **argv){
   sqlite3_free(zSql2);
   printf("PRAGMA integrity_check;\n");
   printf("ROLLBACK;\n");
-  return 0; 
+  return 0;
 }

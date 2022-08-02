@@ -350,6 +350,8 @@ sqlite3_uint64 sqlite3BtreeSeekCount(Btree*);
 # define sqlite3BtreeSeekCount(X) 0
 #endif
 
+int sqlite3BtreeExclusiveLock(Btree *pBt);
+
 #ifndef NDEBUG
 int sqlite3BtreeCursorIsValid(BtCursor*);
 #endif
@@ -407,6 +409,5 @@ int sqlite3BtreeTransferRow(BtCursor*, BtCursor*, i64);
 # define sqlite3BtreeHoldsAllMutexes(X) 1
 # define sqlite3SchemaMutexHeld(X,Y,Z) 1
 #endif
-
 
 #endif /* SQLITE_BTREE_H */

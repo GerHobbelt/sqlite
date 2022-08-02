@@ -770,11 +770,11 @@ ac_includes_default="\
 ac_subst_vars='LTLIBOBJS
 LIBOBJS
 BUILD_CFLAGS
-AMALGAMATION_LINE_MACROS
 USE_GCOV
 OPT_FEATURE_FLAGS
 HAVE_ZLIB
 USE_AMALGAMATION
+AMALGAMATION_LINE_MACROS
 TARGET_DEBUG
 TARGET_HAVE_EDITLINE
 TARGET_HAVE_READLINE
@@ -2432,8 +2432,8 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 sqlite_version_sanity_check=`cat $srcdir/VERSION | tr -d '\n'`
 if test "$PACKAGE_VERSION" != "$sqlite_version_sanity_check" ; then
 as_fn_error $? "configure script is out of date:
- configure \$PACKAGE_VERSION = $PACKAGE_VERSION
- top level VERSION file     = $sqlite_version_sanity_check
+ configure \$PACKAGE_VERSION = ($PACKAGE_VERSION)
+ top level VERSION file      = ($sqlite_version_sanity_check)
 please regen with autoconf" "$LINENO" 5
 fi
 
@@ -11862,7 +11862,7 @@ fi
 
 
 #########
-# Enable/disabled amalagamation line macros
+# Enable/disabled amalagmation line macros
 ########
 AMALGAMATION_LINE_MACROS=--linemacros=0
 if test "${amalgamation_line_macros}" = "yes" ; then

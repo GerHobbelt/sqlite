@@ -16,18 +16,23 @@
 ** few places in the code that are even potentially unsafe, and those
 ** places execute for very short periods of time.  So even if the library
 ** is compiled with its mutexes disabled, it is likely to work correctly
-** in a multi-threaded program most of the time.  
+** in a multi-threaded program most of the time.
 **
 ** This file is NOT part of the standard SQLite library.  It is used for
 ** testing only.
 */
-#include "sqlite.h"
+#include "sqlite3.h"
 #include <pthread.h>
 #include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if !defined(_WIN32) && !defined(_WIN64)
 #include <unistd.h>
+#else
+#include <io.h>
+#include <windows.h>
+#endif
 
 /*
 ** Enable for tracing
@@ -50,7 +55,11 @@ extern char *sqlite3_vmprintf(const char *zFormat, va_list);
 static int db_is_locked(void *NotUsed, int iCount){
   /* sched_yield(); */
   if( verbose ) printf("BUSY %s #%d\n", (char*)NotUsed, iCount);
+#ifdef _WIN32
+  Sleep(1); // 1ms = 1000 usec
+#else
   usleep(100);
+#endif
   return iCount<25;
 }
 
@@ -90,7 +99,7 @@ static int db_query_callback(
   if( azArg==0 ) return 0;
   for(i=0; i<nArg; i++){
     pResult->azElem[pResult->nElem++] =
-        sqlite3_mprintf("%s",azArg[i] ? azArg[i] : ""); 
+        sqlite3_mprintf("%s",azArg[i] ? azArg[i] : "");
   }
   return 0;
 }
@@ -99,7 +108,7 @@ static int db_query_callback(
 ** Execute a query against the database.  NULL values are returned
 ** as an empty string.  The list is terminated by a single NULL pointer.
 */
-char **db_query(sqlite *db, const char *zFile, const char *zFormat, ...){
+char **db_query(sqlite3 *db, const char *zFile, const char *zFormat, ...){
   char *zSql;
   int rc;
   char *zErrMsg = 0;
@@ -134,7 +143,7 @@ char **db_query(sqlite *db, const char *zFile, const char *zFormat, ...){
 /*
 ** Execute an SQL statement.
 */
-void db_execute(sqlite *db, const char *zFile, const char *zFormat, ...){
+void db_execute(sqlite3 *db, const char *zFile, const char *zFormat, ...){
   char *zSql;
   int rc;
   char *zErrMsg = 0;
@@ -193,11 +202,10 @@ int thread_cnt = 0;
 
 static void *worker_bee(void *pArg){
   const char *zFilename = (char*)pArg;
-  char *azErr;
   int i, cnt;
   int t = atoi(zFilename);
   char **az;
-  sqlite *db;
+  sqlite3 *db;
 
   pthread_mutex_lock(&lock);
   thread_cnt++;
@@ -210,16 +218,16 @@ static void *worker_bee(void *pArg){
       fprintf(stdout,"%s: can't open\n", zFilename);
       Exit(1);
     }
-    sqlite3_busy_handler(db, db_is_locked, zFilename);
+    sqlite3_busy_handler(db, db_is_locked, (void*)zFilename);
     db_execute(db, zFilename, "CREATE TABLE t%d(a,b,c);", t);
     for(i=1; i<=100; i++){
       db_execute(db, zFilename, "INSERT INTO t%d VALUES(%d,%d,%d);",
          t, i, i*2, i*i);
     }
     az = db_query(db, zFilename, "SELECT count(*) FROM t%d", t);
-    db_check(zFilename, "tX size", az, "100", 0);  
+    db_check(zFilename, "tX size", az, "100", 0);
     az = db_query(db, zFilename, "SELECT avg(b) FROM t%d", t);
-    db_check(zFilename, "tX avg", az, "101", 0);  
+    db_check(zFilename, "tX avg", az, "101", 0);
     db_execute(db, zFilename, "DELETE FROM t%d WHERE a>50", t);
     az = db_query(db, zFilename, "SELECT avg(b) FROM t%d", t);
     db_check(zFilename, "tX avg2", az, "51", 0);
@@ -245,7 +253,12 @@ static void *worker_bee(void *pArg){
   return 0;
 }
 
-int main(int argc, char **argv){
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_threadtest1_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   char *zFile;
   int i, n;
   pthread_t id;
@@ -271,7 +284,7 @@ int main(int argc, char **argv){
       unlink(zJournal);
       free(zJournal);
     }
-      
+
     pthread_create(&id, 0, worker_bee, (void*)zFile);
     pthread_detach(id);
   }

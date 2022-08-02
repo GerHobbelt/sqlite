@@ -28,7 +28,7 @@
 ** autoconf-based build
 */
 #if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
-#include "config.h"
+#include "sqlite3_config.h"
 #define SQLITECONFIG_H 1
 #endif
 

@@ -49,6 +49,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "monolithic_examples.h"
+
+
 /*
 ** Finalize a prepared statement.  If an error has occurred, print the
 ** error message and exit.
@@ -107,7 +110,12 @@ static void execExecSql(sqlite3 *db, const char *zSql){
 }
 
 
-int main(int argc, char **argv){
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_fast_vacuum_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   sqlite3 *db;                 /* Connection to the database file */
   int rc;                      /* Return code from SQLite interface calls */
   sqlite3_uint64 r;            /* A random number */
@@ -160,7 +168,7 @@ int main(int argc, char **argv){
   /* Query the schema of the main database. Create a mirror schema
   ** in the temporary database.
   */
-  execExecSql(db, 
+  execExecSql(db,
       "SELECT 'CREATE TABLE vacuum_db.' || substr(sql,14) "
       "  FROM sqlite_schema WHERE type='table' AND name!='sqlite_sequence'"
       "   AND rootpage>0"

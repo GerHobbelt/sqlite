@@ -9,10 +9,18 @@
 ** To compile:  gcc -o showlocks showlocks.c
 */
 #include <stdio.h>
+#if !defined(_WIN32) && !defined(_WIN64)
 #include <unistd.h>
+#else
+#include <io.h>
+#include <sys/types.h>
+#endif
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "monolithic_examples.h"
+
 
 /* This utility only looks for locks in the first 2 billion bytes */
 #define MX_LCK 2147483647
@@ -23,6 +31,7 @@
 */
 static int showLocksInRange(int fd, off_t lwr, off_t upr){
   int cnt = 0;
+#if defined(F_GETLK)
   struct flock x;
   struct lockRange {
     off_t lwr;
@@ -76,12 +85,22 @@ static int showLocksInRange(int fd, off_t lwr, off_t upr){
     }
   }
   free(aPending);
+#else
+#endif
   return cnt;
 }
 
-int main(int argc, char **argv){
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_showlocks_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   int fd;
+#if defined(F_GETLK)
   int cnt;
+#endif
 
   if( argc!=2 ){
     fprintf(stderr, "Usage: %s FILENAME\n", argv[0]);
@@ -92,8 +111,14 @@ int main(int argc, char **argv){
     fprintf(stderr, "%s: cannot open %s\n", argv[0], argv[1]);
     return 1;
   }
+#if defined(F_GETLK)
   cnt = showLocksInRange(fd, 0, MX_LCK);
-  if( cnt==0 ) printf("no locks\n");  
+  if( cnt==0 ) printf("no locks\n");
   close(fd);
   return 0;
+#else
+  close(fd);
+  fprintf(stderr, "Show-Locks function is not yet implemented for the Windows platform.\n");
+  return 1;
+#endif
 }

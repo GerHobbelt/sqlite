@@ -26,13 +26,15 @@
 #include "sqlite3.h"
 #include <pthread.h>
 #include <stdio.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 
 /* Name of the in-memory database */
-static char *zDbName = 0;
+static const char *zDbName = 0;
 
 /* True for debugging */
 static int eVerbose = 0;
@@ -238,10 +240,15 @@ static void usage(const char *argv0){
 /* Maximum number of threads */
 #define MX_WORKER 100
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_threadtest5_main(cnt, arr)
+#endif
+
 /*
 ** Main routine
 */
-int main(int argc, char **argv){
+int main(int argc, const char** argv){
   int i;
   int nWorker = 4;
   int rc;

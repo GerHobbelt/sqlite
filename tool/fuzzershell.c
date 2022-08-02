@@ -29,7 +29,7 @@
 **         disk database so that the fuzzer starts with a database containing
 **         content.
 **
-**    (4)  The eval() SQL function is added, allowing the fuzzer to do 
+**    (4)  The eval() SQL function is added, allowing the fuzzer to do
 **         interesting recursive operations.
 **
 **    (5)  An error is raised if there is a memory leak.
@@ -293,9 +293,9 @@ struct EvalResult {
 /*
 ** Callback from sqlite_exec() for the eval() function.
 */
-static int callback(void *pCtx, int argc, char **argv, char **colnames){
+static int callback(void *pCtx, int argc, const char **argv, char **colnames){
   struct EvalResult *p = (struct EvalResult*)pCtx;
-  int i; 
+  int i;
   for(i=0; i<argc; i++){
     const char *z = argv[i] ? argv[i] : "";
     size_t sz = strlen(z);
@@ -510,7 +510,7 @@ static int seriesEof(sqlite3_vtab_cursor *cur){
   }
 }
 
-/* True to cause run-time checking of the start=, stop=, and/or step= 
+/* True to cause run-time checking of the start=, stop=, and/or step=
 ** parameters.  The only reason to do this is for testing the
 ** constraint checking logic for virtual tables in the SQLite core.
 */
@@ -521,7 +521,7 @@ static int seriesEof(sqlite3_vtab_cursor *cur){
 /*
 ** This method is called to "rewind" the series_cursor object back
 ** to the first row of output.  This method is always called at least
-** once prior to any call to seriesColumn() or seriesRowid() or 
+** once prior to any call to seriesColumn() or seriesRowid() or
 ** seriesEof().
 **
 ** The query plan selected by seriesBestIndex is passed in the idxNum
@@ -540,7 +540,7 @@ static int seriesEof(sqlite3_vtab_cursor *cur){
 ** (so that seriesEof() will return true) if the table is empty.
 */
 static int seriesFilter(
-  sqlite3_vtab_cursor *pVtabCursor, 
+  sqlite3_vtab_cursor *pVtabCursor,
   int idxNum, const char *idxStr,
   int argc, sqlite3_value **argv
 ){
@@ -636,7 +636,7 @@ static int seriesBestIndex(
     pIdxInfo->aConstraintUsage[stepIdx].omit = !SQLITE_SERIES_CONSTRAINT_VERIFY;
   }
   if( (idxNum & 3)==3 ){
-    /* Both start= and stop= boundaries are available.  This is the 
+    /* Both start= and stop= boundaries are available.  This is the
     ** the preferred case */
     pIdxInfo->estimatedCost = (double)(2 - ((idxNum&4)!=0));
     pIdxInfo->estimatedRows = 1000;
@@ -656,7 +656,7 @@ static int seriesBestIndex(
 }
 
 /*
-** This following structure defines all the methods for the 
+** This following structure defines all the methods for the
 ** generate_series virtual table.
 */
 static sqlite3_module seriesModule = {
@@ -697,7 +697,7 @@ static void showHelp(void){
 "  --database FILE       Use database FILE instead of an in-memory database\n"
 "  --disable-lookaside   Turn off lookaside memory\n"
 "  --heap SZ MIN         Memory allocator uses SZ bytes & min allocation MIN\n"
-"  --help                Show this help text\n"    
+"  --help                Show this help text\n"
 "  --lookaside N SZ      Configure lookaside for N slots of SZ bytes each\n"
 "  --oom                 Run each test multiple times in a simulated OOM loop\n"
 "  --pagesize N          Set the page size to N\n"
@@ -786,7 +786,7 @@ static sqlite3_int64 timeOfDay(void){
   return t;
 }
 
-int main(int argc, char **argv){
+int main(int argc, const char **argv){
   char *zIn = 0;                /* Input text */
   int nAlloc = 0;               /* Number of bytes allocated for zIn[] */
   int nIn = 0;                  /* Number of bytes of zIn[] used */
@@ -824,7 +824,7 @@ int main(int argc, char **argv){
   const char *zFailCode;        /* Value of the TEST_FAILURE environment var */
   const char *zPrompt;          /* Initial prompt when large-file fuzzing */
   int nInFile = 0;              /* Number of input files to read */
-  char **azInFile = 0;          /* Array of input file names */
+  const char **azInFile = 0;    /* Array of input file names */
   int jj;                       /* Loop counter for azInFile[] */
   sqlite3_int64 iBegin;         /* Start time for the whole program */
   sqlite3_int64 iStart, iEnd;   /* Start and end-times for a test case */
@@ -916,7 +916,7 @@ int main(int argc, char **argv){
     }else{
       addNewInFile:
       nInFile++;
-      azInFile = realloc(azInFile, sizeof(azInFile[0])*nInFile);
+      azInFile = realloc((void *)azInFile, sizeof(azInFile[0])*nInFile);
       if( azInFile==0 ) abendError("out of memory");
       azInFile[nInFile-1] = argv[i];
     }
@@ -999,7 +999,7 @@ int main(int argc, char **argv){
       zPrompt = "<stdin>";
     }
     while( !feof(in) ){
-      got = fread(zIn+nIn, 1, nAlloc-nIn-1, in); 
+      got = fread(zIn+nIn, 1, nAlloc-nIn-1, in);
       nIn += (int)got;
       zIn[nIn] = 0;
       if( got==0 ) break;
@@ -1027,7 +1027,7 @@ int main(int argc, char **argv){
         char *z = strstr(&zIn[i], ">****/");
         if( z ){
           z += 6;
-          sqlite3_snprintf(sizeof(g.zTestName), g.zTestName, "%.*s", 
+          sqlite3_snprintf(sizeof(g.zTestName), g.zTestName, "%.*s",
                            (int)(z-&zIn[i]) - 12, &zIn[i+6]);
           if( verboseFlag ){
             printf("%.*s\n", (int)(z-&zIn[i]), &zIn[i]);
@@ -1252,7 +1252,7 @@ int main(int argc, char **argv){
 
   /* Clean up and exit.
   */
-  free(azInFile);
+  free((void *)azInFile);
   free(zIn);
   free(pHeap);
   free(pLook);

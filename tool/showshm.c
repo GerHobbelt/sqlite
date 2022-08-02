@@ -21,6 +21,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "monolithic_examples.h"
+
 static int fd = -1;             /* The open SHM file */
 
 /* Report an out-of-memory error and die.
@@ -137,7 +139,13 @@ static void print_ckpt_info(unsigned char *aData){
 }
 
 
-int main(int argc, char **argv){
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_showshm_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   unsigned char *aData;
   if( argc<2 ){
     fprintf(stderr,"Usage: %s FILENAME\n", argv[0]);

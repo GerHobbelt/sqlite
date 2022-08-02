@@ -21,13 +21,17 @@
 #include <assert.h>
 #include <string.h>
 #include <errno.h>
+#if !defined(_WIN32) && !defined(_WIN64)
 #include <dirent.h>
+#else
+#include <io.h>
+#endif
 #include "sqlite3.h"
 
 /*
 ** Implementation of the "readtext(X)" SQL function.  The entire content
 ** of the file named X is read and returned as a TEXT value. It is assumed
-** the file contains UTF-8 text. NULL is returned if the file does not 
+** the file contains UTF-8 text. NULL is returned if the file does not
 ** exist or is unreadable.
 */
 static void readfileFunc(
@@ -120,15 +124,15 @@ void visit_file(void *pCtx, const char *zPath){
   rc = sqlite3_reset(p->pInsert);
   if( rc!=SQLITE_OK ){
     sqlite_error_out("insert", p->db);
-  }else if( p->nRowPerTrans>0 
-         && (sqlite3_last_insert_rowid(p->db) % p->nRowPerTrans)==0 
+  }else if( p->nRowPerTrans>0
+         && (sqlite3_last_insert_rowid(p->db) % p->nRowPerTrans)==0
   ){
     sqlite3_exec(p->db, "COMMIT ; BEGIN", 0, 0, 0);
   }
 }
 
 /*
-** Recursively traverse directory zDir. For each file that is not a 
+** Recursively traverse directory zDir. For each file that is not a
 ** directory, invoke the supplied callback with its path.
 */
 static void traverse(
@@ -156,7 +160,13 @@ static void traverse(
   closedir(d);
 }
 
-int main(int argc, char **argv){
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_loadfts_main(cnt, arr)
+#endif
+
+int main(int argc, const char **argv){
   int iFts = 5;                   /* Value of -fts option */
   int bMap = 0;                   /* True to create mapping table */
   const char *zDir = ".";         /* Directory to scan */
@@ -173,8 +183,8 @@ int main(int argc, char **argv){
   if( argc % 2 ) showHelp(argv[0]);
 
   for(i=1; i<(argc-1); i+=2){
-    char *zOpt = argv[i];
-    char *zArg = argv[i+1];
+    const char *zOpt = argv[i];
+    const char *zArg = argv[i+1];
     if( strcmp(zOpt, "-fts")==0 ){
       iFts = atoi(zArg);
       if( iFts!=3 && iFts!=4 && iFts!= 5) showHelp(argv[0]);
@@ -224,7 +234,7 @@ int main(int argc, char **argv){
   memset(&sCtx, 0, sizeof(VisitContext));
   sCtx.db = db;
   sCtx.nRowPerTrans = nRowPerTrans;
-  rc = sqlite3_prepare_v2(db, 
+  rc = sqlite3_prepare_v2(db,
       "INSERT INTO fts VALUES(readtext(?))", -1, &sCtx.pInsert, 0
   );
   if( rc!=SQLITE_OK ) sqlite_error_out("sqlite3_prepare_v2(1)", db);

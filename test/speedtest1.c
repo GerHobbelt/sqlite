@@ -313,8 +313,8 @@ unsigned roundup_allones(unsigned limit){
 **     speedtest1_numbername(123)   ->  "one hundred twenty three"
 */
 int speedtest1_numbername(unsigned int n, char *zOut, int nOut){
-  static const char *ones[] = {  "zero", "one", "two", "three", "four", "five", 
-                  "six", "seven", "eight", "nine", "ten", "eleven", "twelve", 
+  static const char *ones[] = {  "zero", "one", "two", "three", "four", "five",
+                  "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
                   "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
                   "eighteen", "nineteen" };
   static const char *tens[] = { "", "ten", "twenty", "thirty", "forty",
@@ -442,7 +442,7 @@ static void printSql(const char *zSql){
   if( g.bExplain ) printf("EXPLAIN ");
   printf("%.*s;\n", n, zSql);
   if( g.bExplain
-#if SQLITE_VERSION_NUMBER>=3007017 
+#if SQLITE_VERSION_NUMBER>=3007017
    && ( sqlite3_strglob("CREATE *", zSql)==0
      || sqlite3_strglob("DROP *", zSql)==0
      || sqlite3_strglob("ALTER *", zSql)==0
@@ -597,14 +597,13 @@ void speedtest1_run(void){
   speedtest1_shrink_memory();
 }
 
-#ifndef SQLITE_OMIT_DEPRECATED
 /* The sqlite3_trace() callback function */
-static void traceCallback(void *NotUsed, const char *zSql){
+static void traceCallback(unsigned int mask, void* pArg, void* vdbe_dbptr, void* misc_data_ref) {
+  const char* zSql = (const char*)misc_data_ref;
   int n = (int)strlen(zSql);
   while( n>0 && (zSql[n-1]==';' || ISSPACE(zSql[n-1])) ) n--;
   fprintf(stderr,"%.*s;\n", n, zSql);
 }
-#endif /* SQLITE_OMIT_DEPRECATED */
 
 /* Substitute random() function that gives the same random
 ** sequence on each run, for repeatability. */
@@ -1315,7 +1314,7 @@ void testset_fp(void){
   int i;
   char zFP1[100];
   char zFP2[100];
-  
+
   n = g.szTest*5000;
   speedtest1_begin_test(100, "Fill a table with %d FP values", n*2);
   speedtest1_exec("BEGIN");
@@ -1491,7 +1490,7 @@ void testset_rtree(int p1, int p2){
     }
     speedtest1_end_test();
   }
-  
+
   n = g.szTest*200;
   speedtest1_begin_test(120, "%d one-dimensional overlap slice queries", n);
   speedtest1_prepare("SELECT count(*) FROM rt1 WHERE y1>=?1 AND y0<=?2");
@@ -1520,7 +1519,7 @@ void testset_rtree(int p1, int p2){
     }
     speedtest1_end_test();
   }
-  
+
 
   n = g.szTest*200;
   speedtest1_begin_test(125, "%d custom geometry callback queries", n);
@@ -2131,7 +2130,7 @@ static void displayLinuxIoStats(FILE *out){
     }
   }
   fclose(in);
-}   
+}
 #endif
 
 #if SQLITE_VERSION_NUMBER<3006018
@@ -2147,7 +2146,12 @@ static int xCompileOptions(void *pCtx, int nVal, char **azVal, char **azCol){
   return SQLITE_OK;
 }
 
-int main(int argc, char **argv){
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_speedtest1_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   int doAutovac = 0;            /* True for --autovacuum */
   int cacheSize = 0;            /* Desired cache size.  0 means default */
   int doExclusive = 0;          /* True for --exclusive */
@@ -2164,7 +2168,7 @@ int main(int argc, char **argv){
   int nThread = 0;              /* --threads value */
   int mmapSize = 0;             /* How big of a memory map to use */
   int memDb = 0;                /* --memdb.  Use an in-memory database */
-  char *zTSet = "main";         /* Which --testset torun */
+  const char *zTSet = "main";   /* Which --testset to run */
   int doTrace = 0;              /* True for --trace */
   const char *zEncoding = 0;    /* --utf16be or --utf16le */
   const char *zDbName = 0;      /* Name of the test database */
@@ -2388,9 +2392,7 @@ int main(int argc, char **argv){
 
   /* Set database connection options */
   sqlite3_create_function(g.db, "random", 0, SQLITE_UTF8, 0, randomFunc, 0, 0);
-#ifndef SQLITE_OMIT_DEPRECATED
-  if( doTrace ) sqlite3_trace(g.db, traceCallback, 0);
-#endif
+  if( doTrace ) sqlite3_trace_v2(g.db, SQLITE_TRACE_STMT, traceCallback, 0);
   if( memDb>0 ){
     speedtest1_exec("PRAGMA temp_store=memory");
   }
@@ -2425,7 +2427,7 @@ int main(int argc, char **argv){
 
   if( g.bExplain ) printf(".explain\n.echo on\n");
   do{
-    char *zThisTest = zTSet;
+    const char *zThisTest = zTSet;
     char *zComma = strchr(zThisTest,',');
     if( zComma ){
       *zComma = 0;
@@ -2512,12 +2514,12 @@ int main(int argc, char **argv){
     printf("-- Page cache misses:           %d\n", iCur);
 #if SQLITE_VERSION_NUMBER>=3007012
     sqlite3_db_status(g.db, SQLITE_DBSTATUS_CACHE_WRITE, &iCur, &iHi, 1);
-    printf("-- Page cache writes:           %d\n", iCur); 
+    printf("-- Page cache writes:           %d\n", iCur);
 #endif
     sqlite3_db_status(g.db, SQLITE_DBSTATUS_SCHEMA_USED, &iCur, &iHi, 0);
-    printf("-- Schema Heap Usage:           %d bytes\n", iCur); 
+    printf("-- Schema Heap Usage:           %d bytes\n", iCur);
     sqlite3_db_status(g.db, SQLITE_DBSTATUS_STMT_USED, &iCur, &iHi, 0);
-    printf("-- Statement Heap Usage:        %d bytes\n", iCur); 
+    printf("-- Statement Heap Usage:        %d bytes\n", iCur);
   }
 #endif
 

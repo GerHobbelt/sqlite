@@ -21,7 +21,7 @@
 ** Examples:
 **
 ** To convert 123 from LogEst to integer:
-** 
+**
 **         ./LogEst ^123
 **
 ** To convert 123456 from integer to LogEst:
@@ -35,6 +35,9 @@
 #include <assert.h>
 #include <string.h>
 #include "sqlite3.h"
+
+#include "monolithic_examples.h"
+
 
 typedef short int LogEst;  /* 10 times log2() */
 
@@ -120,7 +123,13 @@ static void showHelp(const char *zArgv0){
   exit(1);
 }
 
-int main(int argc, char **argv){
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_logest_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv){
   int i;
   int n = 0;
   LogEst a[100];

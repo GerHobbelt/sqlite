@@ -78,7 +78,7 @@
   ** and analysis configurations, not in any deliverable, so this
   ** should not be a great loss.
   */
-  sqlite_uint64 sqlite3Hwtime(void){ return ((sqlite_uint64)0); }
+  inline sqlite_uint64 sqlite3Hwtime(void){ return ((sqlite_uint64)0); }
 
 #endif
 
