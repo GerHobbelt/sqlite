@@ -3800,6 +3800,7 @@ static Expr *substExpr(
           ifNullRow.op = TK_IF_NULL_ROW;
           ifNullRow.pLeft = pCopy;
           ifNullRow.iTable = pSubst->iNewTable;
+          ifNullRow.iColumn = -99;
           ifNullRow.flags = EP_IfNullRow;
           pCopy = &ifNullRow;
         }
@@ -7198,7 +7199,7 @@ int sqlite3Select(
   if( (p->selFlags & SF_FixedLimit)==0 ){
     p->nSelectRow = 320;  /* 4 billion rows */
   }
-  computeLimitRegisters(pParse, p, iEnd);
+  if( p->pLimit ) computeLimitRegisters(pParse, p, iEnd);
   if( p->iLimit==0 && sSort.addrSortIndex>=0 ){
     sqlite3VdbeChangeOpcode(v, sSort.addrSortIndex, OP_SorterOpen);
     sSort.sortFlags |= SORTFLAG_UseSorter;
@@ -7420,8 +7421,13 @@ int sqlite3Select(
         sqlite3TreeViewExprList(0, pMinMaxOrderBy, 0, "ORDERBY");
       }
       for(ii=0; ii<pAggInfo->nColumn; ii++){
-        sqlite3DebugPrintf("agg-column[%d] iMem=%d\n",
-            ii, pAggInfo->aCol[ii].iMem);
+        struct AggInfo_col *pCol = &pAggInfo->aCol[ii];
+        sqlite3DebugPrintf(
+           "agg-column[%d] pTab=%s iTable=%d iColumn=%d iMem=%d"
+           " iSorterColumn=%d\n",
+           ii, pCol->pTab ? pCol->pTab->zName : "NULL", 
+           pCol->iTable, pCol->iColumn, pCol->iMem,
+           pCol->iSorterColumn);
         sqlite3TreeViewExpr(0, pAggInfo->aCol[ii].pCExpr, 0);
       }
       for(ii=0; ii<pAggInfo->nFunc; ii++){
