@@ -22,7 +22,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
+#if !defined(_WIN32)
 #include <unistd.h>
+#endif
 
 /*************************************************************************
 ** Start of generic command line parser.
@@ -194,8 +196,8 @@ static void parse_command_line(
 *************************************************************************/
 
 static void abort_due_to_error(int rc){
-  fprintf(stderr, "Error: %d\n");
-  exit(-1);
+  fprintf(stderr, "Error: %d\n", rc);
+  exit(6);
 }
 
 static void execsql(sqlite3 *db, const char *zSql){
@@ -257,6 +259,11 @@ static void run_test(
   sqlite3_free(pChangeset);
   sqlite3session_delete(pSession);
 }
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_ext_session_speed_test_main(cnt, arr)
+#endif
 
 int main(int argc, char **argv){
   struct Options {
@@ -352,7 +359,6 @@ int main(int argc, char **argv){
       }
     }
   }
-
 
   return 0;
 }

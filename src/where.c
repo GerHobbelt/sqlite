@@ -682,6 +682,7 @@ static void translateColumnToCopy(
       pOp->p1 = pOp->p2 + iRegister;
       pOp->p2 = pOp->p3;
       pOp->p3 = 0;
+      pOp->p5 = 2;  /* Cause the MEM_Subtype flag to be cleared */
     }else if( pOp->opcode==OP_Rowid ){
       pOp->opcode = OP_Sequence;
       pOp->p1 = iAutoidxCur;
@@ -756,14 +757,17 @@ static int termCanDriveIndex(
   char aff;
   if( pTerm->leftCursor!=pSrc->iCursor ) return 0;
   if( (pTerm->eOperator & (WO_EQ|WO_IS))==0 ) return 0;
-  if( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ))!=0
-   && !ExprHasProperty(pTerm->pExpr, EP_OuterON)
-   && (pTerm->eOperator & WO_IS)
-  ){
-    /* Cannot use an IS term from the WHERE clause as an index driver for
-    ** the RHS of a LEFT JOIN or for the LHS of a RIGHT JOIN. Such a term
-    ** can only be used if it is from the ON clause.  */
-    return 0;
+  assert( (pSrc->fg.jointype & JT_RIGHT)==0 );
+  if( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))!=0 ){
+    testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_LEFT );
+    testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_LTORJ );
+    testcase( ExprHasProperty(pTerm->pExpr, EP_OuterON) )
+    testcase( ExprHasProperty(pTerm->pExpr, EP_InnerON) );
+    if( !ExprHasProperty(pTerm->pExpr, EP_OuterON|EP_InnerON)
+     || pTerm->pExpr->w.iJoin != pSrc->iCursor
+    ){
+      return 0;  /* See tag-20191211-001 */
+    }
   }
   if( (pTerm->prereqRight & notReady)!=0 ) return 0;
   assert( (pTerm->eOperator & (WO_OR|WO_AND))==0 );
@@ -1177,13 +1181,20 @@ static sqlite3_index_info *allocateIndexInfo(
     assert( pTerm->u.x.leftColumn<pTab->nCol );
 
     /* tag-20191211-002: WHERE-clause constraints are not useful to the
-    ** right-hand table of a LEFT JOIN nor to the left-hand table of a
+    ** right-hand table of a LEFT JOIN nor to the either table of a
     ** RIGHT JOIN.  See tag-20191211-001 for the
     ** equivalent restriction for ordinary tables. */
-    if( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ))!=0
-     && !ExprHasProperty(pTerm->pExpr, EP_OuterON)
-    ){
-      continue;
+    if( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))!=0 ){
+      testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_LEFT );
+      testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_RIGHT );
+      testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_LTORJ );
+      testcase( ExprHasProperty(pTerm->pExpr, EP_OuterON) );
+      testcase( ExprHasProperty(pTerm->pExpr, EP_InnerON) );
+      if( !ExprHasProperty(pTerm->pExpr, EP_OuterON|EP_InnerON)
+       || pTerm->pExpr->w.iJoin != pSrc->iCursor
+      ){
+        continue;
+      }
     }
     nTerm++;
     pTerm->wtFlags |= TERM_OK;
@@ -1422,7 +1433,7 @@ static int whereKeyStats(
 #endif
   assert( pRec!=0 );
   assert( pIdx->nSample>0 );
-  assert( pRec->nField>0 && pRec->nField<=pIdx->nSampleCol );
+  assert( pRec->nField>0 );
 
   /* Do a binary search to find the first sample greater than or equal
   ** to pRec. If pRec contains a single field, the set of samples to search
@@ -1468,7 +1479,7 @@ static int whereKeyStats(
   ** it is extended to two fields. The duplicates that this creates do not 
   ** cause any problems.
   */
-  nField = pRec->nField;
+  nField = MIN(pRec->nField, pIdx->nSample);
   iCol = 0;
   iSample = pIdx->nSample * nField;
   do{
@@ -2185,12 +2196,18 @@ static void whereLoopClearUnion(sqlite3 *db, WhereLoop *p){
 }
 
 /*
-** Deallocate internal memory used by a WhereLoop object
+** Deallocate internal memory used by a WhereLoop object.  Leave the
+** object in an initialized state, as if it had been newly allocated.
 */
 static void whereLoopClear(sqlite3 *db, WhereLoop *p){
-  if( p->aLTerm!=p->aLTermSpace ) sqlite3DbFreeNN(db, p->aLTerm);
+  if( p->aLTerm!=p->aLTermSpace ){
+    sqlite3DbFreeNN(db, p->aLTerm);
+    p->aLTerm = p->aLTermSpace;
+    p->nLSlot = ArraySize(p->aLTermSpace);
+  }
   whereLoopClearUnion(db, p);
-  whereLoopInit(p);
+  p->nLTerm = 0;
+  p->wsFlags = 0;
 }
 
 /*
@@ -2214,7 +2231,9 @@ static int whereLoopResize(sqlite3 *db, WhereLoop *p, int n){
 */
 static int whereLoopXfer(sqlite3 *db, WhereLoop *pTo, WhereLoop *pFrom){
   whereLoopClearUnion(db, pTo);
-  if( whereLoopResize(db, pTo, pFrom->nLTerm) ){
+  if( pFrom->nLTerm > pTo->nLSlot
+   && whereLoopResize(db, pTo, pFrom->nLTerm)
+  ){
     memset(pTo, 0, WHERE_LOOP_XFER_SZ);
     return SQLITE_NOMEM_BKPT;
   }
@@ -2833,12 +2852,28 @@ static int whereLoopAddBtreeIndex(
 
     /* tag-20191211-001:  Do not allow constraints from the WHERE clause to
     ** be used by the right table of a LEFT JOIN nor by the left table of a
-    ** RIGHT JOIN.  Only constraints in the
-    ** ON clause are allowed.  See tag-20191211-002 for the vtab equivalent. */
-    if( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ))!=0
-     && !ExprHasProperty(pTerm->pExpr, EP_OuterON|EP_InnerON)
-    ){
-      continue;
+    ** RIGHT JOIN.  Only constraints in the ON clause are allowed.
+    ** See tag-20191211-002 for the vtab equivalent.  
+    **
+    ** 2022-06-06: See https://sqlite.org/forum/forumpost/206d99a16dd9212f
+    ** for an example of a WHERE clause constraints that may not be used on
+    ** the right table of a RIGHT JOIN because the constraint implies a
+    ** not-NULL condition on the left table of the RIGHT JOIN.
+    **
+    ** 2022-06-10: The same condition applies to termCanDriveIndex() above.
+    ** https://sqlite.org/forum/forumpost/51e6959f61
+    */
+    if( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))!=0 ){
+      testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_LEFT );
+      testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_RIGHT );
+      testcase( (pSrc->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))==JT_LTORJ );
+      testcase( ExprHasProperty(pTerm->pExpr, EP_OuterON) )
+      testcase( ExprHasProperty(pTerm->pExpr, EP_InnerON) );
+      if( !ExprHasProperty(pTerm->pExpr, EP_OuterON|EP_InnerON)
+       || pTerm->pExpr->w.iJoin != pSrc->iCursor
+      ){
+        continue;
+      }
     }
 
     if( IsUniqueIndex(pProbe) && saved_nEq==pProbe->nKeyCol-1 ){
@@ -2851,7 +2886,11 @@ static int whereLoopAddBtreeIndex(
     pNew->u.btree.nBtm = saved_nBtm;
     pNew->u.btree.nTop = saved_nTop;
     pNew->nLTerm = saved_nLTerm;
-    if( whereLoopResize(db, pNew, pNew->nLTerm+1) ) break; /* OOM */
+    if( pNew->nLTerm>=pNew->nLSlot
+     && whereLoopResize(db, pNew, pNew->nLTerm+1)
+    ){
+       break; /* OOM while trying to enlarge the pNew->aLTerm array */
+    }
     pNew->aLTerm[pNew->nLTerm++] = pTerm;
     pNew->prereq = (saved_prereq | pTerm->prereqRight) & ~pNew->maskSelf;
 
@@ -2944,38 +2983,39 @@ static int whereLoopAddBtreeIndex(
       if( scan.iEquiv>1 ) pNew->wsFlags |= WHERE_TRANSCONS;
     }else if( eOp & WO_ISNULL ){
       pNew->wsFlags |= WHERE_COLUMN_NULL;
-    }else if( eOp & (WO_GT|WO_GE) ){
-      testcase( eOp & WO_GT );
-      testcase( eOp & WO_GE );
-      pNew->wsFlags |= WHERE_COLUMN_RANGE|WHERE_BTM_LIMIT;
-      pNew->u.btree.nBtm = whereRangeVectorLen(
-          pParse, pSrc->iCursor, pProbe, saved_nEq, pTerm
-      );
-      pBtm = pTerm;
-      pTop = 0;
-      if( pTerm->wtFlags & TERM_LIKEOPT ){
-        /* Range constraints that come from the LIKE optimization are
-        ** always used in pairs. */
-        pTop = &pTerm[1];
-        assert( (pTop-(pTerm->pWC->a))<pTerm->pWC->nTerm );
-        assert( pTop->wtFlags & TERM_LIKEOPT );
-        assert( pTop->eOperator==WO_LT );
-        if( whereLoopResize(db, pNew, pNew->nLTerm+1) ) break; /* OOM */
-        pNew->aLTerm[pNew->nLTerm++] = pTop;
-        pNew->wsFlags |= WHERE_TOP_LIMIT;
-        pNew->u.btree.nTop = 1;
-      }
     }else{
-      assert( eOp & (WO_LT|WO_LE) );
-      testcase( eOp & WO_LT );
-      testcase( eOp & WO_LE );
-      pNew->wsFlags |= WHERE_COLUMN_RANGE|WHERE_TOP_LIMIT;
-      pNew->u.btree.nTop = whereRangeVectorLen(
+      int nVecLen = whereRangeVectorLen(
           pParse, pSrc->iCursor, pProbe, saved_nEq, pTerm
       );
-      pTop = pTerm;
-      pBtm = (pNew->wsFlags & WHERE_BTM_LIMIT)!=0 ?
-                     pNew->aLTerm[pNew->nLTerm-2] : 0;
+      if( eOp & (WO_GT|WO_GE) ){
+        testcase( eOp & WO_GT );
+        testcase( eOp & WO_GE );
+        pNew->wsFlags |= WHERE_COLUMN_RANGE|WHERE_BTM_LIMIT;
+        pNew->u.btree.nBtm = nVecLen;
+        pBtm = pTerm;
+        pTop = 0;
+        if( pTerm->wtFlags & TERM_LIKEOPT ){
+          /* Range constraints that come from the LIKE optimization are
+          ** always used in pairs. */
+          pTop = &pTerm[1];
+          assert( (pTop-(pTerm->pWC->a))<pTerm->pWC->nTerm );
+          assert( pTop->wtFlags & TERM_LIKEOPT );
+          assert( pTop->eOperator==WO_LT );
+          if( whereLoopResize(db, pNew, pNew->nLTerm+1) ) break; /* OOM */
+          pNew->aLTerm[pNew->nLTerm++] = pTop;
+          pNew->wsFlags |= WHERE_TOP_LIMIT;
+          pNew->u.btree.nTop = 1;
+        }
+      }else{
+        assert( eOp & (WO_LT|WO_LE) );
+        testcase( eOp & WO_LT );
+        testcase( eOp & WO_LE );
+        pNew->wsFlags |= WHERE_COLUMN_RANGE|WHERE_TOP_LIMIT;
+        pNew->u.btree.nTop = nVecLen;
+        pTop = pTerm;
+        pBtm = (pNew->wsFlags & WHERE_BTM_LIMIT)!=0 ?
+                       pNew->aLTerm[pNew->nLTerm-2] : 0;
+      }
     }
 
     /* At this point pNew->nOut is set to the number of rows expected to
@@ -3190,15 +3230,18 @@ static int indexMightHelpWithOrderBy(
 */
 static int whereUsablePartialIndex(
   int iTab,             /* The table for which we want an index */
-  int isLeft,           /* True if iTab is the right table of a LEFT JOIN */
+  u8 jointype,          /* The JT_* flags on the join */
   WhereClause *pWC,     /* The WHERE clause of the query */
   Expr *pWhere          /* The WHERE clause from the partial index */
 ){
   int i;
   WhereTerm *pTerm;
-  Parse *pParse = pWC->pWInfo->pParse;
+  Parse *pParse;
+
+  if( jointype & JT_LTORJ ) return 0;
+  pParse = pWC->pWInfo->pParse;
   while( pWhere->op==TK_AND ){
-    if( !whereUsablePartialIndex(iTab,isLeft,pWC,pWhere->pLeft) ) return 0;
+    if( !whereUsablePartialIndex(iTab,jointype,pWC,pWhere->pLeft) ) return 0;
     pWhere = pWhere->pRight;
   }
   if( pParse->db->flags & SQLITE_EnableQPSG ) pParse = 0;
@@ -3206,7 +3249,7 @@ static int whereUsablePartialIndex(
     Expr *pExpr;
     pExpr = pTerm->pExpr;
     if( (!ExprHasProperty(pExpr, EP_OuterON) || pExpr->w.iJoin==iTab)
-     && (isLeft==0 || ExprHasProperty(pExpr, EP_OuterON))
+     && ((jointype & JT_OUTER)==0 || ExprHasProperty(pExpr, EP_OuterON))
      && sqlite3ExprImpliesExpr(pParse, pExpr, pWhere, iTab)
      && (pTerm->wtFlags & TERM_VNULL)==0
     ){
@@ -3372,9 +3415,8 @@ static int whereLoopAddBtree(
   for(; rc==SQLITE_OK && pProbe; 
       pProbe=(pSrc->fg.isIndexedBy ? 0 : pProbe->pNext), iSortIdx++
   ){
-    int isLeft = (pSrc->fg.jointype & JT_OUTER)!=0;
     if( pProbe->pPartIdxWhere!=0
-     && !whereUsablePartialIndex(pSrc->iCursor, isLeft, pWC,
+     && !whereUsablePartialIndex(pSrc->iCursor, pSrc->fg.jointype, pWC,
                                  pProbe->pPartIdxWhere)
     ){
       testcase( pNew->iTab!=pSrc->iCursor );  /* See ticket [98d973b8f5] */
@@ -3664,6 +3706,7 @@ static int whereLoopAddVirtualOne(
         *pbIn = 1; assert( (mExclude & WO_IN)==0 );
       }
 
+      assert( pbRetryLimit || !isLimitTerm(pTerm) );
       if( isLimitTerm(pTerm) && *pbIn ){
         /* If there is an IN(...) term handled as an == (separate call to
         ** xFilter for each value on the RHS of the IN) and a LIMIT or
@@ -4137,21 +4180,44 @@ static int whereLoopAddAll(WhereLoopBuilder *pBuilder){
   SrcItem *pEnd = &pTabList->a[pWInfo->nLevel];
   sqlite3 *db = pWInfo->pParse->db;
   int rc = SQLITE_OK;
+  int bFirstPastRJ = 0;
+  int hasRightJoin = 0;
   WhereLoop *pNew;
+
 
   /* Loop over the tables in the join, from left to right */
   pNew = pBuilder->pNew;
-  whereLoopInit(pNew);
+
+  /* Verify that pNew has already been initialized */
+  assert( pNew->nLTerm==0 );
+  assert( pNew->wsFlags==0 );
+  assert( pNew->nLSlot>=ArraySize(pNew->aLTermSpace) );
+  assert( pNew->aLTerm!=0 );
+
   pBuilder->iPlanLimit = SQLITE_QUERY_PLANNER_LIMIT;
   for(iTab=0, pItem=pTabList->a; pItem<pEnd; iTab++, pItem++){
     Bitmask mUnusable = 0;
     pNew->iTab = iTab;
     pBuilder->iPlanLimit += SQLITE_QUERY_PLANNER_LIMIT_INCR;
     pNew->maskSelf = sqlite3WhereGetMask(&pWInfo->sMaskSet, pItem->iCursor);
-    if( (pItem->fg.jointype & (JT_OUTER|JT_CROSS))!=0 ){
-      /* This condition is true when pItem is the FROM clause term on the
-      ** right-hand-side of a OUTER or CROSS JOIN.  */
+    if( bFirstPastRJ 
+     || (pItem->fg.jointype & (JT_OUTER|JT_CROSS|JT_LTORJ))!=0
+    ){
+      /* Add prerequisites to prevent reordering of FROM clause terms
+      ** across CROSS joins and outer joins.  The bFirstPastRJ boolean
+      ** prevents the right operand of a RIGHT JOIN from being swapped with
+      ** other elements even further to the right.
+      **
+      ** The JT_LTORJ case and the hasRightJoin flag work together to
+      ** prevent FROM-clause terms from moving from the right side of
+      ** a LEFT JOIN over to the left side of that join if the LEFT JOIN
+      ** is itself on the left side of a RIGHT JOIN.
+      */
+      if( pItem->fg.jointype & JT_LTORJ ) hasRightJoin = 1;
       mPrereq |= mPrior;
+      bFirstPastRJ = (pItem->fg.jointype & JT_RIGHT)!=0;
+    }else if( !hasRightJoin ){
+      mPrereq = 0;
     }
 #ifndef SQLITE_OMIT_VIRTUALTABLE
     if( IsVirtual(pItem->pTab) ){
@@ -4724,9 +4790,9 @@ static int wherePathSolver(WhereInfo *pWInfo, LogEst nRowEst){
         LogEst nOut;                      /* Rows visited by (pFrom+pWLoop) */
         LogEst rCost;                     /* Cost of path (pFrom+pWLoop) */
         LogEst rUnsorted;                 /* Unsorted cost of (pFrom+pWLoop) */
-        i8 isOrdered = pFrom->isOrdered;  /* isOrdered for (pFrom+pWLoop) */
+        i8 isOrdered;                     /* isOrdered for (pFrom+pWLoop) */
         Bitmask maskNew;                  /* Mask of src visited by (..) */
-        Bitmask revMask = 0;              /* Mask of rev-order loops for (..) */
+        Bitmask revMask;                  /* Mask of rev-order loops for (..) */
 
         if( (pWLoop->prereq & ~pFrom->maskLoop)!=0 ) continue;
         if( (pWLoop->maskSelf & pFrom->maskLoop)!=0 ) continue;
@@ -4745,7 +4811,9 @@ static int wherePathSolver(WhereInfo *pWInfo, LogEst nRowEst){
         rUnsorted = sqlite3LogEstAdd(rUnsorted, pFrom->rUnsorted);
         nOut = pFrom->nRow + pWLoop->nOut;
         maskNew = pFrom->maskLoop | pWLoop->maskSelf;
+        isOrdered = pFrom->isOrdered;
         if( isOrdered<0 ){
+          revMask = 0;
           isOrdered = wherePathSatisfiesOrderBy(pWInfo,
                        pWInfo->pOrderBy, pFrom, pWInfo->wctrlFlags,
                        iLoop, pWLoop, &revMask);
@@ -5044,7 +5112,11 @@ static int whereShortCut(WhereLoopBuilder *pBuilder){
   pItem = pWInfo->pTabList->a;
   pTab = pItem->pTab;
   if( IsVirtual(pTab) ) return 0;
-  if( pItem->fg.isIndexedBy ) return 0;
+  if( pItem->fg.isIndexedBy || pItem->fg.notIndexed ){
+    testcase( pItem->fg.isIndexedBy );
+    testcase( pItem->fg.notIndexed );
+    return 0;
+  }
   iCur = pItem->iCursor;
   pWC = &pWInfo->sWC;
   pLoop = pBuilder->pNew;
@@ -5217,7 +5289,7 @@ static SQLITE_NOINLINE Bitmask whereOmitNoopJoin(
     WhereLoop *pLoop;
     pLoop = pWInfo->a[i].pWLoop;
     pItem = &pWInfo->pTabList->a[pLoop->iTab];
-    if( (pItem->fg.jointype & JT_LEFT)==0 ) continue;
+    if( (pItem->fg.jointype & (JT_LEFT|JT_RIGHT))!=JT_LEFT ) continue;
     if( (pWInfo->wctrlFlags & WHERE_WANT_DISTINCT)==0
      && (pLoop->wsFlags & WHERE_ONEROW)==0
     ){
@@ -5549,7 +5621,7 @@ WhereInfo *sqlite3WhereBegin(
   /* Analyze all of the subexpressions. */
   sqlite3WhereExprAnalyze(pTabList, &pWInfo->sWC);
   sqlite3WhereAddLimit(&pWInfo->sWC, pLimit);
-  if( db->mallocFailed ) goto whereBeginError;
+  if( pParse->nErr ) goto whereBeginError;
 
   /* Special case: WHERE terms that do not refer to any tables in the join
   ** (constant expressions). Evaluate each such term, and jump over all the
@@ -5853,6 +5925,7 @@ WhereInfo *sqlite3WhereBegin(
         iIndexCur = pParse->nTab++;
       }
       pLevel->iIdxCur = iIndexCur;
+      assert( pIx!=0 );
       assert( pIx->pSchema==pTab->pSchema );
       assert( iIndexCur>=0 );
       if( op ){
@@ -5928,9 +6001,20 @@ WhereInfo *sqlite3WhereBegin(
   for(ii=0; ii<nTabList; ii++){
     int addrExplain;
     int wsFlags;
+    SrcItem *pSrc;
     if( pParse->nErr ) goto whereBeginError;
     pLevel = &pWInfo->a[ii];
     wsFlags = pLevel->pWLoop->wsFlags;
+    pSrc = &pTabList->a[pLevel->iFrom];
+    if( pSrc->fg.isMaterialized ){
+      if( pSrc->fg.isCorrelated ){
+        sqlite3VdbeAddOp2(v, OP_Gosub, pSrc->regReturn, pSrc->addrFillSub);
+      }else{
+        int iOnce = sqlite3VdbeAddOp0(v, OP_Once);  VdbeCoverage(v);
+        sqlite3VdbeAddOp2(v, OP_Gosub, pSrc->regReturn, pSrc->addrFillSub);
+        sqlite3VdbeJumpHere(v, iOnce);
+      }
+    }
     if( (wsFlags & (WHERE_AUTO_INDEX|WHERE_BLOOMFILTER))!=0 ){
       if( (wsFlags & WHERE_AUTO_INDEX)!=0 ){
 #ifndef SQLITE_OMIT_AUTOMATIC_INDEX
@@ -6022,6 +6106,7 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
   SrcList *pTabList = pWInfo->pTabList;
   sqlite3 *db = pParse->db;
   int iEnd = sqlite3VdbeCurrentAddr(v);
+  int nRJ = 0;
 
   /* Generate loop termination code.
   */
@@ -6038,8 +6123,7 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
       pRJ->endSubrtn = sqlite3VdbeCurrentAddr(v);
       sqlite3VdbeAddOp3(v, OP_Return, pRJ->regReturn, pRJ->addrSubrtn, 1);
       VdbeCoverage(v);
-      assert( pParse->withinRJSubrtn>0 );
-      pParse->withinRJSubrtn--;
+      nRJ++;
     }
     pLoop = pLevel->pWLoop;
     if( pLevel->op!=OP_Noop ){
@@ -6320,5 +6404,6 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
   */
   pParse->nQueryLoop = pWInfo->savedNQueryLoop;
   whereInfoFree(db, pWInfo);
+  pParse->withinRJSubrtn -= nRJ;
   return;
 }

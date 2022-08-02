@@ -59,6 +59,11 @@ do_execsql_test 2.0 {
        SELECT a FROM cte1
     ), 1);
   END;
+
+  CREATE TRIGGER r1 AFTER INSERT ON t2 BEGIN
+    UPDATE t2 SET k=1 FROM t2 AS one, t2 AS two NATURAL JOIN t2 AS three 
+    WHERE one.k=two.v;
+  END;
 }
 
 faultsim_save_and_close

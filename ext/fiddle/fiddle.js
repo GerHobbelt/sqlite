@@ -16,6 +16,183 @@
 */
 (function(){
     'use strict';
+    /* Recall that the 'self' symbol, except where locally
+       overwritten, refers to the global window or worker object. */
+
+    const storage = (function(NS/*namespace object in which to store this module*/){
+        /* Pedantic licensing note: this code originated in the Fossil SCM
+           source tree, where it has a different license, but the person who
+           ported it into sqlite is the same one who wrote it for fossil. */
+        'use strict';
+        NS = NS||{};
+
+        /**
+           This module provides a basic wrapper around localStorage
+           or sessionStorage or a dummy proxy object if neither
+           of those are available.
+        */
+        const tryStorage = function f(obj){
+            if(!f.key) f.key = 'storage.access.check';
+            try{
+                obj.setItem(f.key, 'f');
+                const x = obj.getItem(f.key);
+                obj.removeItem(f.key);
+                if(x!=='f') throw new Error(f.key+" failed")
+                return obj;
+            }catch(e){
+                return undefined;
+            }
+        };
+
+        /** Internal storage impl for this module. */
+        const $storage =
+              tryStorage(window.localStorage)
+              || tryStorage(window.sessionStorage)
+              || tryStorage({
+                  // A basic dummy xyzStorage stand-in
+                  $$$:{},
+                  setItem: function(k,v){this.$$$[k]=v},
+                  getItem: function(k){
+                      return this.$$$.hasOwnProperty(k) ? this.$$$[k] : undefined;
+                  },
+                  removeItem: function(k){delete this.$$$[k]},
+                  clear: function(){this.$$$={}}
+              });
+
+        /**
+           For the dummy storage we need to differentiate between
+           $storage and its real property storage for hasOwnProperty()
+           to work properly...
+        */
+        const $storageHolder = $storage.hasOwnProperty('$$$') ? $storage.$$$ : $storage;
+
+        /**
+           A prefix which gets internally applied to all storage module
+           property keys so that localStorage and sessionStorage across the
+           same browser profile instance do not "leak" across multiple apps
+           being hosted by the same origin server. Such cross-polination is
+           still there but, with this key prefix applied, it won't be
+           immediately visible via the storage API.
+
+           With this in place we can justify using localStorage instead of
+           sessionStorage.
+
+           One implication of using localStorage and sessionStorage is that
+           their scope (the same "origin" and client application/profile)
+           allows multiple apps on the same origin to use the same
+           storage. Thus /appA/foo could then see changes made via
+           /appB/foo. The data do not cross user- or browser boundaries,
+           though, so it "might" arguably be called a
+           feature. storageKeyPrefix was added so that we can sandbox that
+           state for each separate app which shares an origin.
+
+           See: https://fossil-scm.org/forum/forumpost/4afc4d34de
+
+           Sidebar: it might seem odd to provide a key prefix and stick all
+           properties in the topmost level of the storage object. We do that
+           because adding a layer of object to sandbox each app would mean
+           (de)serializing that whole tree on every storage property change.
+           e.g. instead of storageObject.projectName.foo we have
+           storageObject[storageKeyPrefix+'foo']. That's soley for
+           efficiency's sake (in terms of battery life and
+           environment-internal storage-level effort).
+        */
+        const storageKeyPrefix = (
+            $storageHolder===$storage/*localStorage or sessionStorage*/
+                ? (
+                    (NS.config ?
+                     (NS.config.projectCode || NS.config.projectName
+                      || NS.config.shortProjectName)
+                     : false)
+                        || window.location.pathname
+                )+'::' : (
+                    '' /* transient storage */
+                )
+        );
+
+        /**
+           A proxy for localStorage or sessionStorage or a
+           page-instance-local proxy, if neither one is availble.
+
+           Which exact storage implementation is uses is unspecified, and
+           apps must not rely on it.
+        */
+        NS.storage = {
+            storageKeyPrefix: storageKeyPrefix,
+            /** Sets the storage key k to value v, implicitly converting
+                it to a string. */
+            set: (k,v)=>$storage.setItem(storageKeyPrefix+k,v),
+            /** Sets storage key k to JSON.stringify(v). */
+            setJSON: (k,v)=>$storage.setItem(storageKeyPrefix+k,JSON.stringify(v)),
+            /** Returns the value for the given storage key, or
+                dflt if the key is not found in the storage. */
+            get: (k,dflt)=>$storageHolder.hasOwnProperty(
+                storageKeyPrefix+k
+            ) ? $storage.getItem(storageKeyPrefix+k) : dflt,
+            /** Returns true if the given key has a value of "true".  If the
+                key is not found, it returns true if the boolean value of dflt
+                is "true". (Remember that JS persistent storage values are all
+                strings.) */
+            getBool: function(k,dflt){
+                return 'true'===this.get(k,''+(!!dflt));
+            },
+            /** Returns the JSON.parse()'d value of the given
+                storage key's value, or dflt is the key is not
+                found or JSON.parse() fails. */
+            getJSON: function f(k,dflt){
+                try {
+                    const x = this.get(k,f);
+                    return x===f ? dflt : JSON.parse(x);
+                }
+                catch(e){return dflt}
+            },
+            /** Returns true if the storage contains the given key,
+                else false. */
+            contains: (k)=>$storageHolder.hasOwnProperty(storageKeyPrefix+k),
+            /** Removes the given key from the storage. Returns this. */
+            remove: function(k){
+                $storage.removeItem(storageKeyPrefix+k);
+                return this;
+            },
+            /** Clears ALL keys from the storage. Returns this. */
+            clear: function(){
+                this.keys().forEach((k)=>$storage.removeItem(/*w/o prefix*/k));
+                return this;
+            },
+            /** Returns an array of all keys currently in the storage. */
+            keys: ()=>Object.keys($storageHolder).filter((v)=>(v||'').startsWith(storageKeyPrefix)),
+            /** Returns true if this storage is transient (only available
+                until the page is reloaded), indicating that fileStorage
+                and sessionStorage are unavailable. */
+            isTransient: ()=>$storageHolder!==$storage,
+            /** Returns a symbolic name for the current storage mechanism. */
+            storageImplName: function(){
+                if($storage===window.localStorage) return 'localStorage';
+                else if($storage===window.sessionStorage) return 'sessionStorage';
+                else return 'transient';
+            },
+
+            /**
+               Returns a brief help text string for the currently-selected
+               storage type.
+            */
+            storageHelpDescription: function(){
+                return {
+                    localStorage: "Browser-local persistent storage with an "+
+                        "unspecified long-term lifetime (survives closing the browser, "+
+                        "but maybe not a browser upgrade).",
+                    sessionStorage: "Storage local to this browser tab, "+
+                        "lost if this tab is closed.",
+                    "transient": "Transient storage local to this invocation of this page."
+                }[this.storageImplName()];
+            }
+        };
+        return NS.storage;
+    })({})/*storage API setup*/;
+
+
+    /** Name of the stored copy of SqliteFiddle.config. */
+    const configStorageKey = 'sqlite3-fiddle-config';
 
     /**
        The SqliteFiddle object is intended to be the primary
@@ -39,7 +216,7 @@
                That slows it down but is useful for testing. */
             echoToConsole: false,
             /* If true, display input/output areas side-by-side. */
-            sideBySide: false,
+            sideBySide: true,
             /* If true, swap positions of the input/output areas. */
             swapInOut: false
         },
@@ -76,13 +253,15 @@
                 f._.value = '';
             }
             if(this.config.echoToConsole) console.log(text);
-            if(this.jqTerm) window.Module.jqTerm.echo(text);
+            if(this.jqTerm) this.jqTerm.echo(text);
             f._.value += text + "\n";
             if(this.config.autoScrollOutput){
                 f._.scrollTop = f._.scrollHeight;
             }
         },
         _msgMap: {},
+        /** Adds a worker message handler for messages of the given
+            type. */
         addMsgHandler: function f(type,callback){
             if(Array.isArray(type)){
                 type.forEach((t)=>this.addMsgHandler(t, callback));
@@ -93,6 +272,7 @@
              : (this._msgMap[type] = [])).push(callback);
             return this;
         },
+        /** Given a worker message, runs all handlers for msg.type. */
         runMsgHandlers: function(msg){
             const list = (this._msgMap.hasOwnProperty(msg.type)
                           ? this._msgMap[msg.type] : false);
@@ -104,6 +284,7 @@
             list.forEach((f)=>f(msg));
             return true;
         },
+        /** Removes all message handlers for the given message type. */
         clearMsgHandlers: function(type){
             delete this._msgMap[type];
             return this;
@@ -112,8 +293,38 @@
         wMsg: function(type,data){
             this.worker.postMessage({type, data});
             return this;
+        },
+        /**
+           Prompts for confirmation and, if accepted, deletes
+           all content and tables in the (transient) database.
+        */
+        resetDb: function(){
+            if(window.confirm("Really destroy all content and tables "
+                              +"in the (transient) db?")){
+                this.wMsg('db-reset');
+            }
+            return this;
+        },
+        /** Stores this object's config in the browser's storage. */
+        storeConfig: function(){
+            storage.setJSON(configStorageKey,this.config);
         }
     };
+
+    if(1){ /* Restore SF.config */
+        const storedConfig = storage.getJSON(configStorageKey);
+        if(storedConfig){
+            /* Copy all properties to SF.config which are currently in
+               storedConfig. We don't bother copying any other
+               properties: those have been removed from the app in the
+               meantime. */
+            Object.keys(SF.config).forEach(function(k){
+                if(storedConfig.hasOwnProperty(k)){
+                    SF.config[k] = storedConfig[k];
+                }
+            });
+        }
+    }
 
     SF.worker = new Worker('fiddle-worker.js');
     SF.worker.onmessage = (ev)=>SF.runMsgHandlers(ev.data);
@@ -129,44 +340,55 @@
         return (arguments.length>1 ? arguments[0] : document)
             .querySelector(arguments[arguments.length-1]);
     };
-    
-    const statusElement = E('#module-status');
-    const progressElement = E('#module-progress');
-    const spinnerElement = E('#module-spinner');
 
+    /** Handles status updates from the Module object. */
     SF.addMsgHandler('module', function f(ev){
         ev = ev.data;
-        //console.log("Module status:",ev);
-        if('status'!==ev.type) return;
-        /* This weird handling of the ev.data is simply how
-           emscripten's auto-generated code notifies the client of
-           load progress. */
-        let text = ev.data;
-        if(!f.last) f.last = { time: Date.now(), text: '' };
-        if(text === f.last.text) return;
-        const m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
-        const now = Date.now();
-        if(m && now - f.last.time < 30) return; // if this is a progress update, skip it if too soon
-        f.last.time = now;
-        f.last.text = text;
-        if(m) {
-            text = m[1];
-            progressElement.value = parseInt(m[2])*100;
-            progressElement.max = parseInt(m[4])*100;
-            progressElement.hidden = false;
-            spinnerElement.hidden = false;
-        } else {
-            progressElement.remove();
-            if(!text) spinnerElement.remove();
+        if('status'!==ev.type){
+            console.warn("Unexpected module-type message:",ev);
+            return;
         }
-        if(text){
-            statusElement.innerText = text;
+        if(!f.ui){
+            f.ui = {
+                status: E('#module-status'),
+                progress: E('#module-progress'),
+                spinner: E('#module-spinner')
+            };
+        }
+        const msg = ev.data;
+        if(f.ui.progres){
+            progress.value = msg.step;
+            progress.max = msg.step + 1/*we don't know how many steps to expect*/;
+        }
+        if(1==msg.step){
+            f.ui.progress.classList.remove('hidden');
+            f.ui.spinner.classList.remove('hidden');
+        }
+        if(msg.text){
+            f.ui.status.classList.remove('hidden');
+            f.ui.status.innerText = msg.text;
         }else{
-            console.log("Finalizing status.");
-            statusElement.remove();
-            SF.clearMsgHandlers('module');
-            self.onSFLoaded();
+            if(f.ui.progress){
+                f.ui.progress.remove();
+                f.ui.spinner.remove();
+                delete f.ui.progress;
+                delete f.ui.spinner;
+            }
+            f.ui.status.classList.add('hidden');
+            /* The module can post messages about fatal problems,
+               e.g. an exit() being triggered or assertion failure,
+               after the last "load" message has arrived, so
+               leave f.ui.status and message listener intact. */
         }
+    });
+
+    /**
+       The 'fiddle-ready' event is fired (with no payload) when the
+       wasm module has finished loading. Interestingly, that happens
+       _before_ the final module:status event */
+    SF.addMsgHandler('fiddle-ready', function(){
+        SF.clearMsgHandlers('fiddle-ready');
+        self.onSFLoaded();
     });
 
     /**
@@ -178,7 +400,7 @@
         delete this.onSFLoaded;
         // Unhide all elements which start out hidden
         EAll('.initially-hidden').forEach((e)=>e.classList.remove('initially-hidden'));
-        
+        E('#btn-reset').addEventListener('click',()=>SF.resetDb());
         const taInput = E('#input');
         const btnClearIn = E('#btn-clear');
         btnClearIn.addEventListener('click',function(){
@@ -199,15 +421,23 @@
             if(SF.jqTerm) SF.jqTerm.clear();
         },false);
         const btnShellExec = E('#btn-shell-exec');
-        btnShellExec.addEventListener('click',function(){
-            const sql = taInput.value.trim();
+        btnShellExec.addEventListener('click',function(ev){
+            let sql;
+            ev.preventDefault();
+            if(taInput.selectionStart<taInput.selectionEnd){
+                sql = taInput.value.substring(taInput.selectionStart,taInput.selectionEnd).trim();
+            }else{
+                sql = taInput.value.trim();
+            }
             if(sql) SF.dbExec(sql);
         },false);
 
+        const btnInterrupt = E("#btn-interrupt");
+        //btnInterrupt.classList.add('hidden');
         /** To be called immediately before work is sent to the
-            worker.  Updates some UI elements. The 'working'/'end'
+            worker. Updates some UI elements. The 'working'/'end'
             event will apply the inverse, undoing the bits this
-            function does.  This impl is not in the 'working'/'start'
+            function does. This impl is not in the 'working'/'start'
             event handler because that event is given to us
             asynchronously _after_ we need to have performed this
             work.
@@ -223,6 +453,7 @@
             }
             f._.pageTitle.innerText = "[working...] "+f._.pageTitleOrig;
             btnShellExec.setAttribute('disabled','disabled');
+            btnInterrupt.removeAttribute('disabled','disabled');
         };
 
         /* Sends the given text to the db module to evaluate as if it
@@ -238,13 +469,16 @@
         };
 
         SF.addMsgHandler('working',function f(ev){
-            if('start' === ev.data){
-                /* See notes in preStartWork(). */
-            }else if('end' === ev.data){
-                preStartWork._.pageTitle.innerText = preStartWork._.pageTitleOrig;
-                btnShellExec.innerText = preStartWork._.btnLabel;
-                btnShellExec.removeAttribute('disabled');
+            switch(ev.data){
+                case 'start': /* See notes in preStartWork(). */; return;
+                case 'end':
+                    preStartWork._.pageTitle.innerText = preStartWork._.pageTitleOrig;
+                    btnShellExec.innerText = preStartWork._.btnLabel;
+                    btnShellExec.removeAttribute('disabled');
+                    btnInterrupt.setAttribute('disabled','disabled');
+                    return;
             }
+            console.warn("Unhandled 'working' event:",ev.data);
         });
 
         /* For each checkbox with data-csstgt, set up a handler which
@@ -275,14 +509,112 @@
                 }
                 e.addEventListener('change', function(){
                     SF.config[this.dataset.config] = this.checked;
+                    SF.storeConfig();
                 }, false);
             });
         /* For each button with data-cmd=X, map a click handler which
-           calls dbExec(X). */
+           calls SF.dbExec(X). */
         const cmdClick = function(){SF.dbExec(this.dataset.cmd);};
         EAll('button[data-cmd]').forEach(
             e => e.addEventListener('click', cmdClick, false)
         );
+
+        btnInterrupt.addEventListener('click',function(){
+            SF.wMsg('interrupt');
+        });
+
+        /** Initiate a download of the db. */
+        const btnExport = E('#btn-export');
+        const eLoadDb = E('#load-db');
+        const btnLoadDb = E('#btn-load-db');
+        btnLoadDb.addEventListener('click', ()=>eLoadDb.click());
+        /**
+           Enables (if passed true) or disables all UI elements which
+           "might," if timed "just right," interfere with an
+           in-progress db import/export/exec operation.
+        */
+        const enableMutatingElements = function f(enable){
+            if(!f._elems){
+                f._elems = [
+                    /* UI elements to disable while import/export are
+                       running. Normally the export is fast enough
+                       that this won't matter, but we really don't
+                       want to be reading (from outside of sqlite) the
+                       db when the user taps btnShellExec. */
+                    btnShellExec, btnExport, eLoadDb
+                ];
+            }
+            f._elems.forEach( enable
+                              ? (e)=>e.removeAttribute('disabled')
+                              : (e)=>e.setAttribute('disabled','disabled') );
+        };
+        btnExport.addEventListener('click',function(){
+            enableMutatingElements(false);
+            SF.wMsg('db-export');
+        });
+        SF.addMsgHandler('db-export', function(ev){
+            enableMutatingElements(true);
+            ev = ev.data;
+            if(ev.error){
+                SF.echo("Export failed:",ev.error);
+                return;
+            }
+            const blob = new Blob([ev.buffer], {type:"application/x-sqlite3"});
+            const a = document.createElement('a');
+            document.body.appendChild(a);
+            a.href = window.URL.createObjectURL(blob);
+            a.download = ev.filename;
+            a.addEventListener('click',function(){
+                setTimeout(function(){
+                    SF.echo("Exported (possibly auto-downloaded):",ev.filename);
+                    window.URL.revokeObjectURL(a.href);
+                    a.remove();
+                },500);
+            });
+            a.click();
+        });
+        /**
+           Handle load/import of an external db file.
+        */
+        eLoadDb.addEventListener('change',function(){
+            const f = this.files[0];
+            const r = new FileReader();
+            const status = {loaded: 0, total: 0};
+            enableMutatingElements(false);
+            r.addEventListener('loadstart', function(){
+                SF.echo("Loading",f.name,"...");
+            });
+            r.addEventListener('progress', function(ev){
+                SF.echo("Loading progress:",ev.loaded,"of",ev.total,"bytes.");
+            });
+            const that = this;
+            r.addEventListener('load', function(){
+                enableMutatingElements(true);
+                SF.echo("Loaded",f.name+". Opening db...");
+                SF.wMsg('open',{
+                    filename: f.name,
+                    buffer: this.result
+                });
+            });
+            r.addEventListener('error',function(){
+                enableMutatingElements(true);
+                SF.echo("Loading",f.name,"failed for unknown reasons.");
+            });
+            r.addEventListener('abort',function(){
+                enableMutatingElements(true);
+                SF.echo("Cancelled loading of",f.name+".");
+            });
+            r.readAsArrayBuffer(f);
+        });
+
+        EAll('fieldset.collapsible').forEach(function(fs){
+            const btnToggle = E(fs,'legend > .fieldset-toggle'),
+                  content = EAll(fs,':scope > div');
+            btnToggle.addEventListener('click', function(){
+                fs.classList.toggle('collapsed');
+                content.forEach((d)=>d.classList.toggle('hidden'));
+            }, false);
+        });
 
         /**
            Given a DOM element, this routine measures its "effective
@@ -350,22 +682,24 @@
         debounce.$defaultDelay = 500 /*arbitrary*/;
 
         const ForceResizeKludge = (function(){
-            /* Workaround for Safari mayhem regarding use of vh CSS units....
-               We cannot use vh units to set the terminal area size because
-               Safari chokes on that, so we calculate that height here. Larger
-               than ~95% is too big for Firefox on Android, causing the input
-               area to move off-screen. */
-            const bcl = document.body.classList;
+            /* Workaround for Safari mayhem regarding use of vh CSS
+               units....  We cannot use vh units to set the main view
+               size because Safari chokes on that, so we calculate
+               that height here. Larger than ~95% is too big for
+               Firefox on Android, causing the input area to move
+               off-screen. */
             const appViews = EAll('.app-view');
+            const elemsToCount = [
+                /* Elements which we need to always count in the
+                   visible body size. */
+                E('body > header'),
+                E('body > footer')
+            ];
             const resized = function f(){
                 if(f.$disabled) return;
                 const wh = window.innerHeight;
                 var ht;
                 var extra = 0;
-                const elemsToCount = [
-                    E('body > header'),
-                    E('body > footer')
-                ];
                 elemsToCount.forEach((e)=>e ? extra += effectiveHeight(e) : false);
                 ht = wh - extra;
                 appViews.forEach(function(e){
@@ -388,6 +722,14 @@
         (function(){
             const xElem = E('#select-examples');
             const examples = [
+                {name: "Help", sql:
+`-- ================================================
+-- Use ctrl-enter or shift-enter to execute sqlite3
+-- shell commands and SQL.
+-- If a subset of the text is currently selected,
+-- only that part is executed.
+-- ================================================
+.help`},
                 {name: "Timer on", sql: ".timer on"},
                 {name: "Setup table T", sql:`.nullvalue NULL
 CREATE TABLE t(a,b);
@@ -429,7 +771,7 @@ SELECT group_concat(rtrim(t),x'0a') as Mandelbrot FROM a;`}
                 taInput.value = '-- ' +
                     this.selectedOptions[0].innerText +
                     '\n' + this.value;
-                //dbExec(this.value);
+                SF.dbExec(this.value);
             });
         })()/* example queries */;
 
@@ -437,7 +779,7 @@ SELECT group_concat(rtrim(t),x'0a') as Mandelbrot FROM a;`}
         if(window.jQuery && window.jQuery.terminal){
             /* Set up the terminal-style view... */
             const eTerm = window.jQuery('#view-terminal').empty();
-            SF.jqTerm = eTerm.terminal(dbExec,{
+            SF.jqTerm = eTerm.terminal(SF.dbExec.bind(SF),{
                 prompt: 'sqlite> ',
                 greetings: false /* note that the docs incorrectly call this 'greeting' */
             });
@@ -445,6 +787,7 @@ SELECT group_concat(rtrim(t),x'0a') as Mandelbrot FROM a;`}
             const head = E('header#titlebar');
             const btnToggleView = document.createElement('button');
             btnToggleView.appendChild(document.createTextNode("Toggle View"));
+            head.appendChild(btnToggleView);
             btnToggleView.addEventListener('click',function f(){
                 EAll('.app-view').forEach(e=>e.classList.toggle('hidden'));
                 if(document.body.classList.toggle('terminal-mode')){
@@ -460,5 +803,7 @@ SELECT group_concat(rtrim(t),x'0a') as Mandelbrot FROM a;`}
                 'any number of changes or outright removal at any time.\n');
         delete ForceResizeKludge.$disabled;
         ForceResizeKludge();
+
+        btnShellExec.click();
     }/*onSFLoaded()*/;
 })();

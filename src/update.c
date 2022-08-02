@@ -468,7 +468,7 @@ void sqlite3Update(
       x.z = pChanges->a[i].zEName;
       x.n = sqlite3Strlen30(x.z);
       pChanges->a[i].pExpr =
-         sqlite3PExpr(pParse, TK_UPLUS, sqlite3ExprAlloc(db, TK_ID, &x, 0), 0);
+        sqlite3PExpr(pParse, TK_UPLUS, sqlite3ExprAlloc(db, TK_ID, &x, 0), 0);
       if( db->mallocFailed ) goto update_cleanup;
     }
 #endif
@@ -1039,7 +1039,7 @@ void sqlite3Update(
       }else{
         sqlite3VdbeAddOp3(v, OP_NotExists, iDataCur, labelContinue,regOldRowid);
       }
-      VdbeCoverageNeverTaken(v);
+      VdbeCoverage(v);
     }
 
     /* Do FK constraint checks. */

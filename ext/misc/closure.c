@@ -67,7 +67,7 @@
 **
 ** The above query will return all elements that are part of group ?1
 ** or children of group ?1 or grand-children of ?1 and so forth for all
-** descendents of group ?1.  The same query can be formulated as a join:
+** descendants of group ?1.  The same query can be formulated as a join:
 **
 **    SELECT element.* FROM element, ct1
 **     WHERE element.groupid=ct1.id
@@ -76,7 +76,7 @@
 ** The depth of the transitive_closure (the number of generations of
 ** parent/child relations to follow) can be limited by setting "depth"
 ** column in the WHERE clause.  So, for example, the following query
-** finds only children and grandchildren but no further descendents:
+** finds only children and grandchildren but no further descendants:
 **
 **    SELECT element.* FROM element, ct1
 **     WHERE element.groupid=ct1.id
@@ -90,8 +90,8 @@
 ** The root=?1 term must be supplied in WHERE clause or else the query
 ** of the ct1 virtual table will return an empty set.  The tablename,
 ** idcolumn, and parentcolumn attributes can be overridden in the WHERE
-** clause if desired.  So, for example, the ct1 table could be repurposed
-** to find ancestors rather than descendents by inverting the roles of
+** clause if desired.  So, for example, the ct1 table could be re-purposed
+** to find ancestors rather than descendants by inverting the roles of
 ** the idcolumn and parentcolumn:
 **
 **    SELECT element.* FROM element, ct1
@@ -240,7 +240,7 @@ static closure_avl **closureAvlFromPtr(closure_avl *p, closure_avl **pp){
 }
 
 /*
-** Rebalance all nodes starting with p and working up to the root.
+** Re-balance all nodes starting with p and working up to the root.
 ** Return the new root.
 */
 static closure_avl *closureAvlBalance(closure_avl *p){

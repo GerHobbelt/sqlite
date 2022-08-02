@@ -58,7 +58,7 @@ void sqlite3TreeViewLine(TreeView *p, const char *zFormat, ...){
   va_list ap;
   int i;
   StrAccum acc;
-  char zBuf[500];
+  char zBuf[1000];
   sqlite3StrAccumInit(&acc, 0, zBuf, sizeof(zBuf), 0);
   if( p ){
     for(i=0; i<p->iLevel && i<(int)sizeof(p->bLine)-1; i++){
@@ -100,8 +100,8 @@ void sqlite3TreeViewColumnList(
   sqlite3TreeViewLine(pView, "COLUMNS");
   for(i=0; i<nCol; i++){
     u16 flg = aCol[i].colFlags;
-    int moreToFollow = i<(nCol - 1);
-    sqlite3TreeViewPush(&pView, moreToFollow);
+    int colMoreToFollow = i<(nCol - 1);
+    sqlite3TreeViewPush(&pView, colMoreToFollow);
     sqlite3TreeViewLine(pView, 0);
     printf(" %s", aCol[i].zCnName);
     switch( aCol[i].eCType ){
@@ -189,7 +189,7 @@ void sqlite3TreeViewSrcList(TreeView *pView, const SrcList *pSrc){
     const SrcItem *pItem = &pSrc->a[i];
     StrAccum x;
     int n = 0;
-    char zLine[100];
+    char zLine[1000];
     sqlite3StrAccumInit(&x, 0, zLine, sizeof(zLine), 0);
     x.printfFlags |= SQLITE_PRINTF_INTERNAL;
     sqlite3_str_appendf(&x, "{%d:*} %!S", pItem->iCursor, pItem);
@@ -215,6 +215,9 @@ void sqlite3TreeViewSrcList(TreeView *pView, const SrcList *pSrc){
     if( pItem->fg.isCte ){
       sqlite3_str_appendf(&x, " CteUse=0x%p", pItem->u2.pCteUse);
     }
+    if( pItem->fg.isOn || (pItem->fg.isUsing==0 && pItem->u3.pOn!=0) ){
+      sqlite3_str_appendf(&x, " ON");
+    }
     sqlite3StrAccumFinish(&x);
     sqlite3TreeViewItem(pView, zLine, i<pSrc->nSrc-1);
     n = 0;
@@ -229,7 +232,7 @@ void sqlite3TreeViewSrcList(TreeView *pView, const SrcList *pSrc){
         Table *pTab = pItem->pTab;
         sqlite3TreeViewColumnList(pView, pTab->aCol, pTab->nCol, 1);
       }
-      assert( pItem->fg.isNestedFrom == IsNestedFrom(pItem->pSelect) );
+      assert( (int)pItem->fg.isNestedFrom == IsNestedFrom(pItem->pSelect) );
       sqlite3TreeViewSelect(pView, pItem->pSelect, (--n)>0);
     }
     if( pItem->fg.isTabFunc ){
@@ -996,6 +999,7 @@ void sqlite3TreeViewUpsert(
   sqlite3TreeViewPop(&pView);
 }
 
+#if TREETRACE_ENABLED
 /*
 ** Generate a human-readable diagram of the data structure that go
 ** into generating an DELETE statement.
@@ -1049,7 +1053,9 @@ void sqlite3TreeViewDelete(
   }
   sqlite3TreeViewPop(&pView);
 }
+#endif /* TREETRACE_ENABLED */
 
+#if TREETRACE_ENABLED
 /*
 ** Generate a human-readable diagram of the data structure that go
 ** into generating an INSERT statement.
@@ -1117,7 +1123,9 @@ void sqlite3TreeViewInsert(
   }
   sqlite3TreeViewPop(&pView);
 }
+#endif /* TREETRACE_ENABLED */
 
+#if TREETRACE_ENABLED
 /*
 ** Generate a human-readable diagram of the data structure that go
 ** into generating an UPDATE statement.
@@ -1193,6 +1201,7 @@ void sqlite3TreeViewUpdate(
   }
   sqlite3TreeViewPop(&pView);
 }
+#endif /* TREETRACE_ENABLED */
 
 #ifndef SQLITE_OMIT_TRIGGER
 /*

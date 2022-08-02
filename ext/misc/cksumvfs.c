@@ -76,7 +76,7 @@
 ** value of exactly 8.  The default value for reserve-bytes is 0.
 ** Hence, newly created database files will omit the checksum by
 ** default.  To create a database that includes a checksum, change
-** the reserve-bytes value to 8 by runing:
+** the reserve-bytes value to 8 by running:
 **
 **    int n = 8;
 **    sqlite3_file_control(db, 0, SQLITE_FCNTL_RESERVE_BYTES, &n);

@@ -1004,7 +1004,7 @@ case OP_Gosub: {            /* jump */
 ** and also less than the current address, then the "EXPLAIN" output
 ** formatter in the CLI will indent all opcodes from the P2 opcode up
 ** to be not including the current Return.   P2 should be the first opcode
-** in the subroutine from which this opcode is returnning.  Thus the P2
+** in the subroutine from which this opcode is returning.  Thus the P2
 ** value is a byte-code indentation hint.  See tag-20220407a in
 ** wherecode.c and shell.c.
 */
@@ -1479,10 +1479,15 @@ case OP_Move: {
   break;
 }
 
-/* Opcode: Copy P1 P2 P3 * *
+/* Opcode: Copy P1 P2 P3 * P5
 ** Synopsis: r[P2@P3+1]=r[P1@P3+1]
 **
 ** Make a copy of registers P1..P1+P3 into registers P2..P2+P3.
+**
+** If the 0x0002 bit of P5 is set then also clear the MEM_Subtype flag in the
+** destination.  The 0x0001 bit of P5 indicates that this Copy opcode cannot
+** be merged.  The 0x0001 bit is used by the query planner and does not
+** come into play during query execution.
 **
 ** This instruction makes a deep copy of the value.  A duplicate
 ** is made of any string or blob constant.  See also OP_SCopy.
@@ -1498,6 +1503,9 @@ case OP_Copy: {
     memAboutToChange(p, pOut);
     sqlite3VdbeMemShallowCopy(pOut, pIn1, MEM_Ephem);
     Deephemeralize(pOut);
+    if( (pOut->flags & MEM_Subtype)!=0 &&  (pOp->p5 & 0x0002)!=0 ){
+      pOut->flags &= ~MEM_Subtype;
+    }
 #ifdef SQLITE_DEBUG
     pOut->pScopyFrom = 0;
 #endif
@@ -1658,7 +1666,7 @@ case OP_Concat: {           /* same as TK_CONCAT, in1, in2, out3 */
   if( nByte>db->aLimit[SQLITE_LIMIT_LENGTH] ){
     goto too_big;
   }
-  if( sqlite3VdbeMemGrow(pOut, (int)nByte+3, pOut==pIn2) ){
+  if( sqlite3VdbeMemGrow(pOut, (int)nByte+2, pOut==pIn2) ){
     goto no_mem;
   }
   MemSetTypeFlag(pOut, MEM_Str);
@@ -1670,9 +1678,9 @@ case OP_Concat: {           /* same as TK_CONCAT, in1, in2, out3 */
   memcpy(&pOut->z[pIn2->n], pIn1->z, pIn1->n);
   assert( (pIn1->flags & MEM_Dyn) == (flags1 & MEM_Dyn) );
   pIn1->flags = flags1;
+  if( encoding>SQLITE_UTF8 ) nByte &= ~1;
   pOut->z[nByte]=0;
   pOut->z[nByte+1] = 0;
-  pOut->z[nByte+2] = 0;
   pOut->flags |= MEM_Term;
   pOut->n = (int)nByte;
   pOut->enc = encoding;
@@ -2631,11 +2639,14 @@ case OP_NotNull: {            /* same as TK_NOTNULL, jump, in1 */
 ** If it is, then set register P3 to NULL and jump immediately to P2.
 ** If P1 is not on a NULL row, then fall through without making any
 ** changes.
+**
+** If P1 is not an open cursor, then this opcode is a no-op.
 */
 case OP_IfNullRow: {         /* jump */
+  VdbeCursor *pC;
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
-  assert( p->apCsr[pOp->p1]!=0 );
-  if( p->apCsr[pOp->p1]->nullRow ){
+  pC = p->apCsr[pOp->p1];
+  if( ALWAYS(pC) && pC->nullRow ){
     sqlite3VdbeMemSetNull(aMem + pOp->p3);
     goto jump_to_p2;
   }
@@ -3900,6 +3911,11 @@ case OP_Transaction: {
     }
     p->expired = 1;
     rc = SQLITE_SCHEMA;
+
+    /* Set changeCntOn to 0 to prevent the value returned by sqlite3_changes()
+    ** from being modified in sqlite3VdbeHalt(). If this statement is
+    ** reprepared, changeCntOn will be set again. */
+    p->changeCntOn = 0;
   }
   if( rc ) goto abort_due_to_error;
   break;
@@ -3977,7 +3993,7 @@ case OP_SetCookie: {
   rc = sqlite3BtreeUpdateMeta(pDb->pBt, pOp->p2, pOp->p3);
   if( pOp->p2==BTREE_SCHEMA_VERSION ){
     /* When the schema cookie changes, record the new cookie internally */
-    pDb->pSchema->schema_cookie = pOp->p3 - pOp->p5;
+    *(u32*)&pDb->pSchema->schema_cookie = *(u32*)&pOp->p3 - pOp->p5;
     db->mDbFlags |= DBFLAG_SchemaChange;
     sqlite3FkClearTriggerCache(db, pOp->p1);
   }else if( pOp->p2==BTREE_FILE_FORMAT ){
@@ -4215,8 +4231,8 @@ case OP_OpenDup: {
   pCx->pgnoRoot = pOrig->pgnoRoot;
   pCx->isOrdered = pOrig->isOrdered;
   pCx->ub.pBtx = pOrig->ub.pBtx;
-  pCx->hasBeenDuped = 1;
-  pOrig->hasBeenDuped = 1;
+  pCx->noReuse = 1;
+  pOrig->noReuse = 1;
   rc = sqlite3BtreeCursor(pCx->ub.pBtx, pCx->pgnoRoot, BTREE_WRCSR, 
                           pCx->pKeyInfo, pCx->uc.pCursor);
   /* The sqlite3BtreeCursor() routine can only fail for the first cursor
@@ -4283,7 +4299,7 @@ case OP_OpenEphemeral: {
     aMem[pOp->p3].z = "";
   }
   pCx = p->apCsr[pOp->p1];
-  if( pCx && !pCx->hasBeenDuped &&  ALWAYS(pOp->p2<=pCx->nField) ){
+  if( pCx && !pCx->noReuse &&  ALWAYS(pOp->p2<=pCx->nField) ){
     /* If the ephermeral table is already open and has no duplicates from
     ** OP_OpenDup, then erase all existing content so that the table is
     ** empty again, rather than creating a new table. */
@@ -5870,6 +5886,7 @@ case OP_NullRow: {
     if( pC==0 ) goto no_mem;
     pC->seekResult = 0;
     pC->isTable = 1;
+    pC->noReuse = 1;
     pC->uc.pCursor = sqlite3BtreeFakeValidCursor();
   }
   pC->nullRow = 1;
@@ -8019,7 +8036,6 @@ case OP_VColumn: {
 
   VdbeCursor *pCur = p->apCsr[pOp->p1];
   assert( pCur!=0 );
-  assert( pCur->eCurType==CURTYPE_VTAB );
   assert( pOp->p3>0 && pOp->p3<=(p->nMem+1 - p->nCursor) );
   pDest = &aMem[pOp->p3];
   memAboutToChange(p, pDest);
@@ -8027,6 +8043,7 @@ case OP_VColumn: {
     sqlite3VdbeMemSetNull(pDest);
     break;
   }
+  assert( pCur->eCurType==CURTYPE_VTAB );
   pVtab = pCur->uc.pVCur->pVtab;
   pModule = pVtab->pModule;
   assert( pModule->xColumn );
@@ -8351,6 +8368,17 @@ case OP_Function: {            /* group */
 
   REGISTER_TRACE(pOp->p3, pOut);
   UPDATE_MAX_BLOBSIZE(pOut);
+  break;
+}
+
+/* Opcode: ClrSubtype P1 * * * *
+** Synopsis:  r[P1].subtype = 0
+**
+** Clear the subtype from register P1.
+*/
+case OP_ClrSubtype: {   /* in1 */
+  pIn1 = &aMem[pOp->p1];
+  pIn1->flags &= ~MEM_Subtype;
   break;
 }
 

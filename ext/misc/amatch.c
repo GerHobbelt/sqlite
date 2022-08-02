@@ -76,7 +76,7 @@
 **    INSERT INTO f_data(iLang, cFrom, cTo, Cost) VALUES(0, '?', '?', 99);
 **
 ** The '?' to '' rule is the cost of having any single character in the input
-** that is not found in the vocabular.  The '' to '?' rule is the cost of
+** that is not found in the vocabulary.  The '' to '?' rule is the cost of
 ** having a character in the vocabulary table that is missing from input.
 ** And the '?' to '?' rule is the cost of doing an arbitrary character
 ** substitution.  These three generic rules apply across all languages.

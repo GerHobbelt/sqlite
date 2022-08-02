@@ -101,6 +101,11 @@ static void prepareAndRun(sqlite3 *db, const char *zSql){
   free(utf16);
 }
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_speedtest16_main(cnt, arr)
+#endif
+
 int main(int argc, const char** argv){
   void *utf16;
   sqlite3 *db;

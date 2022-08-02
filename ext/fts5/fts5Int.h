@@ -34,7 +34,9 @@ typedef sqlite3_uint64 u64;
 # define ArraySize(x) ((int)(sizeof(x) / sizeof(x[0])))
 #endif
 
+#ifndef testcase
 #define testcase(x)
+#endif
 
 #if defined(SQLITE_COVERAGE_TEST) || defined(SQLITE_MUTATION_TEST)
 # define SQLITE_OMIT_AUXILIARY_SAFETY_CHECKS 1
@@ -50,8 +52,12 @@ typedef sqlite3_uint64 u64;
 # define NEVER(X)       (X)
 #endif
 
+#ifndef MIN
 #define MIN(x,y) (((x) < (y)) ? (x) : (y))
+#endif
+#ifndef MAX
 #define MAX(x,y) (((x) > (y)) ? (x) : (y))
+#endif
 
 /*
 ** Constants for the largest and smallest possible 64-bit signed integers.
@@ -537,7 +543,12 @@ int sqlite3Fts5GetVarintLen(u32 iVal);
 u8 sqlite3Fts5GetVarint(const unsigned char*, u64*);
 int sqlite3Fts5PutVarint(unsigned char *p, u64 v);
 
-#define fts5GetVarint32(a,b) sqlite3Fts5GetVarint32(a,(u32*)&b)
+static inline int sqlite3Fts5GetVarint32I(const unsigned char *p, int *v) {
+  return sqlite3Fts5GetVarint32(p, (u32 *)v);
+}
+
+#define fts5GetVarint32(a,b) sqlite3Fts5GetVarint32I((a),&(b))
+#define fts5GetVarint32U(a,b) sqlite3Fts5GetVarint32((a),&(b))
 #define fts5GetVarint    sqlite3Fts5GetVarint
 
 #define fts5FastGetVarint32(a, iOff, nVal) {      \
@@ -545,6 +556,13 @@ int sqlite3Fts5PutVarint(unsigned char *p, u64 v);
   if( nVal & 0x80 ){                              \
     iOff--;                                       \
     iOff += fts5GetVarint32(&(a)[iOff], nVal);    \
+  }                                               \
+}
+#define fts5FastGetVarint32U(a, iOff, nVal) {     \
+  nVal = (a)[iOff++];                             \
+  if( nVal & 0x80 ){                              \
+    iOff--;                                       \
+    iOff += fts5GetVarint32U(&(a)[iOff], nVal);   \
   }                                               \
 }
 

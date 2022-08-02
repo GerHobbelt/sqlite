@@ -752,6 +752,11 @@ static char *nextToken(char *z){
 }
 
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_mksourceid_main(cnt, arr)
+#endif
+
 int main(int argc, const char **argv){
   const char *zManifest = 0;
   int i;

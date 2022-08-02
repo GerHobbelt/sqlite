@@ -1105,18 +1105,33 @@ static void exprAnalyze(
   if( prereqAll!=sqlite3WhereExprUsageNN(pMaskSet, pExpr) ){
     printf("\n*** Incorrect prereqAll computed for:\n");
     sqlite3TreeViewExpr(0,pExpr,0);
+    assert( 0 );
     abort();
   }
 #endif
 
-  if( ExprHasProperty(pExpr, EP_OuterON) ){
+  if( ExprHasProperty(pExpr, EP_OuterON|EP_InnerON) ){
     Bitmask x = sqlite3WhereGetMask(pMaskSet, pExpr->w.iJoin);
-    prereqAll |= x;
-    extraRight = x-1;  /* ON clause terms may not be used with an index
-                       ** on left table of a LEFT JOIN.  Ticket #3015 */
-    if( (prereqAll>>1)>=x ){
-      sqlite3ErrorMsg(pParse, "ON clause references tables to its right");
-      return;
+    if( ExprHasProperty(pExpr, EP_OuterON) ){
+      prereqAll |= x;
+      extraRight = x-1;  /* ON clause terms may not be used with an index
+                         ** on left table of a LEFT JOIN.  Ticket #3015 */
+      if( (prereqAll>>1)>=x ){
+        sqlite3ErrorMsg(pParse, "ON clause references tables to its right");
+        return;
+      }
+    }else if( (prereqAll>>1)>=x ){
+      /* The ON clause of an INNER JOIN references a table to its right.
+      ** Most other SQL database engines raise an error.  But SQLite versions
+      ** 3.0 through 3.38 just put the ON clause constraint into the WHERE
+      ** clause and carried on.   Beginning with 3.39, raise an error only
+      ** if there is a RIGHT or FULL JOIN in the query.  This makes SQLite
+      ** more like other systems, and also preserves legacy. */
+      if( ALWAYS(pSrc->nSrc>0) && (pSrc->a[0].fg.jointype & JT_LTORJ)!=0 ){
+        sqlite3ErrorMsg(pParse, "ON clause references tables to its right");
+        return;
+      }
+      ExprClearProperty(pExpr, EP_InnerON);
     }
   }
   pTerm->prereqAll = prereqAll;
@@ -1403,7 +1418,7 @@ static void exprAnalyze(
     }
     pTerm = &pWC->a[idxTerm];
     pTerm->wtFlags |= TERM_CODED|TERM_VIRTUAL;  /* Disable the original */
-    pTerm->eOperator = 0;
+    pTerm->eOperator = WO_ROWVAL;
   }
 
   /* If there is a vector IN term - e.g. "(a, b) IN (SELECT ...)" - create
@@ -1604,7 +1619,7 @@ void sqlite3WhereAddLimit(WhereClause *pWC, Select *p){
         /* This term is a vector operation that has been decomposed into
         ** other, subsequent terms.  It can be ignored. See tag-20220128a */
         assert( pWC->a[ii].wtFlags & TERM_VIRTUAL );
-        assert( pWC->a[ii].eOperator==0 );
+        assert( pWC->a[ii].eOperator==WO_ROWVAL );
         continue;
       }
       if( pWC->a[ii].leftCursor!=iCsr ) return;
