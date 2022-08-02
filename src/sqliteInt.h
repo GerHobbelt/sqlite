@@ -2907,7 +2907,7 @@ struct Expr {
 #define EP_Reduced    0x004000 /* Expr struct EXPR_REDUCEDSIZE bytes only */
 #define EP_Win        0x008000 /* Contains window functions */
 #define EP_TokenOnly  0x010000 /* Expr struct EXPR_TOKENONLYSIZE bytes only */
-#define EP_MemToken   0x020000 /* Need to sqlite3DbFree() Expr.zToken */
+                   /* 0x020000 // Available for reuse */
 #define EP_IfNullRow  0x040000 /* The TK_IF_NULL_ROW opcode */
 #define EP_Unlikely   0x080000 /* unlikely() or likelihood() function */
 #define EP_ConstFunc  0x100000 /* A SQLITE_FUNC_CONSTANT or _SLOCHNG function */
@@ -4495,6 +4495,7 @@ char *sqlite3VMPrintf(sqlite3*,const char*, va_list);
   void sqlite3TreeViewSelect(TreeView*, const Select*, u8);
   void sqlite3TreeViewWith(TreeView*, const With*, u8);
   void sqlite3TreeViewUpsert(TreeView*, const Upsert*, u8);
+#if TREETRACE_ENABLED
   void sqlite3TreeViewDelete(const With*, const SrcList*, const Expr*,
                              const ExprList*,const Expr*, const Trigger*);
   void sqlite3TreeViewInsert(const With*, const SrcList*,
@@ -4503,6 +4504,7 @@ char *sqlite3VMPrintf(sqlite3*,const char*, va_list);
   void sqlite3TreeViewUpdate(const With*, const SrcList*, const ExprList*,
                              const Expr*, int, const ExprList*, const Expr*,
                              const Upsert*, const Trigger*);
+#endif
 #ifndef SQLITE_OMIT_TRIGGER
   void sqlite3TreeViewTriggerStep(TreeView*, const TriggerStep*, u8, u8);
   void sqlite3TreeViewTrigger(TreeView*, const Trigger*, u8, u8);

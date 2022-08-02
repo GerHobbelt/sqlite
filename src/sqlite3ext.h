@@ -98,7 +98,7 @@ struct sqlite3_api_routines {
   int  (*exec)(sqlite3*,const char*,sqlite3_callback,void*,char**);
   int  (*expired)(sqlite3_stmt*);
   int  (*finalize)(sqlite3_stmt*pStmt);
-  void  (*free)(void*);
+  void  (*_free)(void*);
   void  (*free_table)(char**result);
   int  (*get_autocommit)(sqlite3*);
   void * (*get_auxdata)(sqlite3_context*,int);
@@ -108,7 +108,7 @@ struct sqlite3_api_routines {
   sqlite_int64  (*last_insert_rowid)(sqlite3*);
   const char * (*libversion)(void);
   int  (*libversion_number)(void);
-  void *(*malloc)(int);
+  void *(*_malloc)(int);
   char * (*mprintf)(const char*,...);
   int  (*open)(const char*,sqlite3**);
   int  (*open16)(const void*,sqlite3**);
@@ -116,7 +116,7 @@ struct sqlite3_api_routines {
   int  (*prepare16)(sqlite3*,const void*,int,sqlite3_stmt**,const void**);
   void * (*profile)(sqlite3*,void(*)(void*,const char*,sqlite_uint64),void*);
   void  (*progress_handler)(sqlite3*,int,int(*)(void*),void*);
-  void *(*realloc)(void*,int);
+  void *(*_realloc)(void*,int);
   int  (*reset)(sqlite3_stmt*pStmt);
   void  (*result_blob)(sqlite3_context*,const void*,int,void(*)(void*));
   void  (*result_double)(sqlite3_context*,double);
@@ -444,7 +444,7 @@ typedef int (*sqlite3_loadext_entry)(
 #define sqlite3_expired                sqlite3_api->expired
 #endif
 #define sqlite3_finalize               sqlite3_api->finalize
-#define sqlite3_free                   sqlite3_api->free
+#define sqlite3_free                   sqlite3_api->_free
 #define sqlite3_free_table             sqlite3_api->free_table
 #define sqlite3_get_autocommit         sqlite3_api->get_autocommit
 #define sqlite3_get_auxdata            sqlite3_api->get_auxdata
@@ -456,7 +456,7 @@ typedef int (*sqlite3_loadext_entry)(
 #define sqlite3_last_insert_rowid      sqlite3_api->last_insert_rowid
 #define sqlite3_libversion             sqlite3_api->libversion
 #define sqlite3_libversion_number      sqlite3_api->libversion_number
-#define sqlite3_malloc                 sqlite3_api->malloc
+#define sqlite3_malloc                 sqlite3_api->_malloc
 #define sqlite3_mprintf                sqlite3_api->mprintf
 #define sqlite3_open                   sqlite3_api->open
 #define sqlite3_open16                 sqlite3_api->open16
@@ -466,7 +466,7 @@ typedef int (*sqlite3_loadext_entry)(
 #define sqlite3_prepare16_v2           sqlite3_api->prepare16_v2
 #define sqlite3_profile                sqlite3_api->profile
 #define sqlite3_progress_handler       sqlite3_api->progress_handler
-#define sqlite3_realloc                sqlite3_api->realloc
+#define sqlite3_realloc                sqlite3_api->_realloc
 #define sqlite3_reset                  sqlite3_api->reset
 #define sqlite3_result_blob            sqlite3_api->result_blob
 #define sqlite3_result_double          sqlite3_api->result_double
