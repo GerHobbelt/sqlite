@@ -324,7 +324,7 @@ int sqlite3ColumnIndex(Table *pTab, const char *zCol){
 */
 void sqlite3SrcItemColumnUsed(SrcItem *pItem, int iCol){
   assert( pItem!=0 );
-  assert( pItem->fg.isNestedFrom == IsNestedFrom(pItem->pSelect) );
+  assert( (int)pItem->fg.isNestedFrom == IsNestedFrom(pItem->pSelect) );
   if( pItem->fg.isNestedFrom ){
     ExprList *pResults;
     assert( pItem->pSelect!=0 );
@@ -424,20 +424,27 @@ void sqlite3SetJoinExpr(Expr *p, int iTable, u32 joinFlag){
   } 
 }
 
-/* Undo the work of sqlite3SetJoinExpr(). In the expression p, convert every
-** term that is marked with EP_OuterON and w.iJoin==iTable into
-** an ordinary term that omits the EP_OuterON mark.
+/* Undo the work of sqlite3SetJoinExpr().  This is used when a LEFT JOIN
+** is simplified into an ordinary JOIN, and when an ON expression is
+** "pushed down" into the WHERE clause of a subquery.
 **
-** This happens when a LEFT JOIN is simplified into an ordinary JOIN.
+** Convert every term that is marked with EP_OuterON and w.iJoin==iTable into
+** an ordinary term that omits the EP_OuterON mark.  Or if iTable<0, then
+** just clear every EP_OuterON and EP_InnerON mark from the expression tree.
+**
+** If nullable is true, that means that Expr p might evaluate to NULL even
+** if it is a reference to a NOT NULL column.  This can happen, for example,
+** if the table that p references is on the left side of a RIGHT JOIN.
+** If nullable is true, then take care to not remove the EP_CanBeNull bit.
+** See forum thread https://sqlite.org/forum/forumpost/b40696f50145d21c
 */
-static void unsetJoinExpr(Expr *p, int iTable){
+static void unsetJoinExpr(Expr *p, int iTable, int nullable){
   while( p ){
-    if( ExprHasProperty(p, EP_OuterON)
-     && (iTable<0 || p->w.iJoin==iTable) ){
-      ExprClearProperty(p, EP_OuterON);
-      ExprSetProperty(p, EP_InnerON);
+    if( iTable<0 || (ExprHasProperty(p, EP_OuterON) && p->w.iJoin==iTable) ){
+      ExprClearProperty(p, EP_OuterON|EP_InnerON);
+      if( iTable>=0 ) ExprSetProperty(p, EP_InnerON);
     }
-    if( p->op==TK_COLUMN && p->iTable==iTable ){
+    if( p->op==TK_COLUMN && p->iTable==iTable && !nullable ){
       ExprClearProperty(p, EP_CanBeNull);
     }
     if( p->op==TK_FUNCTION ){
@@ -445,11 +452,11 @@ static void unsetJoinExpr(Expr *p, int iTable){
       if( p->x.pList ){
         int i;
         for(i=0; i<p->x.pList->nExpr; i++){
-          unsetJoinExpr(p->x.pList->a[i].pExpr, iTable);
+          unsetJoinExpr(p->x.pList->a[i].pExpr, iTable, nullable);
         }
       }
     }
-    unsetJoinExpr(p->pLeft, iTable);
+    unsetJoinExpr(p->pLeft, iTable, nullable);
     p = p->pRight;
   } 
 }
@@ -610,6 +617,7 @@ static int sqlite3ProcessJoin(Parse *pParse, Select *p){
       sqlite3SetJoinExpr(pRight->u3.pOn, pRight->iCursor, joinType);
       p->pWhere = sqlite3ExprAnd(pParse, p->pWhere, pRight->u3.pOn);
       pRight->u3.pOn = 0;
+      pRight->fg.isOn = 1;
     }
   }
   return 0;
@@ -1812,9 +1820,6 @@ static void generateSortTail(
 ** Return a pointer to a string containing the 'declaration type' of the
 ** expression pExpr. The string may be treated as static by the caller.
 **
-** Also try to estimate the size of the returned value and return that
-** result in *pEstWidth.
-**
 ** The declaration type is the exact datatype definition extracted from the
 ** original CREATE TABLE statement if the expression is a column. The
 ** declaration type for a ROWID field is INTEGER. Exactly when an expression
@@ -2193,10 +2198,11 @@ int sqlite3ColumnsFromExprList(
       }
       if( pColExpr->op==TK_COLUMN
        && ALWAYS( ExprUseYTab(pColExpr) )
-       && (pTab = pColExpr->y.pTab)!=0
+       && ALWAYS( pColExpr->y.pTab!=0 )
       ){
         /* For columns use the column name name */
         int iCol = pColExpr->iColumn;
+        pTab = pColExpr->y.pTab;
         if( iCol<0 ) iCol = pTab->iPKey;
         zName = iCol>=0 ? pTab->aCol[iCol].zCnName : "rowid";
       }else if( pColExpr->op==TK_ID ){
@@ -3764,9 +3770,10 @@ static Expr *substExpr(
   Expr *pExpr            /* Expr in which substitution occurs */
 ){
   if( pExpr==0 ) return 0;
-  if( ExprHasProperty(pExpr, EP_OuterON)
+  if( ExprHasProperty(pExpr, EP_OuterON|EP_InnerON)
    && pExpr->w.iJoin==pSubst->iTable
   ){
+    testcase( ExprHasProperty(pExpr, EP_InnerON) );
     pExpr->w.iJoin = pSubst->iNewTable;
   }
   if( pExpr->op==TK_COLUMN
@@ -3793,6 +3800,7 @@ static Expr *substExpr(
           ifNullRow.op = TK_IF_NULL_ROW;
           ifNullRow.pLeft = pCopy;
           ifNullRow.iTable = pSubst->iNewTable;
+          ifNullRow.iColumn = -99;
           ifNullRow.flags = EP_IfNullRow;
           pCopy = &ifNullRow;
         }
@@ -3811,6 +3819,11 @@ static Expr *substExpr(
         }
         sqlite3ExprDelete(db, pExpr);
         pExpr = pNew;
+        if( pExpr->op==TK_TRUEFALSE ){
+          pExpr->u.iValue = sqlite3ExprTruthValue(pExpr);
+          pExpr->op = TK_INTEGER;
+          ExprSetProperty(pExpr, EP_IntValue);
+        }
 
         /* Ensure that the expression now has an implicit collation sequence,
         ** just as it did when it was a column of a view or sub-query. */
@@ -4055,7 +4068,8 @@ static void renumberCursors(
 **        (3a) the subquery may not be a join and
 **        (3b) the FROM clause of the subquery may not contain a virtual
 **             table and
-**        (3c) the outer query may not be an aggregate.
+**        (**) Was: "The outer query may not have a GROUP BY." This case
+**             is now managed correctly
 **        (3d) the outer query may not be DISTINCT.
 **        See also (26) for restrictions on RIGHT JOIN.
 **
@@ -4109,6 +4123,9 @@ static void renumberCursors(
 **              (17d2) DISTINCT
 **        (17e) the subquery may not contain window functions, and
 **        (17f) the subquery must not be the RHS of a LEFT JOIN.
+**        (17g) either the subquery is the first element of the outer
+**              query or there are no RIGHT or FULL JOINs in any arm
+**              of the subquery.  (This is a duplicate of condition (27b).)
 **
 **        The parent and sub-query may contain WHERE clauses. Subject to
 **        rules (11), (13) and (14), they may also contain ORDER BY,
@@ -4160,9 +4177,18 @@ static void renumberCursors(
 **        See also (3) for restrictions on LEFT JOIN.
 **
 **  (27)  The subquery may not contain a FULL or RIGHT JOIN unless it
-**        is the first element of the parent query.
+**        is the first element of the parent query.  This must be the
+**        the case if:
+**        (27a) the subquery is not compound query, and
+**        (27b) the subquery is a compound query and the RIGHT JOIN occurs
+**              in any arm of the compound query.  (See also (17g).)
 **
 **  (28)  The subquery is not a MATERIALIZED CTE.
+**
+**  (29)  Either the subquery is not the right-hand operand of a join with an
+**        ON or USING clause nor the right-hand operand of a NATURAL JOIN, or
+**        the right-most table within the FROM clause of the subquery
+**        is not part of an outer join.
 **
 **
 ** In this routine, the "p" parameter is a pointer to the outer query.
@@ -4255,17 +4281,11 @@ static int flattenSubquery(
   **
   ** which is not at all the same thing.
   **
-  ** If the subquery is the right operand of a LEFT JOIN, then the outer
-  ** query cannot be an aggregate. (3c)  This is an artifact of the way
-  ** aggregates are processed - there is no mechanism to determine if
-  ** the LEFT JOIN table should be all-NULL.
-  **
   ** See also tickets #306, #350, and #3300.
   */
   if( (pSubitem->fg.jointype & (JT_OUTER|JT_LTORJ))!=0 ){
     if( pSubSrc->nSrc>1                        /* (3a) */
-     || isAgg                                  /* (3b) */
-     || IsVirtual(pSubSrc->a[0].pTab)          /* (3c) */
+     || IsVirtual(pSubSrc->a[0].pTab)          /* (3b) */
      || (p->selFlags & SF_Distinct)!=0         /* (3d) */
      || (pSubitem->fg.jointype & JT_RIGHT)!=0  /* (26) */
     ){
@@ -4285,10 +4305,39 @@ static int flattenSubquery(
 
   assert( pSubSrc->nSrc>0 );  /* True by restriction (7) */
   if( iFrom>0 && (pSubSrc->a[0].fg.jointype & JT_LTORJ)!=0 ){
-    return 0;   /* Restriction (27) */
+    return 0;   /* Restriction (27a) */
   }
   if( pSubitem->fg.isCte && pSubitem->u2.pCteUse->eM10d==M10d_Yes ){
     return 0;       /* (28) */
+  }
+
+  /* Restriction (29): 
+  **
+  ** We do not want two constraints on the same term of the flattened
+  ** query where one constraint has EP_InnerON and the other is EP_OuterON.
+  ** To prevent this, one or the other of the following conditions must be
+  ** false:
+  **
+  **   (29a)  The right-most entry in the FROM clause of the subquery
+  **          must not be part of an outer join.
+  **
+  **   (29b)  The subquery itself must not be the right operand of a 
+  **          NATURAL join or a join that as an ON or USING clause.
+  **
+  ** These conditions are sufficient to keep an EP_OuterON from being
+  ** flattened into an EP_InnerON.  Restrictions (3a) and (27a) prevent
+  ** an EP_InnerON from being flattened into an EP_OuterON.
+  */
+  if( pSubSrc->nSrc>=2
+   && (pSubSrc->a[pSubSrc->nSrc-1].fg.jointype & JT_OUTER)!=0
+  ){
+    if( (pSubitem->fg.jointype & JT_NATURAL)!=0
+     || pSubitem->fg.isUsing
+     || NEVER(pSubitem->u3.pOn!=0) /* ON clause already shifted into WHERE */
+     || pSubitem->fg.isOn
+    ){
+      return 0;
+    }
   }
 
   /* Restriction (17): If the sub-query is a compound SELECT, then it must
@@ -4317,6 +4366,12 @@ static int flattenSubquery(
 #endif
       ){
         return 0;
+      }
+      if( iFrom>0 && (pSub1->pSrc->a[0].fg.jointype & JT_LTORJ)!=0 ){
+        /* Without this restriction, the JT_LTORJ flag would end up being
+        ** omitted on left-hand tables of the right join that is being
+        ** flattened. */
+        return 0;   /* Restrictions (17g), (27b) */
       }
       testcase( pSub1->pSrc->nSrc>1 );
     }
@@ -4620,6 +4675,8 @@ struct WhereConst {
   int nConst;      /* Number for COLUMN=CONSTANT terms */
   int nChng;       /* Number of times a constant is propagated */
   int bHasAffBlob; /* At least one column in apExpr[] as affinity BLOB */
+  u32 mExcludeOn;  /* Which ON expressions to exclude from considertion.
+                   ** Either EP_OuterON or EP_InnerON|EP_OuterON */
   Expr **apExpr;   /* [i*2] is COLUMN and [i*2+1] is VALUE */
 };
 
@@ -4682,7 +4739,11 @@ static void constInsert(
 static void findConstInWhere(WhereConst *pConst, Expr *pExpr){
   Expr *pRight, *pLeft;
   if( NEVER(pExpr==0) ) return;
-  if( ExprHasProperty(pExpr, EP_OuterON) ) return;
+  if( ExprHasProperty(pExpr, pConst->mExcludeOn) ){
+    testcase( ExprHasProperty(pExpr, EP_OuterON) );
+    testcase( ExprHasProperty(pExpr, EP_InnerON) );
+    return;
+  }
   if( pExpr->op==TK_AND ){
     findConstInWhere(pConst, pExpr->pRight);
     findConstInWhere(pConst, pExpr->pLeft);
@@ -4718,9 +4779,10 @@ static int propagateConstantExprRewriteOne(
   int i;
   if( pConst->pOomFault[0] ) return WRC_Prune;
   if( pExpr->op!=TK_COLUMN ) return WRC_Continue;
-  if( ExprHasProperty(pExpr, EP_FixedCol|EP_OuterON) ){
+  if( ExprHasProperty(pExpr, EP_FixedCol|pConst->mExcludeOn) ){
     testcase( ExprHasProperty(pExpr, EP_FixedCol) );
     testcase( ExprHasProperty(pExpr, EP_OuterON) );
+    testcase( ExprHasProperty(pExpr, EP_InnerON) );
     return WRC_Continue;
   }
   for(i=0; i<pConst->nConst; i++){
@@ -4844,6 +4906,17 @@ static int propagateConstants(
     x.nChng = 0;
     x.apExpr = 0;
     x.bHasAffBlob = 0;
+    if( ALWAYS(p->pSrc!=0)
+     && p->pSrc->nSrc>0
+     && (p->pSrc->a[0].fg.jointype & JT_LTORJ)!=0
+    ){
+      /* Do not propagate constants on any ON clause if there is a
+      ** RIGHT JOIN anywhere in the query */
+      x.mExcludeOn = EP_InnerON | EP_OuterON;
+    }else{
+      /* Do not propagate constants through the ON clause of a LEFT JOIN */
+      x.mExcludeOn = EP_OuterON;
+    }
     findConstInWhere(&x, p->pWhere);
     if( x.nConst ){
       memset(&w, 0, sizeof(w));
@@ -5023,7 +5096,7 @@ static int pushDownWhereTerms(
     while( pSubq ){
       SubstContext x;
       pNew = sqlite3ExprDup(pParse->db, pWhere, 0);
-      unsetJoinExpr(pNew, -1);
+      unsetJoinExpr(pNew, -1, 1);
       x.pParse = pParse;
       x.iTable = pSrc->iCursor;
       x.iNewTable = pSrc->iCursor;
@@ -5132,6 +5205,7 @@ static Table *isSimpleCount(Select *p, AggInfo *pAggInfo){
    || p->pSrc->nSrc!=1
    || p->pSrc->a[0].pSelect
    || pAggInfo->nFunc!=1
+   || p->pHaving
   ){
     return 0;
   }
@@ -5833,7 +5907,7 @@ static int selectExpander(Walker *pWalker, Select *p){
             zTabName = pTab->zName;
           }
           if( db->mallocFailed ) break;
-          assert( pFrom->fg.isNestedFrom == IsNestedFrom(pFrom->pSelect) );
+          assert( (int)pFrom->fg.isNestedFrom == IsNestedFrom(pFrom->pSelect) );
           if( pFrom->fg.isNestedFrom ){
             assert( pFrom->pSelect!=0 );
             pNestedFrom = pFrom->pSelect->pEList;
@@ -6521,6 +6595,29 @@ static int countOfViewOptimization(Parse *pParse, Select *p){
 #endif /* SQLITE_COUNTOFVIEW_OPTIMIZATION */
 
 /*
+** If any term of pSrc, or any SF_NestedFrom sub-query, is not the same
+** as pSrcItem but has the same alias as p0, then return true.
+** Otherwise return false.
+*/
+static int sameSrcAlias(SrcItem *p0, SrcList *pSrc){
+  int i;
+  for(i=0; i<pSrc->nSrc; i++){
+    SrcItem *p1 = &pSrc->a[i];
+    if( p1==p0 ) continue;
+    if( p0->pTab==p1->pTab && 0==sqlite3_stricmp(p0->zAlias, p1->zAlias) ){
+      return 1;
+    }
+    if( p1->pSelect
+     && (p1->pSelect->selFlags & SF_NestedFrom)!=0
+     && sameSrcAlias(p0, p1->pSelect->pSrc)
+    ){
+      return 1;
+    }
+  }
+  return 0;
+}
+
+/*
 ** Generate code for the SELECT statement given in the p argument.  
 **
 ** The results are returned according to the SelectDest structure.
@@ -6624,15 +6721,12 @@ int sqlite3Select(
   ** disallow it altogether.  */
   if( p->selFlags & SF_UFSrcCheck ){
     SrcItem *p0 = &p->pSrc->a[0];
-    for(i=1; i<p->pSrc->nSrc; i++){
-      SrcItem *p1 = &p->pSrc->a[i];
-      if( p0->pTab==p1->pTab && 0==sqlite3_stricmp(p0->zAlias, p1->zAlias) ){
-        sqlite3ErrorMsg(pParse, 
-            "target object/alias may not appear in FROM clause: %s", 
-            p0->zAlias ? p0->zAlias : p0->pTab->zName
-        );
-        goto select_end;
-      }
+    if( sameSrcAlias(p0, p->pSrc) ){
+      sqlite3ErrorMsg(pParse, 
+          "target object/alias may not appear in FROM clause: %s", 
+          p0->zAlias ? p0->zAlias : p0->pTab->zName
+      );
+      goto select_end;
     }
 
     /* Clear the SF_UFSrcCheck flag. The check has already been performed,
@@ -6687,7 +6781,9 @@ int sqlite3Select(
       SELECTTRACE(0x100,pParse,p,
                 ("LEFT-JOIN simplifies to JOIN on term %d\n",i));
       pItem->fg.jointype &= ~(JT_LEFT|JT_OUTER);
-      unsetJoinExpr(p->pWhere, pItem->iCursor);
+      assert( pItem->iCursor>=0 );
+      unsetJoinExpr(p->pWhere, pItem->iCursor,
+                    pTabList->a[0].fg.jointype & JT_LTORJ);
     }
 
     /* No futher action if this term of the FROM clause is no a subquery */
@@ -6740,7 +6836,9 @@ int sqlite3Select(
     ){
       SELECTTRACE(0x100,pParse,p,
                 ("omit superfluous ORDER BY on %r FROM-clause subquery\n",i+1));
-      sqlite3ExprListDelete(db, pSub->pOrderBy);
+      sqlite3ParserAddCleanup(pParse, 
+         (void(*)(sqlite3*,void*))sqlite3ExprListDelete,
+         pSub->pOrderBy);
       pSub->pOrderBy = 0;
     }
 
@@ -6907,7 +7005,7 @@ int sqlite3Select(
 
     /* Generate code to implement the subquery
     **
-    ** The subquery is implemented as a co-routine all of the following are
+    ** The subquery is implemented as a co-routine if all of the following are
     ** true:
     **
     **    (1)  the subquery is guaranteed to be the outer loop (so that
@@ -6965,11 +7063,11 @@ int sqlite3Select(
       ** the same view can reuse the materialization. */
       int topAddr;
       int onceAddr = 0;
-      int retAddr;
 
       pItem->regReturn = ++pParse->nMem;
-      topAddr = sqlite3VdbeAddOp2(v, OP_Integer, 0, pItem->regReturn);
+      topAddr = sqlite3VdbeAddOp0(v, OP_Goto);
       pItem->addrFillSub = topAddr+1;
+      pItem->fg.isMaterialized = 1;
       if( pItem->fg.isCorrelated==0 ){
         /* If the subquery is not correlated and if we are not inside of
         ** a trigger, then we only need to compute the value of the subquery
@@ -6984,9 +7082,9 @@ int sqlite3Select(
       sqlite3Select(pParse, pSub, &dest);
       pItem->pTab->nRowLogEst = pSub->nSelectRow;
       if( onceAddr ) sqlite3VdbeJumpHere(v, onceAddr);
-      retAddr = sqlite3VdbeAddOp1(v, OP_Return, pItem->regReturn);
+      sqlite3VdbeAddOp2(v, OP_Return, pItem->regReturn, topAddr+1);
       VdbeComment((v, "end %!S", pItem));
-      sqlite3VdbeChangeP1(v, topAddr, retAddr);
+      sqlite3VdbeJumpHere(v, topAddr);
       sqlite3ClearTempRegCache(pParse);
       if( pItem->fg.isCte && pItem->fg.isCorrelated==0 ){
         CteUse *pCteUse = pItem->u2.pCteUse;
@@ -7101,7 +7199,7 @@ int sqlite3Select(
   if( (p->selFlags & SF_FixedLimit)==0 ){
     p->nSelectRow = 320;  /* 4 billion rows */
   }
-  computeLimitRegisters(pParse, p, iEnd);
+  if( p->pLimit ) computeLimitRegisters(pParse, p, iEnd);
   if( p->iLimit==0 && sSort.addrSortIndex>=0 ){
     sqlite3VdbeChangeOpcode(v, sSort.addrSortIndex, OP_SorterOpen);
     sSort.sortFlags |= SORTFLAG_UseSorter;
@@ -7323,8 +7421,13 @@ int sqlite3Select(
         sqlite3TreeViewExprList(0, pMinMaxOrderBy, 0, "ORDERBY");
       }
       for(ii=0; ii<pAggInfo->nColumn; ii++){
-        sqlite3DebugPrintf("agg-column[%d] iMem=%d\n",
-            ii, pAggInfo->aCol[ii].iMem);
+        struct AggInfo_col *pCol = &pAggInfo->aCol[ii];
+        sqlite3DebugPrintf(
+           "agg-column[%d] pTab=%s iTable=%d iColumn=%d iMem=%d"
+           " iSorterColumn=%d\n",
+           ii, pCol->pTab ? pCol->pTab->zName : "NULL", 
+           pCol->iTable, pCol->iColumn, pCol->iMem,
+           pCol->iSorterColumn);
         sqlite3TreeViewExpr(0, pAggInfo->aCol[ii].pCExpr, 0);
       }
       for(ii=0; ii<pAggInfo->nFunc; ii++){
@@ -7445,15 +7548,15 @@ int sqlite3Select(
         regBase = sqlite3GetTempRange(pParse, nCol);
         sqlite3ExprCodeExprList(pParse, pGroupBy, regBase, 0, 0);
         j = nGroupBy;
+        pAggInfo->directMode = 1;
         for(i=0; i<pAggInfo->nColumn; i++){
           struct AggInfo_col *pCol = &pAggInfo->aCol[i];
           if( pCol->iSorterColumn>=j ){
-            int r1 = j + regBase;
-            sqlite3ExprCodeGetColumnOfTable(v,
-                               pCol->pTab, pCol->iTable, pCol->iColumn, r1);
+            sqlite3ExprCode(pParse, pCol->pCExpr, j + regBase);
             j++;
           }
         }
+        pAggInfo->directMode = 0;
         regRecord = sqlite3GetTempReg(pParse);
         sqlite3VdbeAddOp3(v, OP_MakeRecord, regBase, nCol, regRecord);
         sqlite3VdbeAddOp2(v, OP_SorterInsert, pAggInfo->sortingIdx, regRecord);

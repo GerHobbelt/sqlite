@@ -2633,7 +2633,7 @@ static void parseonetoken(struct pstate *psp)
       if( x[0]=='{' || x[0]=='\"' || ISALNUM(x[0]) ){
         const char *zOld, *zNew;
         char *zBuf;
-	const char *z;
+        const char *z;
         int nOld, n, nLine = 0, nNew, nBack;
         int addLineMacro;
         char zLine[50];

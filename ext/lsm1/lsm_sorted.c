@@ -3957,7 +3957,7 @@ static int mergeWorkerWrite(
   Merge *pMerge;                  /* Persistent part of level merge state */
   int nHdr;                       /* Space required for this record header */
   Page *pPg;                      /* Page to write to */
-  u8 *aData;                      /* Data buffer for page pWriter->pPage */
+  u8 *aData = NULL;               /* Data buffer for page pWriter->pPage */
   int nData = 0;                  /* Size of buffer aData[] in bytes */
   int nRec = 0;                   /* Number of records on page pPg */
   int iFPtr = 0;                  /* Value of pointer in footer of pPg */
@@ -3975,8 +3975,10 @@ static int mergeWorkerWrite(
     bFirst = 1;
   }
   pPg = pMW->pPage;
+  assert(rc == LSM_OK ? !!pPg : 1);
   if( pPg ){
     aData = fsPageData(pPg, &nData);
+	assert(aData);
     nRec = pageGetNRec(aData, nData);
     iFPtr = (int)pageGetPtr(aData, nData);
     iRPtr = iPtr - iFPtr;

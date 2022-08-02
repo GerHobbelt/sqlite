@@ -68,7 +68,7 @@
 
 /* Character classes for tokenizing
 **
-** In the sqlite3GetToken() function, a switch() on aiClass[c] is implemented
+** In the sqlite3GetToken4Normalize() function, a switch() on aiClass[c] is implemented
 ** using a lookup table, whereas a switch() directly on c uses a binary search.
 ** The lookup table is much faster.  To maximize speed, and to ensure that
 ** a lookup table is used, all of the classes need to be small integers and
@@ -130,7 +130,7 @@ static const unsigned char aiClass[] = {
 ** handle case conversions for the UTF character set since the tables
 ** involved are nearly as big or bigger than SQLite itself.
 */
-static const unsigned char sqlite3UpperToLower[] = {
+const unsigned char sqlite3UpperToLower[] = {
       0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
      18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
      36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
@@ -176,7 +176,7 @@ static const unsigned char sqlite3UpperToLower[] = {
 ** non-ASCII UTF character. Hence the test for whether or not a character is
 ** part of an identifier is 0x46.
 */
-static const unsigned char sqlite3CtypeMap[256] = {
+const unsigned char sqlite3CtypeMap[256] = {
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  /* 00..07    ........ */
   0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00,  /* 08..0f    ........ */
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  /* 10..17    ........ */
@@ -244,7 +244,9 @@ static const unsigned char sqlite3CtypeMap[256] = {
 /*
 ** Ignore testcase() macros
 */
+#ifndef testcase
 #define testcase(X)
+#endif
 
 /*
 ** Token values
@@ -297,7 +299,7 @@ static const unsigned char sqlite3CtypeMap[256] = {
 ** Return the length (in bytes) of the token that begins at z[0]. 
 ** Store the token type in *tokenType before returning.
 */
-static int sqlite3GetToken(const unsigned char *z, int *tokenType){
+static int sqlite3GetToken4Normalize(const unsigned char *z, int *tokenType){
   int i, c;
   switch( aiClass[*z] ){  /* Switch on the character-class of the first byte
                           ** of the token. See the comment on the CC_ defines
@@ -567,7 +569,7 @@ char *sqlite3_normalize(const char *zSql){
   z = sqlite3_malloc64( nZ+2 );
   if( z==0 ) return 0;
   for(i=j=0; zSql[i]; i += n){
-    n = sqlite3GetToken((unsigned char*)zSql+i, &tokenType);
+    n = sqlite3GetToken4Normalize((unsigned char*)zSql+i, &tokenType);
     switch( tokenType ){
       case TKN_SPACE: {
         break;
@@ -644,7 +646,8 @@ char *sqlite3_normalize(const char *zSql){
 ** run sqlite3_normalize() over the text of all files named on the command-
 ** line and show the result on standard output.
 */
-#ifdef SQLITE_NORMALIZE_CLI
+#if defined( SQLITE_NORMALIZE_CLI ) || defined( BUILD_MONOLITHIC )
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -681,7 +684,12 @@ static void normalizeFile(char *zIn){
 ** The main routine for "sql_normalize".  Read files named on the
 ** command-line and run the text of each through sqlite3_normalize().
 */
-int main(int argc, char **argv){
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_normalize_main(cnt, arr)
+#endif
+
+int main(int argc, const char **argv){
   int i;
   FILE *in;
   char *zBuf = 0;
@@ -699,7 +707,7 @@ int main(int argc, char **argv){
     zBuf = sqlite3_realloc64(zBuf, sz+1);
     if( zBuf==0 ){
       fprintf(stderr, "failed to malloc for %lld bytes\n", sz);
-      exit(1);
+	  return EXIT_FAILURE;
     }
     got = fread(zBuf, 1, sz, in);
     fclose(in);
@@ -712,5 +720,7 @@ int main(int argc, char **argv){
     }
   }
   sqlite3_free(zBuf);
+  return EXIT_SUCCESS;
 }
+
 #endif /* SQLITE_NORMALIZE_CLI */

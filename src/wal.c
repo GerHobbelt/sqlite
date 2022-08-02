@@ -1831,7 +1831,8 @@ static int walIndexRecover(Wal *pWal){
     if( isOpen(pWal->apWalFd[1]) ){
       /* The case where *-wal2 may follow *-wal */
       if( nCkpt2<=0x0F && nCkpt2==nCkpt1+1 ){
-        if( sqlite3Get4byte((u8*)(&pWal->hdr.aSalt[0]))==hdr.aFrameCksum[0]
+        if( pWal->hdr.mxFrame
+         && sqlite3Get4byte((u8*)(&pWal->hdr.aSalt[0]))==hdr.aFrameCksum[0]
          && sqlite3Get4byte((u8*)(&pWal->hdr.aSalt[1]))==hdr.aFrameCksum[1]
         ){
           walidxSetFile(&pWal->hdr, 1);
@@ -1844,7 +1845,8 @@ static int walIndexRecover(Wal *pWal){
 
       /* When *-wal may follow *-wal2 */
       if( (nCkpt2==0x0F && nCkpt1==0) || (nCkpt2<0x0F && nCkpt2==nCkpt1-1) ){
-        if( sqlite3Get4byte((u8*)(&hdr.aSalt[0]))==pWal->hdr.aFrameCksum[0]
+        if( hdr.mxFrame
+         && sqlite3Get4byte((u8*)(&hdr.aSalt[0]))==pWal->hdr.aFrameCksum[0]
          && sqlite3Get4byte((u8*)(&hdr.aSalt[1]))==pWal->hdr.aFrameCksum[1]
         ){
           SWAP(WalIndexHdr, pWal->hdr, hdr);
@@ -3899,6 +3901,7 @@ int sqlite3WalFindFrame(
   int iApp = walidxGetFile(&pWal->hdr);
   int rc = SQLITE_OK;
   u32 iRead = 0;                  /* If !=0, WAL frame to return data from */
+  u32 iLast = pWal->hdr.mxFrame;  /* Last page in WAL for this reader */
 
   /* This routine is only be called from within a read transaction. Or,
   ** sometimes, as part of a rollback that occurs after an error reaquiring
@@ -3923,8 +3926,14 @@ int sqlite3WalFindFrame(
   }
 #endif
 
-  /* Return early if read-lock 0 is held. */
-  if( (pWal->readLock==0 && pWal->bShmUnreliable==0) ){
+
+  /* If the "last page" field of the wal-index header snapshot is 0, then
+  ** no data will be read from the wal under any circumstances. Return early
+  ** in this case as an optimization.  Likewise, if pWal->readLock==0, 
+  ** then the WAL is ignored by the reader so return early, as if the 
+  ** WAL were empty.
+  */
+  if( iLast==0 || (pWal->readLock==0 && pWal->bShmUnreliable==0) ){
     assert( !bWal2 );
     *piRead = 0;
     return SQLITE_OK;

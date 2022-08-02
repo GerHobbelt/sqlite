@@ -18,6 +18,7 @@
 SQLITE_EXTENSION_INIT1
 
 #ifndef SQLITE_AMALGAMATION
+
 # if !defined(NDEBUG) && !defined(SQLITE_DEBUG)
 #  define NDEBUG 1
 # endif
@@ -28,10 +29,23 @@ SQLITE_EXTENSION_INIT1
 # include <stdio.h>
 # include <stdlib.h>
 # include <assert.h>
-# define ALWAYS(X)  1
-# define NEVER(X)   0
+
+#ifndef ALWAYS
+#if defined(SQLITE_OMIT_AUXILIARY_SAFETY_CHECKS)
+# define ALWAYS(X)      (1)
+# define NEVER(X)       (0)
+#elif !defined(NDEBUG)
+# define ALWAYS(X)      ((X)?1:(assert(0),0))
+# define NEVER(X)       ((X)?(assert(0),1):0)
+#else
+# define ALWAYS(X)      (X)
+# define NEVER(X)       (X)
+#endif
+#endif
+
   typedef unsigned char u8;
   typedef unsigned short u16;
+
 #endif
 #include <ctype.h>
 
@@ -336,7 +350,7 @@ static int substituteCost(char cPrev, char cFrom, char cTo){
     /* Convert from one consonant to another, but in a different class */
     return 75;
   }
-  /* Any other subsitution */
+  /* Any other substitution */
   return 100;
 }
 
