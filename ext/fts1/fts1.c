@@ -7,6 +7,7 @@
         && !defined(SQLITE_ENABLE_BROKEN_FTS1)
 #error fts1 has a design flaw and has been deprecated.
 #endif
+
 /* The flaw is that fts1 uses the content table's unaliased rowid as
 ** the unique docid.  fts1 embeds the rowid in the index it builds,
 ** and expects the rowid to not change.  The SQLite VACUUM operation
