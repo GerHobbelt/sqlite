@@ -718,7 +718,7 @@ static void btreePtrmapCheck(BtShared *pBt, Pgno nPage){
 # define btreePtrmapCheck(y,z) 
 #endif /* SQLITE_OMIT_CONCURRENT */
 
-static void releasePage(MemPage *pPage);  /* Forward reference */
+static void releasePage(MemPage *pPage);         /* Forward reference */
 static void releasePageOne(MemPage *pPage);      /* Forward reference */
 static void releasePageNotNull(MemPage *pPage);  /* Forward reference */
 
