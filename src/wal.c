@@ -3720,13 +3720,13 @@ int sqlite3WalBeginReadTransaction(Wal *pWal, int *pChanged){
   testcase( (rc&0xff)==SQLITE_IOERR );
   testcase( rc==SQLITE_PROTOCOL );
   testcase( rc==SQLITE_OK );
-
-  pWal->nPriorFrame = pWal->hdr.mxFrame;
   
   if( rc==SQLITE_OK && pWal->hdr.iVersion==WAL_VERSION2 ){
     rc = walOpenWal2(pWal);
   }
 
+  pWal->nPriorFrame = pWal->hdr.mxFrame;
+  
 #ifdef SQLITE_ENABLE_SNAPSHOT
   if( rc==SQLITE_OK ){
     if( pSnapshot && memcmp(pSnapshot, &pWal->hdr, sizeof(WalIndexHdr))!=0 ){

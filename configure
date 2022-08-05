@@ -2432,8 +2432,8 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 sqlite_version_sanity_check=`cat $srcdir/VERSION | tr -d '\n'`
 if test "$PACKAGE_VERSION" != "$sqlite_version_sanity_check" ; then
 as_fn_error $? "configure script is out of date:
- configure \$PACKAGE_VERSION = $PACKAGE_VERSION
- top level VERSION file     = $sqlite_version_sanity_check
+ configure \$PACKAGE_VERSION = ($PACKAGE_VERSION)
+ top level VERSION file      = ($sqlite_version_sanity_check)
 please regen with autoconf" "$LINENO" 5
 fi
 

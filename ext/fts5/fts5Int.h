@@ -53,10 +53,10 @@ typedef sqlite3_uint64 u64;
 #endif
 
 #ifndef MIN
-# define MIN(A,B) ((A)<(B)?(A):(B))
+#define MIN(x,y) (((x) < (y)) ? (x) : (y))
 #endif
 #ifndef MAX
-# define MAX(A,B) ((A)>(B)?(A):(B))
+#define MAX(x,y) (((x) > (y)) ? (x) : (y))
 #endif
 
 /*
