@@ -1447,6 +1447,7 @@ struct Lookaside {
 #endif /* SQLITE_OMIT_TWOSIZE_LOOKASIDE */
   void *pStart;           /* First byte of available memory space */
   void *pEnd;             /* First byte past end of available space */
+  void *pTrueEnd;         /* True value of pEnd, when db->pnBytesFreed!=0 */
 };
 struct LookasideSlot {
   LookasideSlot *pNext;    /* Next buffer in the list of free buffers */
@@ -4385,6 +4386,7 @@ void *sqlite3DbReallocOrFree(sqlite3 *, void *, u64);
 void *sqlite3DbRealloc(sqlite3 *, void *, u64);
 void sqlite3DbFree(sqlite3*, void*);
 void sqlite3DbFreeNN(sqlite3*, void*);
+void sqlite3DbNNFreeNN(sqlite3*, void*);
 int sqlite3MallocSize(const void*);
 int sqlite3DbMallocSize(sqlite3*, const void*);
 void *sqlite3PageMalloc(int);

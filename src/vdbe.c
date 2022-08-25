@@ -6129,7 +6129,9 @@ case OP_SorterNext: {  /* jump */
 
 case OP_Prev:          /* jump */
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
-  assert( pOp->p5<ArraySize(p->aCounter) );
+  assert( pOp->p5==0
+       || pOp->p5==SQLITE_STMTSTATUS_FULLSCAN_STEP
+       || pOp->p5==SQLITE_STMTSTATUS_AUTOINDEX);
   pC = p->apCsr[pOp->p1];
   assert( pC!=0 );
   assert( pC->deferredMoveto==0 );
@@ -6142,7 +6144,9 @@ case OP_Prev:          /* jump */
 
 case OP_Next:          /* jump */
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
-  assert( pOp->p5<ArraySize(p->aCounter) );
+  assert( pOp->p5==0
+       || pOp->p5==SQLITE_STMTSTATUS_FULLSCAN_STEP
+       || pOp->p5==SQLITE_STMTSTATUS_AUTOINDEX);
   pC = p->apCsr[pOp->p1];
   assert( pC!=0 );
   assert( pC->deferredMoveto==0 );
