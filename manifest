@@ -1,5 +1,5 @@
-C Add\sa\smutex\sto\sthe\ssqlite3_db_config()\sinterface\sso\sthat\sit\sis\sthreadsafe\nwhen\stwo\sor\smore\sthreads\scall\sit\son\sthe\ssame\sdatabase\sconnection\sat\sthe\ssame\ntime.
-D 2022-08-24T17:59:00.857
+C Ensure\sthat\ssqlite3_prepare()\sinputs\salways\shave\sa\ssemicolon\sterminator\sin\nspeedtest1.
+D 2022-08-25T19:29:35.476
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -660,7 +660,7 @@ F src/upsert.c 8789047a8f0a601ea42fa0256d1ba3190c13746b6ba940fe2d25643a7e991937
 F src/utf.c ee39565f0843775cc2c81135751ddd93eceb91a673ea2c57f61c76f288b041a0
 F src/util.c 602fe229f32a96ceccae4f40824129669582096f7c355f53dbac156c9fecef23
 F src/vacuum.c bb346170b0b54c6683bba4a5983aea40485597fdf605c87ec8bc2e199fe88cd8
-F src/vdbe.c 0150d16da21cb96b2b0f2880aad6acd80ddedf93a9f3eb2c5200aef864854fe6
+F src/vdbe.c d27ec9a57f752fc2acf6a64d43bbf6072d2415efc976184f6d8a146e65819d3b
 F src/vdbe.h 64619af62603dc3c4f5ff6ff6d2c8f389abd667a29ce6007ed44bd22b3211cd0
 F src/vdbeInt.h 17b7461ffcf9ee760d1341731715a419f6b8c763089a7ece25c2e8098d702b3f
 F src/vdbeapi.c fc3183daf72808b4311b228989120fdbc2dc44972fb0d77d5c453460cc0e5b2c
@@ -791,7 +791,7 @@ F test/boundary4.tcl 0bb4b1a94f4fc5ae59b79b9a2b7a140c405e2983
 F test/boundary4.test 89e02fa66397b8a325d5eb102b5806f961f8ec4b
 F test/btree01.test fef17d9e999ac4f04095948e3438fbe674f4e07bb2c63bb1cad41d87baee077f
 F test/btree02.test 7555a5440453d900410160a52554fe6478af4faf53098f7235f1f443d5a1d6cc
-F test/btreefault.test c2bcb542685eea44621275cfedbd8a13f65201e3
+F test/btreefault.test a82a23b0578bc587afbf9a622c8f54a54f63762f062ba8a35613cfee38ab42f9
 F test/busy.test 510dc6daaad18bcbbc085bcc6217d6dc418def5e73f72ce1475eea0cb7834727
 F test/busy2.test 20823a5d7c42fb257d9f108c66312d90b1bb4ec3d80ba6b4e371073727560f98
 F test/cache.test 13bc046b26210471ca6f2889aceb1ea52dc717de
@@ -1480,7 +1480,7 @@ F test/speed3.test 694affeb9100526007436334cf7d08f3d74b85ef
 F test/speed4.test abc0ad3399dcf9703abed2fff8705e4f8e416715
 F test/speed4p.explain 6b5f104ebeb34a038b2f714150f51d01143e59aa
 F test/speed4p.test 377a0c48e5a92e0b11c1c5ebb1bc9d83a7312c922bc0cb05970ef5d6a96d1f0c
-F test/speedtest1.c 61f8a72bbcc80edb0b95e957f108feb4013ff3d08721cc87ae1865fd4d20652d
+F test/speedtest1.c 8bf7ebac9ac316feed6656951249db531dc380c73fb3e3b22e224ffda96beff6
 F test/spellfix.test 951a6405d49d1a23d6b78027d3877b4a33eeb8221dcab5704b499755bb4f552e
 F test/spellfix2.test dfc8f519a3fc204cb2dfa8b4f29821ae90f6f8c3
 F test/spellfix3.test 0f9efaaa502a0e0a09848028518a6fb096c8ad33
@@ -1999,8 +1999,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P c055d05dbdfd4643d5052c6e6a736c78651fdfcd78f15f791af903df3814832d
-R ffd7ba0b6070375035a4339c90c0b447
+P 1c87d7c58d5aec83f9e2ae3771a81aa17cfae0cf06169025a5db085e2d5749f9
+R 03aae009b62262596bf019082ce9ceed
 U drh
-Z c6fbe2adc7008df263b408289cea2842
+Z 8bd158a0ccc4257762e239c65a25bd98
 # Remove this line to create a well-formed Fossil manifest.
