@@ -3726,6 +3726,7 @@ int sqlite3WalBeginReadTransaction(Wal *pWal, int *pChanged){
   }
 
   pWal->nPriorFrame = pWal->hdr.mxFrame;
+  
 #ifdef SQLITE_ENABLE_SNAPSHOT
   if( rc==SQLITE_OK ){
     if( pSnapshot && memcmp(pSnapshot, &pWal->hdr, sizeof(WalIndexHdr))!=0 ){
@@ -4407,6 +4408,8 @@ int sqlite3WalUndo(
       assert( bConcurrent && isWalMode2(pWal) );
       return SQLITE_OK;
     }
+#else
+    UNUSED_PARAMETER(bConcurrent);
 #endif
     assert( walidxGetFile(&pWal->hdr)==iWal );
 
