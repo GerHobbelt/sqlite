@@ -651,7 +651,7 @@ void sqlite3PcacheTruncate(PCache *pCache, Pgno pgno){
       pNext = p->pDirtyNext;
       /* This routine never gets call with a positive pgno except right
       ** after sqlite3PcacheCleanAll().  So if there are dirty pages,
-      ** it must be that pgno==0.
+      ** it must be that pgno>0.
       */
       assert( p->pgno>0 );
       if( p->pgno>pgno ){
