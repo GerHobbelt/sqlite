@@ -314,7 +314,8 @@ static VdbeCursor *allocateCursor(
 ** return false.
 */
 static int alsoAnInt(Mem *pRec, double rValue, i64 *piValue){
-  i64 iValue = (double)rValue;
+  i64 iValue;
+  iValue = sqlite3RealToI64(rValue);
   if( sqlite3RealSameAsInt(rValue,iValue) ){
     *piValue = iValue;
     return 1;
@@ -476,17 +477,18 @@ static u16 SQLITE_NOINLINE computeNumericType(Mem *pMem){
 ** But it does set pMem->u.r and pMem->u.i appropriately.
 */
 static u16 numericType(Mem *pMem){
-  if( pMem->flags & (MEM_Int|MEM_Real|MEM_IntReal) ){
+  assert( (pMem->flags & MEM_Null)==0
+       || pMem->db==0 || pMem->db->mallocFailed );
+  if( pMem->flags & (MEM_Int|MEM_Real|MEM_IntReal|MEM_Null) ){
     testcase( pMem->flags & MEM_Int );
     testcase( pMem->flags & MEM_Real );
     testcase( pMem->flags & MEM_IntReal );
-    return pMem->flags & (MEM_Int|MEM_Real|MEM_IntReal);
+    return pMem->flags & (MEM_Int|MEM_Real|MEM_IntReal|MEM_Null);
   }
-  if( pMem->flags & (MEM_Str|MEM_Blob) ){
-    testcase( pMem->flags & MEM_Str );
-    testcase( pMem->flags & MEM_Blob );
-    return computeNumericType(pMem);
-  }
+  assert( pMem->flags & (MEM_Str|MEM_Blob) );
+  testcase( pMem->flags & MEM_Str );
+  testcase( pMem->flags & MEM_Blob );
+  return computeNumericType(pMem);
   return 0;
 }
 
@@ -4802,7 +4804,7 @@ seek_not_found:
 **      sqlite3BtreeNext() calls, then jump to This.P2, which will land just
 **      past the OP_IdxGT or OP_IdxGE opcode that follows the OP_SeekGE.
 **
-** <li> If the cursor ends up past the target row (indicating the the target
+** <li> If the cursor ends up past the target row (indicating that the target
 **      row does not exist in the btree) then jump to SeekOP.P2. 
 ** </ol>
 */
@@ -6148,7 +6150,9 @@ case OP_SorterNext: {  /* jump */
 
 case OP_Prev:          /* jump */
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
-  assert( pOp->p5<ArraySize(p->aCounter) );
+  assert( pOp->p5==0
+       || pOp->p5==SQLITE_STMTSTATUS_FULLSCAN_STEP
+       || pOp->p5==SQLITE_STMTSTATUS_AUTOINDEX);
   pC = p->apCsr[pOp->p1];
   assert( pC!=0 );
   assert( pC->deferredMoveto==0 );
@@ -6161,7 +6165,9 @@ case OP_Prev:          /* jump */
 
 case OP_Next:          /* jump */
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
-  assert( pOp->p5<ArraySize(p->aCounter) );
+  assert( pOp->p5==0
+       || pOp->p5==SQLITE_STMTSTATUS_FULLSCAN_STEP
+       || pOp->p5==SQLITE_STMTSTATUS_AUTOINDEX);
   pC = p->apCsr[pOp->p1];
   assert( pC!=0 );
   assert( pC->deferredMoveto==0 );
@@ -6368,10 +6374,10 @@ case OP_IdxRowid: {           /* out2 */
   ** of sqlite3VdbeCursorRestore() and sqlite3VdbeIdxRowid(). */
   rc = sqlite3VdbeCursorRestore(pC);
 
-  /* sqlite3VbeCursorRestore() can only fail if the record has been deleted
-  ** out from under the cursor.  That will never happens for an IdxRowid
-  ** or Seek opcode */
-  if( NEVER(rc!=SQLITE_OK) ) goto abort_due_to_error;
+  /* sqlite3VdbeCursorRestore() may fail if the cursor has been disturbed
+  ** since it was last positioned and an error (e.g. OOM or an IO error)
+  ** occurs while trying to reposition it. */
+  if( rc!=SQLITE_OK ) goto abort_due_to_error;
 
   if( !pC->nullRow ){
     rowid = 0;  /* Not needed.  Only used to silence a warning. */
