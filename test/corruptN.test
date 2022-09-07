@@ -141,7 +141,6 @@ do_test 2.0 {
 | end c-b92b.txt.db
 }]} {}
 
-
 reset_db
 if {![info exists ::G(perm:presql)]} {
   do_execsql_test 3.0 {
