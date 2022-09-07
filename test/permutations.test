@@ -90,6 +90,7 @@ foreach f [glob -nocomplain            \
     $testdir/../ext/rtree/*.test       \
     $testdir/../ext/fts5/test/*.test   \
     $testdir/../ext/lsm1/test/*.test   \
+    $testdir/../ext/recover/*.test     \
 ] {
   lappend alltests $f 
 }
