@@ -966,6 +966,7 @@ void sqlite3Pragma(
   **
   */
   case PragTyp_TEMP_STORE_DIRECTORY: {
+    sqlite3_mutex_enter(sqlite3MutexAlloc(SQLITE_MUTEX_STATIC_TEMPDIR));
     if( !zRight ){
       returnSingleText(v, sqlite3_temp_directory);
     }else{
@@ -975,6 +976,7 @@ void sqlite3Pragma(
         rc = sqlite3OsAccess(db->pVfs, zRight, SQLITE_ACCESS_READWRITE, &res);
         if( rc!=SQLITE_OK || res==0 ){
           sqlite3ErrorMsg(pParse, "not a writable directory");
+          sqlite3_mutex_leave(sqlite3MutexAlloc(SQLITE_MUTEX_STATIC_TEMPDIR));
           goto pragma_out;
         }
       }
@@ -992,6 +994,7 @@ void sqlite3Pragma(
       }
 #endif /* SQLITE_OMIT_WSD */
     }
+    sqlite3_mutex_leave(sqlite3MutexAlloc(SQLITE_MUTEX_STATIC_TEMPDIR));
     break;
   }
 
@@ -1010,6 +1013,7 @@ void sqlite3Pragma(
   **
   */
   case PragTyp_DATA_STORE_DIRECTORY: {
+    sqlite3_mutex_enter(sqlite3MutexAlloc(SQLITE_MUTEX_STATIC_TEMPDIR));
     if( !zRight ){
       returnSingleText(v, sqlite3_data_directory);
     }else{
@@ -1019,6 +1023,7 @@ void sqlite3Pragma(
         rc = sqlite3OsAccess(db->pVfs, zRight, SQLITE_ACCESS_READWRITE, &res);
         if( rc!=SQLITE_OK || res==0 ){
           sqlite3ErrorMsg(pParse, "not a writable directory");
+          sqlite3_mutex_leave(sqlite3MutexAlloc(SQLITE_MUTEX_STATIC_TEMPDIR));
           goto pragma_out;
         }
       }
@@ -1030,6 +1035,7 @@ void sqlite3Pragma(
       }
 #endif /* SQLITE_OMIT_WSD */
     }
+    sqlite3_mutex_leave(sqlite3MutexAlloc(SQLITE_MUTEX_STATIC_TEMPDIR));
     break;
   }
 #endif
@@ -1759,15 +1765,23 @@ void sqlite3Pragma(
       for(x=sqliteHashFirst(pTbls); x; x=sqliteHashNext(x)){
         Table *pTab = sqliteHashData(x);
         Index *pIdx, *pPk;
-        Index *pPrior = 0;
+        Index *pPrior = 0;      /* Previous index */
         int loopTop;
         int iDataCur, iIdxCur;
         int r1 = -1;
         int bStrict;
+        int r2;                 /* Previous key for WITHOUT ROWID tables */
 
         if( !IsOrdinaryTable(pTab) ) continue;
         if( pObjTab && pObjTab!=pTab ) continue;
-        pPk = HasRowid(pTab) ? 0 : sqlite3PrimaryKeyIndex(pTab);
+        if( isQuick || HasRowid(pTab) ){
+          pPk = 0;
+          r2 = 0;
+        }else{
+          pPk = sqlite3PrimaryKeyIndex(pTab);
+          r2 = sqlite3GetTempRange(pParse, pPk->nKeyCol);
+          sqlite3VdbeAddOp3(v, OP_Null, 1, r2, r2+pPk->nKeyCol-1);
+        }
         sqlite3OpenTableAndIndices(pParse, pTab, OP_OpenRead, 0,
                                    1, 0, &iDataCur, &iIdxCur);
         /* reg[7] counts the number of entries in the table.
@@ -1786,6 +1800,24 @@ void sqlite3Pragma(
           sqlite3VdbeAddOp3(v, OP_Column, iDataCur, pTab->nNVCol-1,3);
           sqlite3VdbeChangeP5(v, OPFLAG_TYPEOFARG);
           VdbeComment((v, "(right-most column)"));
+          if( pPk ){
+            /* Verify WITHOUT ROWID keys are in ascending order */
+            int a1;
+            char *zErr;
+            a1 = sqlite3VdbeAddOp4Int(v, OP_IdxGT, iDataCur, 0,r2,pPk->nKeyCol);
+            VdbeCoverage(v);
+            sqlite3VdbeAddOp1(v, OP_IsNull, r2); VdbeCoverage(v);
+            zErr = sqlite3MPrintf(db,
+                   "row not in PRIMARY KEY order for %s",
+                    pTab->zName);
+            sqlite3VdbeAddOp4(v, OP_String8, 0, 3, 0, zErr, P4_DYNAMIC);
+            integrityCheckResultRow(v);
+            sqlite3VdbeJumpHere(v, a1);
+            sqlite3VdbeJumpHere(v, a1+1);
+            for(j=0; j<pPk->nKeyCol; j++){
+              sqlite3ExprCodeLoadIndexColumn(pParse, pPk, iDataCur, j, r2+j);
+            }
+          }
         }
         /* Verify that all NOT NULL columns really are NOT NULL.  At the
         ** same time verify the type of the content of STRICT tables */
@@ -1813,9 +1845,7 @@ void sqlite3Pragma(
             }
             sqlite3VdbeJumpHere(v, jmp2);
           }
-          if( (pTab->tabFlags & TF_Strict)!=0
-           && pCol->eCType!=COLTYPE_ANY
-          ){
+          if( bStrict && pCol->eCType!=COLTYPE_ANY ){
             jmp2 = sqlite3VdbeAddOp3(v, OP_IsNullOrType, 3, 0, 
                                      sqlite3StdTypeMap[pCol->eCType-1]);
             VdbeCoverage(v);
@@ -1913,6 +1943,9 @@ void sqlite3Pragma(
             sqlite3VdbeAddOp3(v, OP_Concat, 4, 2, 3);
             integrityCheckResultRow(v);
             sqlite3VdbeJumpHere(v, addr);
+          }
+          if( pPk ){
+            sqlite3ReleaseTempRange(pParse, r2, pPk->nKeyCol);
           }
         }
       } 

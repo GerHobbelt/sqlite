@@ -129,7 +129,7 @@ static void showSchema(sqlite3 *db, const char *zTab){
   sqlite3_finalize(pStmt);
 }
 
-/* 
+/*
 ** Read a 64-bit variable-length integer from memory starting at p[0].
 ** Return the number of bytes read, or 0 on error.
 ** The value is stored in *v.
@@ -137,13 +137,13 @@ static void showSchema(sqlite3 *db, const char *zTab){
 int getVarint(const unsigned char *p, sqlite_uint64 *v){
   const unsigned char *q = p;
   sqlite_uint64 x = 0, y = 1;
-  while( (*q&0x80)==0x80 && q-(unsigned char *)p<9 ){
+  while( (*q&0x80)==0x80 && q-p<9 ){
     x += y * (*q++ & 0x7f);
     y <<= 7;
   }
   x += y * (*q++);
   *v = x;
-  return (int) (q - (unsigned char *)p);
+  return (q - p);
 }
 
 
