@@ -99,10 +99,7 @@ static void resolveAlias(
         pExpr->y.pWin->pOwner = pExpr;
       }
     }
-    //sqlite3ExprDeferredDelete(pParse, pDup);
-    sqlite3ParserAddCleanup(pParse,
-      (void(*)(sqlite3*,void*))sqlite3ExprDelete,
-      pDup);
+    sqlite3ExprDeferredDelete(pParse, pDup);
   }
 }
 
