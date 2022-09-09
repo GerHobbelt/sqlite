@@ -60,6 +60,7 @@ proc do_recover_test {tn} {
     set ::sqlhook [list]
     set R [sqlite3_recover_init_sql db main my_sql_hook]
     $R config testdb rstate.db
+    $R config rowids 1
     $R step
     $R finish
   } {}]
@@ -82,6 +83,7 @@ do_execsql_test 1.0 {
   )
   INSERT INTO t1 SELECT i*2, hex(randomblob(250)) FROM s;
   INSERT INTO t2 SELECT * FROM t1;
+
 }
 
 do_recover_test 1
@@ -131,8 +133,28 @@ do_execsql_test 7.1 {
   SELECT * FROM t2
 } {10 11 ten}
 
-breakpoint
 do_recover_test 7.2
+
+#--------------------------------------------------------------------------
+#
+reset_db
+do_execsql_test 8.0 {
+  CREATE TABLE x1(a INTEGER PRIMARY KEY AUTOINCREMENT, b, c);
+  WITH s(i) AS (
+    SELECT 1 UNION ALL SELECT i+1 FROM s WHERE i<2
+  )
+  INSERT INTO x1(b, c) SELECT hex(randomblob(100)), hex(randomblob(100)) FROM s;
+  
+  CREATE INDEX x1b ON x1(b);
+  CREATE INDEX x1cb ON x1(c, b);
+  DELETE FROM x1 WHERE a>50;
+
+  ANALYZE;
+}
+
+do_recover_test 8
+
+
 
 finish_test
 
