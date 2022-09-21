@@ -572,7 +572,6 @@ static void recoverGetPage(
     }
 
     if( pStmt ){
-      int rc = SQLITE_OK;
       sqlite3_bind_int64(pStmt, 1, pgno);
       if( SQLITE_ROW==sqlite3_step(pStmt) ){
         sqlite3_result_value(pCtx, sqlite3_column_value(pStmt, 0));
@@ -1567,7 +1566,7 @@ static int recoverWriteData(sqlite3_recover *p){
               if( nVal>0 ){
                 for(ii=0; ii<pTab->nCol; ii++){
                   RecoverColumn *pCol = &pTab->aCol[ii];
-		  int iBind = pCol->iBind;
+                  int iBind = pCol->iBind;
                   if( iBind>0 ){
                     if( pCol->bIPK ){
                       sqlite3_bind_int64(pInsert, iBind, iRowid);
@@ -1784,7 +1783,7 @@ int sqlite3_recover_config(sqlite3_recover *p, int op, void *pArg){
 
   if( p==0 ) return SQLITE_NOMEM;
   switch( op ){
-    case 789:
+    case SQLITE_RECOVER_TESTDB:
       sqlite3_free(p->zStateDb);
       p->zStateDb = recoverMPrintf(p, "%s", (char*)pArg);
       break;

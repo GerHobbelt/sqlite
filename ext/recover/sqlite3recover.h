@@ -106,6 +106,8 @@ sqlite3_recover *sqlite3_recover_init_sql(
 int sqlite3_recover_config(sqlite3_recover*, int op, void *pArg);
 
 /*
+** SQLITE_RECOVER_TESTDB:
+**
 ** SQLITE_RECOVER_LOST_AND_FOUND:
 **   The pArg argument points to a string buffer containing the name
 **   of a "lost-and-found" table in the output database, or NULL. If
@@ -133,9 +135,10 @@ int sqlite3_recover_config(sqlite3_recover*, int op, void *pArg);
 **   clear, then new rowids are assigned to all recovered rows. The
 **   default value is 1 (set).
 */
-#define SQLITE_RECOVER_LOST_AND_FOUND   1
-#define SQLITE_RECOVER_FREELIST_CORRUPT 2
-#define SQLITE_RECOVER_ROWIDS           3
+#define SQLITE_RECOVER_TESTDB           1
+#define SQLITE_RECOVER_LOST_AND_FOUND   2
+#define SQLITE_RECOVER_FREELIST_CORRUPT 3
+#define SQLITE_RECOVER_ROWIDS           4
 
 /* 
 ** Run the recovery operation. This function does not return until the 
