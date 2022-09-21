@@ -42,8 +42,16 @@ static int xSqlCallback(void *pSqlArg, const char *zSql){
   if( res ){
     Tcl_BackgroundError(p->interp);
     return TCL_ERROR;
+  }else{
+    Tcl_Obj *pObj = Tcl_GetObjResult(p->interp);
+    if( Tcl_GetCharLength(pObj)==0 ){
+      res = 0;
+    }else if( Tcl_GetIntFromObj(p->interp, pObj, &res) ){
+      Tcl_BackgroundError(p->interp);
+      return TCL_ERROR;
+    }
   }
-  return SQLITE_OK;
+  return res;
 }
 
 static int getDbPointer(Tcl_Interp *interp, Tcl_Obj *pObj, sqlite3 **pDb){
@@ -60,7 +68,7 @@ static int getDbPointer(Tcl_Interp *interp, Tcl_Obj *pObj, sqlite3 **pDb){
 ** Implementation of the command created by [sqlite3_recover_init]:
 **
 **     $cmd config OP ARG
-**     $cmd step
+**     $cmd run
 **     $cmd errmsg
 **     $cmd errcode
 **     $cmd finalize
@@ -76,8 +84,8 @@ static int testRecoverCmd(
     int nArg;
     const char *zMsg;
   } aSub[] = {
-    { "config",    2, "REBASE-BLOB" }, /* 0 */
-    { "step",      0, ""            }, /* 1 */
+    { "config",    2, "ARG"         }, /* 0 */
+    { "run",      0, ""             }, /* 1 */
     { "errmsg",    0, ""            }, /* 2 */
     { "errcode",   0, ""            }, /* 3 */
     { "finish",  0, ""              }, /* 4 */
@@ -107,6 +115,7 @@ static int testRecoverCmd(
         "lostandfound",    /* 1 */
         "freelistcorrupt", /* 2 */
         "rowids",          /* 3 */
+        "invalid",         /* 4 */
         0
       };
       int iOp = 0;
@@ -117,14 +126,16 @@ static int testRecoverCmd(
       switch( iOp ){
         case 0:
           res = sqlite3_recover_config(pTest->p, 
-              SQLITE_RECOVER_TESTDB, (void*)Tcl_GetString(objv[3])
+              789, (void*)Tcl_GetString(objv[3]) /* MAGIC NUMBER! */
           );
           break;
-        case 1:
+        case 1: {
+          const char *zStr = Tcl_GetString(objv[3]);
           res = sqlite3_recover_config(pTest->p, 
-              SQLITE_RECOVER_LOST_AND_FOUND, (void*)Tcl_GetString(objv[3])
+              SQLITE_RECOVER_LOST_AND_FOUND, (void*)(zStr[0] ? zStr : 0)
           );
           break;
+        }
         case 2: {
           int iVal = 0;
           if( Tcl_GetBooleanFromObj(interp, objv[3], &iVal) ) return TCL_ERROR;
@@ -141,11 +152,15 @@ static int testRecoverCmd(
           );
           break;
         }
+        case 4: {
+          res = sqlite3_recover_config(pTest->p, 12345, 0);
+          break;
+        }
       }
       Tcl_SetObjResult(interp, Tcl_NewIntObj(res));
       break;
     }
-    case 1:  assert( sqlite3_stricmp("step", aSub[iSub].zSub)==0 ); {
+    case 1:  assert( sqlite3_stricmp("run", aSub[iSub].zSub)==0 ); {
       int res = sqlite3_recover_run(pTest->p);
       Tcl_SetObjResult(interp, Tcl_NewIntObj(res));
       break;
@@ -165,9 +180,7 @@ static int testRecoverCmd(
       int res2;
       if( res!=SQLITE_OK ){
         const char *zErr = sqlite3_recover_errmsg(pTest->p);
-        char *zRes = sqlite3_mprintf("(%d) - %s", res, zErr);
-        Tcl_SetObjResult(interp, Tcl_NewStringObj(zRes, -1));
-        sqlite3_free(zRes);
+        Tcl_SetObjResult(interp, Tcl_NewStringObj(zErr, -1));
       }
       res2 = sqlite3_recover_finish(pTest->p);
       assert( res2==res );
@@ -204,6 +217,7 @@ static int test_sqlite3_recover_init(
   }
   if( getDbPointer(interp, objv[1], &db) ) return TCL_ERROR;
   zDb = Tcl_GetString(objv[2]);
+  if( zDb[0]=='\0' ) zDb = 0;
 
   pNew = ckalloc(sizeof(TestRecover));
   if( bSql==0 ){
@@ -223,6 +237,40 @@ static int test_sqlite3_recover_init(
   return TCL_OK;
 }
 
+/*
+** Declaration for public API function in file dbdata.c. This may be called
+** with NULL as the final two arguments to register the sqlite_dbptr and
+** sqlite_dbdata virtual tables with a database handle.
+*/
+#ifdef _WIN32
+__declspec(dllexport)
+#endif
+int sqlite3_dbdata_init(sqlite3*, char**, const sqlite3_api_routines*);
+
+/*
+** sqlite3_recover_init DB DBNAME URI
+*/
+static int test_sqlite3_dbdata_init(
+  void *clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  sqlite3 *db = 0;
+
+  if( objc!=2 ){
+    Tcl_WrongNumArgs(interp, 1, objv, "DB");
+    return TCL_ERROR;
+  }
+  if( getDbPointer(interp, objv[1], &db) ) return TCL_ERROR;
+  sqlite3_dbdata_init(db, 0, 0);
+
+  Tcl_ResetResult(interp);
+  return TCL_OK;
+}
+
+
+
 int TestRecover_Init(Tcl_Interp *interp){
   struct Cmd {
     const char *zCmd;
@@ -231,6 +279,7 @@ int TestRecover_Init(Tcl_Interp *interp){
   } aCmd[] = {
     { "sqlite3_recover_init", test_sqlite3_recover_init, 0 },
     { "sqlite3_recover_init_sql", test_sqlite3_recover_init, (void*)1 },
+    { "sqlite3_dbdata_init", test_sqlite3_dbdata_init, (void*)1 },
   };
   int i;
 

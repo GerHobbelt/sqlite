@@ -45,7 +45,7 @@ proc do_recover_test {tn} {
   uplevel [list do_test $tn.1 {
     set R [sqlite3_recover_init db main test.db2]
     $R config testdb rstate.db
-    $R step
+    $R run
     $R finish
   } {}]
 
@@ -61,18 +61,21 @@ proc do_recover_test {tn} {
     set R [sqlite3_recover_init_sql db main my_sql_hook]
     $R config testdb rstate.db
     $R config rowids 1
-    $R step
+    $R run
     $R finish
   } {}]
 
   sqlite3 db2 test.db2
   execsql [join $::sqlhook ";"] db2
+  db2 close
+  sqlite3 db2 test.db2
   uplevel [list do_test $tn.4 [list compare_dbs db db2] {}]
   db2 close
 }
 
 proc my_sql_hook {sql} {
   lappend ::sqlhook $sql
+  return 0
 }
 
 do_execsql_test 1.0 {
@@ -154,7 +157,57 @@ do_execsql_test 8.0 {
 
 do_recover_test 8
 
+#-------------------------------------------------------------------------
+reset_db
+ifcapable fts5 {
+  do_execsql_test 9.1 {
+    CREATE VIRTUAL TABLE ft5 USING fts5(a, b);
+    INSERT INTO ft5 VALUES('hello', 'world');
+  }
+  do_recover_test 9 
+}
 
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 10.1 {
+  CREATE TABLE x1(a PRIMARY KEY, str TEXT) WITHOUT ROWID;
+  INSERT INTO x1 VALUES(1, '
+    \nhello\012world(\n0)(\n1)
+  ');
+  INSERT INTO x1 VALUES(2, '
+    \nhello
+  ');
+}
+do_execsql_test 10.2 "
+  INSERT INTO x1 VALUES(3, '\012hello there\015world');
+  INSERT INTO x1 VALUES(4, '\015hello there\015world');
+"
+do_recover_test 10 
+
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 11.1 {
+  PRAGMA encoding='utf16';
+  CREATE TABLE u1(u, v);
+  INSERT INTO u1 VALUES('edvin marton', 'bond');
+  INSERT INTO u1 VALUES(1, 4.0);
+}
+
+do_recover_test 11 
+
+do_test 12.1 {
+  set R [sqlite3_recover_init db "" test.db2]
+  $R config lostandfound ""
+  $R config invalid xyz
+} {12}
+do_test 12.2 {
+  $R run
+  $R run
+} {21}
+
+do_test 12.3 {
+  $R finish
+} {}
 
 finish_test
 
