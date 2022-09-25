@@ -173,25 +173,38 @@ struct sqlite3_recover {
   char *zLostAndFound;            /* Name of lost-and-found table (or NULL) */
   int bFreelistCorrupt;           /* SQLITE_RECOVER_FREELIST_CORRUPT setting */
   int bRecoverRowid;              /* SQLITE_RECOVER_ROWIDS setting */
+  int bSlowIndexes;               /* SQLITE_RECOVER_SLOWINDEXES setting */
 
   /* Error code and error message */
   int errCode;                    /* For sqlite3_recover_errcode() */
   char *zErrMsg;                  /* For sqlite3_recover_errmsg() */
 
+  int eState;
+  int bCloseTransaction;
+
   /* Variables used with eState==RECOVER_STATE_WRITING */
   RecoverStateW1 w1;
 
   /* Fields used within sqlite3_recover_run() */
-  int bRun;                       /* True once _recover_run() has been called */
   sqlite3 *dbOut;                 /* Output database */
   sqlite3_stmt *pGetPage;         /* SELECT against input db sqlite_dbdata */
   RecoverTable *pTblList;         /* List of tables recovered from schema */
   RecoverBitmap *pUsed;           /* Used by recoverLostAndFound() */
 };
 
+/*
+** The various states in which an sqlite3_recover object may exist:
+**
+**   RECOVER_STATE_INIT:
+**    The object is initially created in this state. sqlite3_recover_step()
+**    has yet to be called. This is the only state in which it is permitted
+**    to call sqlite3_recover_config().
+*/
 #define RECOVER_STATE_INIT          0
 #define RECOVER_STATE_WRITING       1
 #define RECOVER_STATE_LOSTANDFOUND  2
+#define RECOVER_STATE_SCHEMA2       3
+#define RECOVER_STATE_DONE          4
 
 /* 
 ** Default value for SQLITE_RECOVER_ROWIDS (sqlite3_recover.bRecoverRowid).
@@ -758,7 +771,7 @@ static int recoverOpenOutput(sqlite3_recover *p){
           "PRAGMA writable_schema = 1;"
           "CREATE TABLE recovery.map(pgno INTEGER PRIMARY KEY, parent INT);" 
           "CREATE TABLE recovery.schema(type, name, tbl_name, rootpage, sql);"
-          );
+      );
       sqlite3_free(zSql);
     }
   }
@@ -979,16 +992,16 @@ static int recoverWriteSchema1(sqlite3_recover *p){
   sqlite3_stmt *pTblname = 0;
 
   pSelect = recoverPrepare(p, p->dbOut,
-      "WITH dbschema(rootpage, name, sql, tbl, isVirtual, isUnique) AS ("
+      "WITH dbschema(rootpage, name, sql, tbl, isVirtual, isIndex) AS ("
       "  SELECT rootpage, name, sql, "
       "    type='table', "
       "    sql LIKE 'create virtual%',"
-      "    (type='index' AND sql LIKE '%unique%')"
+      "    (type='index' AND (sql LIKE '%unique%' OR ?1))"
       "  FROM recovery.schema"
       ")"
       "SELECT rootpage, tbl, isVirtual, name, sql"
       " FROM dbschema "
-      "  WHERE tbl OR isUnique"
+      "  WHERE tbl OR isIndex"
       "  ORDER BY tbl DESC, name=='sqlite_sequence' DESC"
   );
 
@@ -998,6 +1011,7 @@ static int recoverWriteSchema1(sqlite3_recover *p){
   );
 
   if( pSelect ){
+    sqlite3_bind_int(pSelect, 1, p->bSlowIndexes);
     while( sqlite3_step(pSelect)==SQLITE_ROW ){
       i64 iRoot = sqlite3_column_int64(pSelect, 0);
       int bTable = sqlite3_column_int(pSelect, 1);
@@ -1052,6 +1066,10 @@ static int recoverWriteSchema2(sqlite3_recover *p){
   sqlite3_stmt *pSelect = 0;
 
   pSelect = recoverPrepare(p, p->dbOut,
+      p->bSlowIndexes ?
+      "SELECT rootpage, sql FROM recovery.schema "
+      "  WHERE type!='table' AND type!='index'"
+      :
       "SELECT rootpage, sql FROM recovery.schema "
       "  WHERE type!='table' AND (type!='index' OR sql NOT LIKE '%unique%')"
   );
@@ -1547,6 +1565,7 @@ static void recoverWriteDataCleanup(sqlite3_recover *p){
   recoverFinalize(p, p1->pInsert);
   recoverFinalize(p, p1->pTbls);
   recoverFinalize(p, p1->pSel);
+  memset(p1, 0, sizeof(*p1));
 }
 
 static int recoverWriteDataStep(sqlite3_recover *p){
@@ -1554,7 +1573,7 @@ static int recoverWriteDataStep(sqlite3_recover *p){
   sqlite3_stmt *pSel = p1->pSel;
   sqlite3_value **apVal = p1->apVal;
 
-  if( p1->pTab==0 ){
+  if( p->errCode==SQLITE_OK && p1->pTab==0 ){
     if( sqlite3_step(p1->pTbls)==SQLITE_ROW ){
       i64 iRoot = sqlite3_column_int64(p1->pTbls, 0);
       p1->pTab = recoverFindTable(p, iRoot);
@@ -1589,7 +1608,7 @@ static int recoverWriteDataStep(sqlite3_recover *p){
       return SQLITE_DONE;
     }
   }
-  assert( p1->pTab );
+  assert( p->errCode!=SQLITE_OK || p1->pTab );
 
   if( p->errCode==SQLITE_OK && sqlite3_step(pSel)==SQLITE_ROW ){
     RecoverTable *pTab = p1->pTab;
@@ -1670,65 +1689,11 @@ static int recoverWriteDataStep(sqlite3_recover *p){
   return p->errCode;
 }
 
-/*
-** For each table in the recovered schema, this function extracts as much
-** data as possible from the output database and writes it to the input
-** database. Or, if the recover handle is in SQL callback mode, issues
-** equivalent callbacks.
-**
-** It does not recover "orphaned" data into the lost-and-found table.
-** See recoverLostAndFound() for that.
-*/
-static int recoverWriteData(sqlite3_recover *p){
-  recoverWriteDataInit(p);
-  while( p->errCode==SQLITE_OK && SQLITE_OK==recoverWriteDataStep(p) );
-  recoverWriteDataCleanup(p);
-  return p->errCode;
-}
-
-/*
-** This function does the work of sqlite3_recover_run(). It is assumed that
-** no error has occurred when this is called. If an error occurs during
-** the recovery operation, an error code and error message are left in
-** the recovery handle.
-*/
-static void recoverRun(sqlite3_recover *p){
+static void recoverFinalCleanup(sqlite3_recover *p){
   RecoverTable *pTab = 0;
   RecoverTable *pNext = 0;
-  int rc = SQLITE_OK;
 
-  assert( p->errCode==SQLITE_OK );
-  assert( p->bRun==0 );
-  p->bRun = 1;
-
-  recoverSqlCallback(p, "BEGIN");
-  recoverSqlCallback(p, "PRAGMA writable_schema = on");
-
-  /* Open the output database. And register required virtual tables and 
-  ** user functions with the new handle. */
-  recoverOpenOutput(p);
-
-  /* Open transactions on both the input and output databases. */
-  recoverExec(p, p->dbIn, "BEGIN");
-  recoverExec(p, p->dbOut, "BEGIN");
-
-  recoverCacheSchema(p);
-  recoverWriteSchema1(p);
-  recoverWriteData(p);
-  if( p->zLostAndFound ) recoverLostAndFound(p);
-  recoverWriteSchema2(p);
-
-  /* If no error has occurred, commit the write transaction on the output
-  ** database. Then end the read transaction on the input database, regardless
-  ** of whether or not prior errors have occurred.  */
-  recoverExec(p, p->dbOut, "COMMIT");
-  rc = sqlite3_exec(p->dbIn, "END", 0, 0, 0);
-  if( p->errCode==SQLITE_OK ) p->errCode = rc;
-
-  recoverSqlCallback(p, "PRAGMA writable_schema = off");
-  recoverSqlCallback(p, "COMMIT");
-
-  /* Clean up various resources allocated by this function. */
+  recoverWriteDataCleanup(p);
   for(pTab=p->pTblList; pTab; pTab=pNext){
     pNext = pTab->pNext;
     sqlite3_free(pTab);
@@ -1738,7 +1703,84 @@ static void recoverRun(sqlite3_recover *p){
   p->pGetPage = 0;
   recoverBitmapFree(p->pUsed);
   p->pUsed = 0;
-  sqlite3_close(p->dbOut);
+  {
+    int res = sqlite3_close(p->dbOut);
+    assert( res==SQLITE_OK );
+  }
+  p->dbOut = 0;
+}
+
+static void recoverStep(sqlite3_recover *p){
+  assert( p && p->errCode==SQLITE_OK );
+  switch( p->eState ){
+    case RECOVER_STATE_INIT:
+      /* This is the very first call to sqlite3_recover_step() on this object.
+      */
+      recoverSqlCallback(p, "BEGIN");
+      recoverSqlCallback(p, "PRAGMA writable_schema = on");
+
+      /* Open the output database. And register required virtual tables and 
+      ** user functions with the new handle. */
+      recoverOpenOutput(p);
+
+      /* Open transactions on both the input and output databases. */
+      recoverExec(p, p->dbIn, "PRAGMA writable_schema = on");
+      recoverExec(p, p->dbIn, "BEGIN");
+      if( p->errCode==SQLITE_OK ) p->bCloseTransaction = 1;
+      recoverExec(p, p->dbOut, "BEGIN");
+
+      recoverCacheSchema(p);
+      recoverWriteSchema1(p);
+
+      p->eState = RECOVER_STATE_WRITING;
+      break;
+      
+    case RECOVER_STATE_WRITING: {
+      if( p->w1.pTbls==0 ){
+        recoverWriteDataInit(p);
+      }
+      if( SQLITE_DONE==recoverWriteDataStep(p) ){
+        recoverWriteDataCleanup(p);
+        if( p->zLostAndFound ){
+          p->eState = RECOVER_STATE_LOSTANDFOUND;
+        }else{
+          p->eState = RECOVER_STATE_SCHEMA2;
+        }
+      }
+      break;
+    }
+
+    case RECOVER_STATE_LOSTANDFOUND: {
+      recoverLostAndFound(p);
+      p->eState = RECOVER_STATE_SCHEMA2;
+      break;
+    }
+
+    case RECOVER_STATE_SCHEMA2: {
+      int rc = SQLITE_OK;
+
+      recoverWriteSchema2(p);
+      p->eState = RECOVER_STATE_DONE;
+
+      /* If no error has occurred, commit the write transaction on the output
+      ** database. Regardless of whether or not an error has occurred, make
+      ** an attempt to end the read transaction on the input database.  */
+      recoverExec(p, p->dbOut, "COMMIT");
+      rc = sqlite3_exec(p->dbIn, "END", 0, 0, 0);
+      if( p->errCode==SQLITE_OK ) p->errCode = rc;
+
+      recoverSqlCallback(p, "PRAGMA writable_schema = off");
+      recoverSqlCallback(p, "COMMIT");
+      p->eState = RECOVER_STATE_DONE;
+      recoverFinalCleanup(p);
+      break;
+    };
+
+    case RECOVER_STATE_DONE: {
+      /* no-op */
+      break;
+    };
+  }
 }
 
 
@@ -1831,39 +1873,62 @@ int sqlite3_recover_errcode(sqlite3_recover *p){
 */
 int sqlite3_recover_config(sqlite3_recover *p, int op, void *pArg){
   int rc = SQLITE_OK;
-
-  if( p==0 ) return SQLITE_NOMEM;
-  switch( op ){
+  if( p==0 ){
+    rc = SQLITE_NOMEM;
+  }else if( p->eState!=RECOVER_STATE_INIT ){
+    rc = SQLITE_MISUSE;
+  }else{
+    switch( op ){
     case SQLITE_RECOVER_TESTDB:
-      sqlite3_free(p->zStateDb);
-      p->zStateDb = recoverMPrintf(p, "%s", (char*)pArg);
-      break;
+        sqlite3_free(p->zStateDb);
+        p->zStateDb = recoverMPrintf(p, "%s", (char*)pArg);
+        break;
 
-    case SQLITE_RECOVER_LOST_AND_FOUND: {
-      const char *zArg = (const char*)pArg;
-      sqlite3_free(p->zLostAndFound);
-      if( zArg ){
-        p->zLostAndFound = recoverMPrintf(p, "%s", zArg);
-      }else{
-        p->zLostAndFound = 0;
+      case SQLITE_RECOVER_LOST_AND_FOUND: {
+        const char *zArg = (const char*)pArg;
+        sqlite3_free(p->zLostAndFound);
+        if( zArg ){
+          p->zLostAndFound = recoverMPrintf(p, "%s", zArg);
+        }else{
+          p->zLostAndFound = 0;
+        }
+        break;
       }
-      break;
+
+      case SQLITE_RECOVER_FREELIST_CORRUPT:
+        p->bFreelistCorrupt = *(int*)pArg;
+        break;
+
+      case SQLITE_RECOVER_ROWIDS:
+        p->bRecoverRowid = *(int*)pArg;
+        break;
+
+      case SQLITE_RECOVER_SLOWINDEXES:
+        p->bSlowIndexes = *(int*)pArg;
+        break;
+
+      default:
+        rc = SQLITE_NOTFOUND;
+        break;
     }
-
-    case SQLITE_RECOVER_FREELIST_CORRUPT:
-      p->bFreelistCorrupt = *(int*)pArg;
-      break;
-
-    case SQLITE_RECOVER_ROWIDS:
-      p->bRecoverRowid = *(int*)pArg;
-      break;
-
-    default:
-      rc = SQLITE_NOTFOUND;
-      break;
   }
 
   return rc;
+}
+
+/*
+** Do a unit of work towards the recovery job. Return SQLITE_OK if
+** no error has occurred but database recovery is not finished, SQLITE_DONE
+** if database recovery has been successfully completed, or an SQLite
+** error code if an error has occurred.
+*/
+int sqlite3_recover_step(sqlite3_recover *p){
+  if( p==0 ) return SQLITE_NOMEM;
+  if( p->errCode==SQLITE_OK ) recoverStep(p);
+  if( p->eState==RECOVER_STATE_DONE && p->errCode==SQLITE_OK ){
+    return SQLITE_DONE;
+  }
+  return p->errCode;
 }
 
 /*
@@ -1871,16 +1936,10 @@ int sqlite3_recover_config(sqlite3_recover *p, int op, void *pArg){
 ** else an SQLite error code.
 */
 int sqlite3_recover_run(sqlite3_recover *p){
-  if( p ){
-    recoverExec(p, p->dbIn, "PRAGMA writable_schema=1");
-    if( p->bRun ) return SQLITE_MISUSE;     /* Has already run */
-    if( p->errCode==SQLITE_OK ) recoverRun(p);
-    if( sqlite3_exec(p->dbIn, "PRAGMA writable_schema=0", 0, 0, 0) ){
-      recoverDbError(p, p->dbIn);
-    }
-  }
-  return p ? p->errCode : SQLITE_NOMEM;
+  while( SQLITE_OK==sqlite3_recover_step(p) );
+  return sqlite3_recover_errcode(p);
 }
+
 
 /*
 ** Free all resources associated with the recover handle passed as the only
@@ -1896,6 +1955,11 @@ int sqlite3_recover_finish(sqlite3_recover *p){
   if( p==0 ){
     rc = SQLITE_NOMEM;
   }else{
+    recoverFinalCleanup(p);
+    if( p->bCloseTransaction && sqlite3_get_autocommit(p->dbIn)==0 ){
+      rc = sqlite3_exec(p->dbIn, "END", 0, 0, 0);
+      if( p->errCode==SQLITE_OK ) p->errCode = rc;
+    }
     rc = p->errCode;
     sqlite3_free(p->zErrMsg);
     sqlite3_free(p->zStateDb);
