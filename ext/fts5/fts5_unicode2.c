@@ -17,6 +17,7 @@
 
 
 #include <assert.h>
+#include "fts5Int.h"
 
 
 
