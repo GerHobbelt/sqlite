@@ -13,6 +13,8 @@
 **
 */
 
+#if defined(SQLITE_HAVE_TCL)
+
 #if defined(INCLUDE_SQLITE_TCL_H)
 #  include "sqlite_tcl.h"
 #else
@@ -155,3 +157,5 @@ int Sqlitetestbackup_Init(Tcl_Interp *interp){
   Tcl_CreateObjCommand(interp, "sqlite3_backup", backupTestInit, 0, 0);
   return TCL_OK;
 }
+
+#endif // defined(SQLITE_HAVE_TCL)

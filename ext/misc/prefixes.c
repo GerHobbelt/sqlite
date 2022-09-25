@@ -19,6 +19,12 @@
 ** and the input string itself.  The order of prefixes is from longest
 ** to shortest.
 */
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #if !defined(SQLITE_CORE) || !defined(SQLITE_OMIT_VIRTUALTABLE)
 #if !defined(SQLITEINT_H)
 #include "sqlite3ext.h"

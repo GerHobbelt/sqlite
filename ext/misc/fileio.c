@@ -78,6 +78,12 @@
 **   symbol, FILEIO_WIN32_DLL, must be #define'd to create a stand-alone
 **   DLL form of this extension for WIN32. See its use below for details.
 */
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1
 #include <stdio.h>
@@ -97,7 +103,7 @@ SQLITE_EXTENSION_INIT1
 #  include <io.h>
 #  include <direct.h>
 #  include "test_windirent.h"
-#  define dirent DIRENT
+//#  define dirent DIRENT
 #  ifndef chmod
 #    define chmod _chmod
 #  endif

@@ -22,6 +22,12 @@
 ** The sha1_query(Y) function evaluates all queries in the SQL statements of Y
 ** and returns a hash of their results.
 */
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1
 #include <assert.h>

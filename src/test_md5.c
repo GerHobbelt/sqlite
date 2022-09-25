@@ -16,6 +16,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include "sqlite3.h"
+
+#if defined(SQLITE_HAVE_TCL)
+
 #if defined(INCLUDE_SQLITE_TCL_H)
 # include "sqlite_tcl.h"
 #else
@@ -448,3 +451,5 @@ int Md5_Register(
   sqlite3_overload_function(db, "md5sum", -1);  /* To exercise this API */
   return rc;
 }
+
+#endif // defined(SQLITE_HAVE_TCL)

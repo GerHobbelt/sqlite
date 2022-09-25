@@ -11,8 +11,15 @@
 *************************************************************************
 */
 
+#include "os_setup.h"
 
+#if SQLITE_OS_UNIX
 #include <unistd.h>
+#else
+#include <winsock2.h>
+#include <io.h>
+#include <direct.h>
+#endif
 #include <stdio.h>
 #include <pthread.h>
 #include <assert.h>
@@ -591,6 +598,10 @@ static void print_and_free_err(Error *p){
   free_err(p);
 }
 
+#if defined(_WIN32) && !defined(strerror_r)
+#define strerror_r(errno, buf, len) strerror_s(buf, len, errno)
+#endif
+
 static void system_error(Error *pErr, int iSys){
   pErr->rc = iSys;
   pErr->zErr = (char *)sqlite3_malloc(512);
@@ -634,7 +645,11 @@ static void clear_error_x(
 }
 
 static int busyhandler(void *pArg, int n){
+#if !defined(_WIN32)
   usleep(10*1000);
+#else
+  Sleep(10);
+#endif
   return 1;
 }
 

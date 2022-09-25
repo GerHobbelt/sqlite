@@ -50,6 +50,7 @@
 */
 
 #include "sqlite3.h"
+#include "os_setup.h"
 #include <string.h>
 #include <assert.h>
 #include <stdio.h>

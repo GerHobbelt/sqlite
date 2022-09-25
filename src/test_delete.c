@@ -19,6 +19,8 @@
 **     above.
 */
 
+#if defined(SQLITE_HAVE_TCL)
+
 #ifndef SQLITE_OS_WIN
 #  include <unistd.h>
 #  include <errno.h>
@@ -154,3 +156,5 @@ SQLITE_API int sqlite3_delete_database(
   sqlite3_free(zBuf);
   return (rc ? SQLITE_ERROR : SQLITE_OK);
 }
+
+#endif // defined(SQLITE_HAVE_TCL)

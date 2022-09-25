@@ -1715,6 +1715,11 @@ static void showHelp(void){
   );
 }
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_fuzzcheck_main(cnt, arr)
+#endif
+
 int main(int argc, const char **argv){
   sqlite3_int64 iBegin;        /* Start time of this program */
   int quietFlag = 0;           /* True if --quiet or -q */
@@ -1739,20 +1744,20 @@ int main(int argc, const char **argv){
   int bSpinner = 0;            /* True for --spinner */
   int timeoutTest = 0;         /* undocumented --timeout-test flag */
   int runFlags = 0;            /* Flags sent to runSql() */
-  char *zMsg = 0;              /* Add this message */
+  const char *zMsg = 0;        /* Add this message */
   int nSrcDb = 0;              /* Number of source databases */
-  char **azSrcDb = 0;          /* Array of source database names */
+  const char **azSrcDb = 0;    /* Array of source database names */
   int iSrcDb;                  /* Loop over all source databases */
   int nTest = 0;               /* Total number of tests performed */
-  char *zDbName = "";          /* Appreviated name of a source database */
+  const char *zDbName = "";    /* Appreviated name of a source database */
   const char *zFailCode = 0;   /* Value of the TEST_FAILURE env variable */
   int cellSzCkFlag = 0;        /* --cell-size-check */
   int sqlFuzz = 0;             /* True for SQL fuzz. False for DB fuzz */
   int iTimeout = 120000;       /* Default 120-second timeout */
   int nMem = 0;                /* Memory limit override */
   int nMemThisDb = 0;          /* Memory limit set by the CONFIG table */
-  char *zExpDb = 0;            /* Write Databases to files in this directory */
-  char *zExpSql = 0;           /* Write SQL to files in this directory */
+  const char *zExpDb = 0;      /* Write Databases to files in this directory */
+  const char *zExpSql = 0;     /* Write SQL to files in this directory */
   void *pHeap = 0;             /* Heap for use by SQLite */
   int ossFuzz = 0;             /* enable OSS-FUZZ testing */
   int ossFuzzThisDb = 0;       /* ossFuzz value for this particular database */

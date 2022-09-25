@@ -14,6 +14,11 @@
 #ifndef _FTS5INT_H
 #define _FTS5INT_H
 
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #include "fts5.h"
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1

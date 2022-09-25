@@ -38,6 +38,12 @@
 ** then it defaults to the sz= value.  Parameter values can be in either
 ** decimal or hexadecimal.  The filename in the URI is ignored.
 */
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #include <sqlite3ext.h>
 SQLITE_EXTENSION_INIT1
 #include <string.h>

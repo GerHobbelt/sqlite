@@ -157,6 +157,12 @@
 ** value at offset 20 the SQLite database header is exactly 8.  If
 ** the reserved-space value is not 8, this module is a no-op.
 */
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #if defined(SQLITE_AMALGAMATION) && !defined(SQLITE_CKSUMVFS_STATIC)
 # define SQLITE_CKSUMVFS_STATIC
 #endif

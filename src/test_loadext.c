@@ -11,6 +11,12 @@
 *************************************************************************
 ** Test extension for testing the sqlite3_load_extension() function.
 */
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #include <string.h>
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1

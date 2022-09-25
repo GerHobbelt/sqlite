@@ -200,6 +200,11 @@ static char *readFile(const char *zName, int *pnByte){
   return pBuf;
 }
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_optfuzz_main(cnt, arr)
+#endif
+
 int main(int argc, const char **argv){
   int nIn = 0;               /* Number of input files */
   const char **azIn = 0;     /* Names of input files */

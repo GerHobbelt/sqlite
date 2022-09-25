@@ -12,6 +12,8 @@
 **
 */
 
+#include "os_setup.h"
+
 #if !defined(SQLITE_TEST) || defined(SQLITE_OS_UNIX)
 
 #include "sqlite3.h"

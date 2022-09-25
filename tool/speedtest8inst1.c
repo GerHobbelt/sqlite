@@ -55,7 +55,7 @@ static void prepareAndRun(sqlite3_vfs *pInstVfs, sqlite3 *db, const char *zSql){
   iTime = sqlite3Hwtime();
   rc = sqlite3_prepare_v2(db, zSql, -1, &pStmt, &stmtTail);
   iTime = sqlite3Hwtime() - iTime;
-  sqlite3_instvfs_binarylog_call(pInstVfs,BINARYLOG_PREPARE_V2,iTime,rc,zSql);
+  sqlite3_instvfs_binarylog_call(pInstVfs, BINARYLOG_PREPARE_V2, iTime, rc, zSql);
 
   if( rc==SQLITE_OK ){
     int nRow = 0;

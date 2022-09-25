@@ -1,3 +1,9 @@
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 /* fts1 has a design flaw which can lead to database corruption (see
 ** below).  It is recommended not to use it any longer, instead use
 ** fts3 (or higher).  If you believe that your use of fts1 is safe,

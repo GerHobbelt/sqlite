@@ -83,7 +83,7 @@
 /*
 ** No support for loadable extensions in VxWorks.
 */
-#if (defined(__RTP__) || defined(_WRS_KERNEL)) && !SQLITE_OMIT_LOAD_EXTENSION
+#if (defined(__RTP__) || defined(_WRS_KERNEL)) && !defined(SQLITE_OMIT_LOAD_EXTENSION)
 # define SQLITE_OMIT_LOAD_EXTENSION 1
 #endif
 
@@ -1096,7 +1096,7 @@ static void shellAddSchemaName(
 #if defined(_WIN32) && defined(_MSC_VER)
 INCLUDE test_windirent.h
 INCLUDE test_windirent.c
-#define dirent DIRENT
+//#define dirent DIRENT
 #endif
 INCLUDE ../ext/misc/memtrace.c
 INCLUDE ../ext/misc/shathree.c

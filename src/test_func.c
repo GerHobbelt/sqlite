@@ -13,6 +13,9 @@
 ** implements new SQL functions used by the test scripts.
 */
 #include "sqlite3.h"
+
+#if defined(SQLITE_HAVE_TCL)
+
 #if defined(INCLUDE_SQLITE_TCL_H)
 #  include "sqlite_tcl.h"
 #else
@@ -952,3 +955,5 @@ int Sqlitetest_func_Init(Tcl_Interp *interp){
   sqlite3_auto_extension((void(*)(void))Md5_Register);
   return TCL_OK;
 }
+
+#endif // defined(SQLITE_HAVE_TCL)

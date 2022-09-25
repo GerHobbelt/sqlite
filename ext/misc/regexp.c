@@ -56,6 +56,12 @@
 ** regular expression in the O(N*M) performance bound is computed after
 ** this expansion.
 */
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #include <string.h>
 #include <stdlib.h>
 #include "sqlite3ext.h"

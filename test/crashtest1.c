@@ -14,6 +14,11 @@
 ** If no problems are seen after a large number of tests, we assume that
 ** the rollback mechanism is working.
 */
+
+#include "os_setup.h"
+
+#if SQLITE_OS_UNIX
+
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -22,12 +27,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sched.h>
-#include "sqlite.h"
+#include "sqlite3.h"
 
 static void do_some_sql(int parent){
   char *zErr;
   int rc = SQLITE_OK;
-  sqlite *db;
+  sqlite3 *db;
   int cnt = 0;
   static char zBig[] =
     "-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -39,7 +44,7 @@ static void do_some_sql(int parent){
     unlink("test.db-journal-saved");
     system("cp test.db-journal test.db-journal-saved");
   }
-  db = sqlite_open("./test.db", 0, &zErr);
+  db = sqlite3_open("./test.db", 0, &zErr);
   if( db==0 ){
     printf("ERROR: %s\n", zErr);
     if( strcmp(zErr,"database disk image is malformed")==0 ){
@@ -50,7 +55,7 @@ static void do_some_sql(int parent){
   srand(getpid());
   while( rc==SQLITE_OK ){
     cnt++;
-    rc = sqlite_exec_printf(db,
+    rc = sqlite3_exec_printf(db,
        "INSERT INTO t1 VALUES(%d,'%d%s')", 0, 0, &zErr,
        rand(), rand(), zBig);
   }
@@ -66,7 +71,7 @@ static void do_some_sql(int parent){
 
 int main(int argc, const char **argv){
   int i;
-  sqlite *db;
+  sqlite3 *db;
   char *zErr;
   int status;
   int parent = getpid();
@@ -78,8 +83,8 @@ int main(int argc, const char **argv){
     printf("Cannot initialize: %s\n", zErr);
     return 1;
   }
-  sqlite_exec(db, "CREATE TABLE t1(a,b)", 0, 0, 0);
-  sqlite_close(db);
+  sqlite3_exec(db, "CREATE TABLE t1(a,b)", 0, 0, 0);
+  sqlite3_close(db);
   for(i=0; i<10000; i++){
     int pid = fork();
     if( pid==0 ){
@@ -94,3 +99,5 @@ int main(int argc, const char **argv){
   }
   return 0;
 }
+
+#endif // SQLITE_OS_UNIX

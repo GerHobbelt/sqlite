@@ -15,6 +15,11 @@
 #ifndef SQLITEINT_H
 #define SQLITEINT_H
 
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 /* Special Comments:
 **
 ** Some comments have special meaning to the tools that measure test

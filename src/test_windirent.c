@@ -44,6 +44,9 @@ const char *windirent_getenv(
   }
 }
 
+
+#if !defined(DIRENT_H)
+
 /*
 ** Implementation of the POSIX opendir() function using the MSVCRT.
 */
@@ -187,5 +190,8 @@ INT closedir(
   sqlite3_free(dirp);
   return result;
 }
+
+
+#endif // !defined(DIRENT_H)
 
 #endif /* defined(WIN32) && defined(_MSC_VER) */

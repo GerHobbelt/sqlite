@@ -699,7 +699,7 @@ static const char zHelp[] =
 #include <string.h>
 #include <assert.h>
 #ifndef OMIT_ZLIB
-#include "zlib.h"
+#include "zlib-ng.h"
 #endif
 
 /*
@@ -721,7 +721,7 @@ static void sqlarUncompressFunc(
   sqlite3_result_value(context, argv[0]);
 #else
   uLong nData;
-  uLongf sz;
+  size_t sz;
 
   assert( argc==2 );
   sz = sqlite3_value_int(argv[1]);
@@ -731,12 +731,16 @@ static void sqlarUncompressFunc(
   }else{
     const Bytef *pData= sqlite3_value_blob(argv[0]);
     Bytef *pOut = sqlite3_malloc(sz);
-    if( Z_OK!=uncompress(pOut, &sz, pData, nData) ){
+#ifndef OMIT_ZLIB
+	if( Z_OK!=zng_uncompress(pOut, &sz, pData, nData) ){
       sqlite3_result_error(context, "error in uncompress()", -1);
     }else{
       sqlite3_result_blob(context, pOut, sz, SQLITE_TRANSIENT);
     }
-    sqlite3_free(pOut);
+#else
+	sqlite3_result_blob(context, pData, nData, SQLITE_TRANSIENT);
+#endif
+	sqlite3_free(pOut);
   }
 #endif
 }
@@ -878,6 +882,11 @@ static const char *fileTail(const char *z){
   }
   return zOut;
 }
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_sessionfuzz_main(cnt, arr)
+#endif
 
 int main(int argc, const char **argv){
   const char *zCmd;

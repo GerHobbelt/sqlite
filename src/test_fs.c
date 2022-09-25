@@ -62,6 +62,9 @@
 **   SELECT * FROM fstree WHERE path LIKE '/home/dan/sqlite/%'
 */
 #include "sqliteInt.h"
+
+#if defined(SQLITE_HAVE_TCL)
+
 #if defined(INCLUDE_SQLITE_TCL_H)
 #  include "sqlite_tcl.h"
 #else
@@ -915,3 +918,5 @@ int Sqlitetestfs_Init(Tcl_Interp *interp){
 #endif
   return TCL_OK;
 }
+
+#endif // defined(SQLITE_HAVE_TCL)

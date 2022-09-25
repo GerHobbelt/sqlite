@@ -644,6 +644,11 @@ static void runSql(sqlite3 *db, const char *zSql, unsigned runFlags){
   }
 }
 
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_dbfuzz_main(cnt, arr)
+#endif
+
 int main(int argc, const char **argv){
   int i;                 /* Loop counter */
   int nDb = 0;           /* Number of databases to fuzz */

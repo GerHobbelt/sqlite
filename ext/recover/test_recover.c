@@ -15,6 +15,8 @@
 #include "sqlite3recover.h"
 #include "sqliteInt.h"
 
+#if defined(SQLITE_HAVE_TCL)
+
 #include <tcl.h>
 #include <assert.h>
 
@@ -305,4 +307,6 @@ int TestRecover_Init(Tcl_Interp *interp){
 
   return TCL_OK;
 }
+
+#endif // defined(SQLITE_HAVE_TCL)
 

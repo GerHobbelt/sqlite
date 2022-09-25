@@ -14,6 +14,8 @@
 ** (defined in ext/async/sqlite3async.h) to Tcl.
 */
 
+#if defined(SQLITE_HAVE_TCL)
+
 #define TCL_THREADS 
 #if defined(INCLUDE_SQLITE_TCL_H)
 #  include "sqlite_tcl.h"
@@ -246,3 +248,5 @@ int Sqlitetestasync_Init(Tcl_Interp *interp){
 #endif  /* SQLITE_ENABLE_ASYNCIO */
   return TCL_OK;
 }
+
+#endif // defined(SQLITE_HAVE_TCL)

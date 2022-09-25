@@ -104,6 +104,12 @@ int rename_all_tables(
   return SQLITE_OK;
 }
 
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_atrc_main(cnt, arr)
+#endif
+
 /*
 ** Generate a script that does this:
 **

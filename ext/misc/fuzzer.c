@@ -141,6 +141,12 @@
 ** of the strings in the second or third column of the fuzzer data table
 ** is 50 bytes.  The maximum cost on a rule is 1000.
 */
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1
 

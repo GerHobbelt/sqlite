@@ -113,7 +113,9 @@
 **   operations.
 */
 
-#if !defined(SQLITE_TEST) || SQLITE_OS_UNIX
+#include "os_setup.h"
+
+#if defined(SQLITE_TEST) && SQLITE_OS_UNIX
 
 #include "sqlite3.h"
 

@@ -73,22 +73,39 @@
 **   logging proceeds as expected. Errors are logged by calling sqlite3_log().
 */
 
-#ifndef _SQLITE3_H_
-#include "sqlite3.h"
+#ifdef _WIN32
+#define _CRT_FUNCTIONS_REQUIRED  1
+#define _CRT_INTERNAL_NONSTDC_NAMES  1
 #endif
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
+#include "sqlite3.h"
+#include "os_setup.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 
 #include <sys/types.h>
+#if SQLITE_OS_UNIX
 #include <unistd.h>
-static int getProcessId(void){
-#if SQLITE_OS_WIN
-  return (int)_getpid();
 #else
-  return (int)getpid();
+#include <direct.h>
+#include <io.h>
+#include <process.h>
+#include <corecrt.h>
+#ifndef F_OK
+#define F_OK 0
 #endif
+#endif
+
+static int getProcessId(void){
+  return (int)getpid();
 }
 
 /* Names of environment variables to be used */

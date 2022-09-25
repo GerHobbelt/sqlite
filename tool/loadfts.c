@@ -21,11 +21,7 @@
 #include <assert.h>
 #include <string.h>
 #include <errno.h>
-#if !defined(_WIN32) && !defined(_WIN64)
-#include <dirent.h>
-#else
-#include <io.h>
-#endif
+#include <dirent.h>  // <-- requires the external dirent.h emulation header on Win32/64 platforms
 #include "sqlite3.h"
 
 /*
@@ -178,7 +174,7 @@ int main(int argc, const char **argv){
   VisitContext sCtx;
 
   int nCmd = 0;
-  char **aCmd = 0;
+  const char **aCmd = 0;
 
   if( argc % 2 ) showHelp(argv[0]);
 

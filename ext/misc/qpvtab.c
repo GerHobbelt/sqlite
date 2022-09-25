@@ -67,6 +67,12 @@
 **      AND c<>x'aabbcc'
 **    ORDER BY d, e DESC;
 */
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #if !defined(SQLITEINT_H)
 #include "sqlite3ext.h"
 #endif

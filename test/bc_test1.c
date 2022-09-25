@@ -160,7 +160,7 @@ static void *vfsWrapDlOpen(sqlite3_vfs *pVfs, const char *a){
 }
 static void vfsWrapDlError(sqlite3_vfs *pVfs, int a, char *b){
   Config *pConfig = (Config*)pVfs->pAppData;
-  return pConfig->pVfs->xDlError(pConfig->pVfs, a, b);
+  pConfig->pVfs->xDlError(pConfig->pVfs, a, b);
 }
 static void (*vfsWrapDlSym(sqlite3_vfs *pVfs, void *a, const char *b))(void){
   Config *pConfig = (Config*)pVfs->pAppData;
@@ -168,7 +168,7 @@ static void (*vfsWrapDlSym(sqlite3_vfs *pVfs, void *a, const char *b))(void){
 }
 static void vfsWrapDlClose(sqlite3_vfs *pVfs, void *a){
   Config *pConfig = (Config*)pVfs->pAppData;
-  return pConfig->pVfs->xDlClose(pConfig->pVfs, a);
+  pConfig->pVfs->xDlClose(pConfig->pVfs, a);
 }
 static int vfsWrapRandomness(sqlite3_vfs *pVfs, int a, char *b){
   Config *pConfig = (Config*)pVfs->pAppData;
@@ -308,7 +308,7 @@ static int vfsWrapShmLock(sqlite3_file *pFd, int offset, int n, int flags){
 }
 static void vfsWrapShmBarrier(sqlite3_file *pFd){
   VfsWrapperFd *pWrapper = (VfsWrapperFd*)pFd;
-  return pWrapper->pFd->pMethods->xShmBarrier(pWrapper->pFd);
+  pWrapper->pFd->pMethods->xShmBarrier(pWrapper->pFd);
 }
 static int vfsWrapShmUnmap(sqlite3_file *pFd, int a){
   VfsWrapperFd *pWrapper = (VfsWrapperFd*)pFd;
@@ -479,6 +479,11 @@ static char *thread_main(int iTid, void *pArg){
       (int)(pCtx->aTime[THREAD_TIME_CKPT]/1000)
   );
 }
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_bctest_main(cnt, arr)
+#endif
 
 int main(int argc, const char **argv){
   Error err = {0};                /* Error code and message */

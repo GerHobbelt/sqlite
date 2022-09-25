@@ -3,6 +3,11 @@
  * This is an SQLite module implementing full-text search.
  */
 
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #include <assert.h>
 #if !defined(__APPLE__)
 #include <malloc.h>

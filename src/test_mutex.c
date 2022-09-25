@@ -12,6 +12,8 @@
 ** This file contains test logic for the sqlite3_mutex interfaces.
 */
 
+#if defined(SQLITE_HAVE_TCL)
+
 #if defined(INCLUDE_SQLITE_TCL_H)
 #  include "sqlite_tcl.h"
 #else
@@ -508,3 +510,6 @@ int Sqlitetest_mutex_Init(Tcl_Interp *interp){
               (char*)&g.disableTry, TCL_LINK_INT);
   return SQLITE_OK;
 }
+
+#endif // defined(SQLITE_HAVE_TCL)
+

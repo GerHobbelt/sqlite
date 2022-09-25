@@ -6,17 +6,12 @@
 ** command line and passes them one by one into ossfuzz.c.
 */
 #include <stddef.h>
-#if !defined(_MSC_VER)
-# include <stdint.h>
-#endif
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "sqlite3.h"
 
-#if defined(_MSC_VER)
-typedef unsigned char uint8_t;
-#endif
 
 /*
 ** The entry point in ossfuzz.c that this routine will be calling
@@ -30,6 +25,11 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size);
 extern void ossfuzz_set_debug_flags(unsigned);
 
 
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_oss_shell_main(cnt, arr)
+#endif
 
 /*
 ** Read files named on the command-line and invoke the fuzzer for

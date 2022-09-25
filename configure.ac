@@ -464,6 +464,7 @@ else
   HAVE_TCL=1
 fi
 AC_SUBST(HAVE_TCL)
+AC_DEFINE(SQLITE_HAVE_TCL,test "x$HAVE_TCL" != "x",[Using TCL for additional tests and tooling])
 
 ##########
 # Figure out what C libraries are required to compile programs
@@ -579,6 +580,7 @@ AC_SUBST(USE_AMALGAMATION)
 AC_CHECK_HEADERS(zlib.h)
 AC_SEARCH_LIBS(deflate, z, [HAVE_ZLIB="-DSQLITE_HAVE_ZLIB=1"], [HAVE_ZLIB=""])
 AC_SUBST(HAVE_ZLIB)
+AC_DEFINE(SQLITE_HAVE_ZLIB,test "x$HAVE_ZLIB" != "x",[Support Deflate compression])
 
 #########
 # See whether we should allow loadable extensions

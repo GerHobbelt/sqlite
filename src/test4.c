@@ -12,6 +12,9 @@
 ** Code for testing the SQLite library in a multithreaded environment.
 */
 #include "sqliteInt.h"
+
+#if defined(SQLITE_HAVE_TCL)
+
 #if defined(INCLUDE_SQLITE_TCL_H)
 #  include "sqlite_tcl.h"
 #else
@@ -739,3 +742,5 @@ int Sqlitetest4_Init(Tcl_Interp *interp){
 #else
 int Sqlitetest4_Init(Tcl_Interp *interp){ return TCL_OK; }
 #endif /* SQLITE_OS_UNIX */
+
+#endif // defined(SQLITE_HAVE_TCL)

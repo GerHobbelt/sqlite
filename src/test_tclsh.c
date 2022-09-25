@@ -20,6 +20,9 @@
 ** in an effort to keep the tclsqlite.c file pure.
 */
 #include "sqlite3.h"
+
+#if defined(SQLITE_HAVE_TCL)
+
 #if defined(INCLUDE_SQLITE_TCL_H)
 # include "sqlite_tcl.h"
 #else
@@ -210,3 +213,5 @@ static int SQLITE_TCLAPI load_testfixture_extensions(
   (void)sqlite3TestInit(slave);
   return TCL_OK;
 }
+
+#endif // defined(SQLITE_HAVE_TCL)

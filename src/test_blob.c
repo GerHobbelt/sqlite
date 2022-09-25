@@ -12,6 +12,9 @@
 **
 */
 #include "sqliteInt.h"
+
+#if defined(SQLITE_HAVE_TCL)
+
 #if defined(INCLUDE_SQLITE_TCL_H)
 #  include "sqlite_tcl.h"
 #else
@@ -328,3 +331,5 @@ int Sqlitetest_blob_Init(Tcl_Interp *interp){
 #endif /* SQLITE_OMIT_INCRBLOB */
   return TCL_OK;
 }
+
+#endif // defined(SQLITE_HAVE_TCL)

@@ -11,6 +11,14 @@
 *************************************************************************
 ** Test extension for testing the sqlite3_auto_extension() function.
 */
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
+#if defined(SQLITE_HAVE_TCL)
+
 #if defined(INCLUDE_SQLITE_TCL_H)
 #  include "sqlite_tcl.h"
 #else
@@ -226,3 +234,5 @@ int Sqlitetest_autoext_Init(Tcl_Interp *interp){
           resetAutoExtObjCmd, 0, 0);
   return TCL_OK;
 }
+
+#endif // defined(SQLITE_HAVE_TCL)

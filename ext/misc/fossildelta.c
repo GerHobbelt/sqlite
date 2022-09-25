@@ -30,6 +30,12 @@
 ** provided as a convenience to developers who want to analyze RBU files 
 ** that contain deltas.
 */
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #include <string.h>
 #include <assert.h>
 #include <stdlib.h>

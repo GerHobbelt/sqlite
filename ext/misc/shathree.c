@@ -26,6 +26,12 @@
 ** is used.  If SIZE is included it must be one of the integers 224, 256,
 ** 384, or 512, to determine SHA3 hash variant that is computed.
 */
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1
 #include <assert.h>

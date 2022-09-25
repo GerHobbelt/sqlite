@@ -16,6 +16,10 @@
 #if defined(_WIN32) && defined(_MSC_VER) && !defined(SQLITE_WINDIRENT_H)
 #define SQLITE_WINDIRENT_H
 
+#include "dirent.h" // <-- provided by the dirent project
+
+#if !defined(DIRENT_H)
+
 /*
 ** We need several data types from the Windows SDK header.
 */
@@ -60,12 +64,16 @@
 #define S_ISLNK(mode) (0)
 #endif
 
+#endif // !defined(DIRENT_H)
+
+
 /*
 ** We may need to provide the "mode_t" type.
 */
 
-#ifndef MODE_T_DEFINED
+#if !defined(MODE_T_DEFINED) && !defined(_MODE_T_DEFINED)
   #define MODE_T_DEFINED
+  #define _MODE_T_DEFINED
   typedef unsigned short mode_t;
 #endif
 
@@ -73,10 +81,14 @@
 ** We may need to provide the "ino_t" type.
 */
 
-#ifndef INO_T_DEFINED
+#if !defined(INO_T_DEFINED) && !defined(_INO_T_DEFINED)
   #define INO_T_DEFINED
+  #define _INO_T_DEFINED
   typedef unsigned short ino_t;
 #endif
+
+
+#if !defined(DIRENT_H)
 
 /*
 ** We need to define "NAME_MAX" if it was not present in "limits.h".
@@ -90,6 +102,9 @@
 #  endif
 #endif
 
+#endif // !defined(DIRENT_H)
+
+
 /*
 ** We need to define "NULL_INTPTR_T" and "BAD_INTPTR_T".
 */
@@ -101,6 +116,9 @@
 #ifndef BAD_INTPTR_T
 #  define BAD_INTPTR_T ((intptr_t)(-1))
 #endif
+
+
+#if !defined(DIRENT_H)
 
 /*
 ** We need to provide the necessary structures and related types.
@@ -139,12 +157,19 @@ struct DIR {
 #  define is_filtered(a) ((((a).attrib)&_A_HIDDEN) || (((a).attrib)&_A_SYSTEM))
 #endif
 
+
+#endif // !defined(DIRENT_H)
+
+
 /*
 ** Provide the function prototype for the POSIX compatiable getenv()
 ** function.  This function is not thread-safe.
 */
 
 extern const char *windirent_getenv(const char *name);
+
+
+#if !defined(DIRENT_H)
 
 /*
 ** Finally, we can provide the function prototypes for the opendir(),
@@ -155,5 +180,7 @@ extern LPDIR opendir(const char *dirname);
 extern LPDIRENT readdir(LPDIR dirp);
 extern INT readdir_r(LPDIR dirp, LPDIRENT entry, LPDIRENT *result);
 extern INT closedir(LPDIR dirp);
+
+#endif // !defined(DIRENT_H)
 
 #endif /* defined(WIN32) && defined(_MSC_VER) */

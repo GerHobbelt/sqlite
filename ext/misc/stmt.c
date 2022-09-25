@@ -20,6 +20,12 @@
 **     .header on
 **     SELECT * FROM stmt;
 */
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_STMTVTAB)
 #if !defined(SQLITEINT_H)
 #include "sqlite3ext.h"

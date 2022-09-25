@@ -49,7 +49,11 @@
 **   .run
 **
 */
+#include "os_setup.h"
+
 #define TSERVER_PORTNUMBER 9999
+
+#if SQLITE_OS_UNIX
 
 #include <arpa/inet.h>
 #include <assert.h>
@@ -646,3 +650,5 @@ int main(int argc, const char **argv) {
 
   return 0;
 }
+
+#endif // SQLITE_OS_UNIX

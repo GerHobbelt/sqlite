@@ -13,6 +13,11 @@
 ** This file defines various limits of what SQLite can process.
 */
 
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 /*
 ** The maximum length of a TEXT or BLOB in bytes.   This also
 ** limits the size of a row in a table or index.

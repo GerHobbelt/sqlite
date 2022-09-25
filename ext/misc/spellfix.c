@@ -14,6 +14,12 @@
 ** to search a large vocabulary for close matches.  See separate
 ** documentation (http://www.sqlite.org/spellfix1.html) for details.
 */
+
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1
 

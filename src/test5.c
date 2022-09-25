@@ -17,6 +17,9 @@
 */
 #include "sqliteInt.h"
 #include "vdbeInt.h"
+
+#if defined(SQLITE_HAVE_TCL)
+
 #if defined(INCLUDE_SQLITE_TCL_H)
 #  include "sqlite_tcl.h"
 #else
@@ -218,3 +221,5 @@ int Sqlitetest5_Init(Tcl_Interp *interp){
   }
   return SQLITE_OK;
 }
+
+#endif // defined(SQLITE_HAVE_TCL)
