@@ -18,6 +18,16 @@
 ** See the showHelp() routine below for a brief description of how to
 ** run the utility.
 */
+
+/*
+** Include the configuration header output by 'configure' if we're using the
+** autoconf-based build
+*/
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite3_config.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>

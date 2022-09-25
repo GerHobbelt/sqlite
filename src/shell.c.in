@@ -9081,6 +9081,7 @@ DISPATCHABLE_COMMAND( lint 3 1 0 ){
   return 1;
 }
 
+CONDITION_COMMAND(load !defined(SQLITE_OMIT_LOAD_EXTENSION));
 DISPATCHABLE_COMMAND( load ? 2 3 ){
   const char *zFile, *zProc;
   char *zErrMsg = 0;
