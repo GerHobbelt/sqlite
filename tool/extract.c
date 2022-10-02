@@ -42,7 +42,7 @@ int main(int argc, const char **argv){
   got = fread(zBuf, 1, n, f);
   fclose(f);
   if( got<n ){
-    fprintf(stderr, "got only %d of %d bytes\n", got, n);
+    fprintf(stderr, "got only %d of %d bytes\n", (int)got, n);
     return 1;
   }else{
     fwrite(zBuf, 1, n, stdout);
