@@ -680,4 +680,4 @@ static const PragmaName aPragmaName[] = {
   /* iArg:      */ SQLITE_WriteSchema|SQLITE_NoSchemaError },
 #endif
 };
-/* Number of pragmas: 69 on by default, 79 total. */
+/* Number of pragmas: 69 on by default, 80 total. */
