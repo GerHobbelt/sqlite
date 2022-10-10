@@ -140,3 +140,6 @@
 
 /* Define for large files, on AIX-style hosts. */
 #undef _LARGE_FILES
+
+/* include the SQLite3 build feature settings */
+#include "sqlite_features_config.h"
