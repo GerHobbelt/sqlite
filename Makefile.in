@@ -648,10 +648,10 @@ all:	sqlite3.h libsqlite3.la sqlite3$(TEXE) $(HAVE_TCL:1=libtclsqlite3.la)
 Makefile: $(TOP)/Makefile.in
 	./config.status
 
-config.h: $(TOP)/config.h.in 
+config.h: $(TOP)/sqlite_cfg.h.in 
 	./config.status
 
-sqlite3_config.h: $(TOP)/config.h.in 
+sqlite3_config.h: $(TOP)/sqlite_cfg.h.in 
 	./config.status
 
 sqlite3.pc: $(TOP)/sqlite3.pc.in

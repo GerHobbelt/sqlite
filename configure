@@ -13052,7 +13052,7 @@ _ACEOF
 
 # Transform confdefs.h into an awk script `defines.awk', embedded as
 # here-document in config.status, that substitutes the proper values into
-# config.h.in to produce config.h.
+# sqlite_cfg.h.in to produce config.h.
 
 # Create a delimiter string that does not exist in confdefs.h, to ease
 # handling of long lines.
