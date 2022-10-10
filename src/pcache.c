@@ -639,6 +639,7 @@ void sqlite3PcacheMove(PgHdr *p, Pgno newPgno){
   p->pgno = newPgno;
   if( (p->flags&PGHDR_DIRTY) && (p->flags&PGHDR_NEED_SYNC) ){
     pcacheManageDirtyList(p, PCACHE_DIRTYLIST_FRONT);
+    assert( sqlite3PcachePageSanity(p) );
   }
 }
 
