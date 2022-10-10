@@ -651,7 +651,7 @@ Makefile: $(TOP)/Makefile.in
 config.h: $(TOP)/sqlite_cfg.h.in 
 	./config.status
 
-sqlite3_config.h: $(TOP)/sqlite_cfg.h.in 
+sqlite_cfg.h: $(TOP)/sqlite_cfg.h.in 
 	./config.status
 
 sqlite3.pc: $(TOP)/sqlite3.pc.in
@@ -761,7 +761,7 @@ mptest:	mptester$(TEXE)
 # files are automatically generated.  This target takes care of
 # all that automatic generation.
 #
-.target_source:	$(SRC) $(TOP)/tool/vdbe-compress.tcl fts5.c config.h sqlite3_config.h
+.target_source:	$(SRC) $(TOP)/tool/vdbe-compress.tcl fts5.c config.h sqlite_cfg.h
 	rm -rf tsrc
 	mkdir tsrc
 	cp -f $(SRC) tsrc

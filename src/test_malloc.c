@@ -1057,7 +1057,7 @@ static int SQLITE_TCLAPI test_db_config_lookaside(
 }
 
 /*
-** Usage:    sqlite3_config_heap NBYTE NMINALLOC
+** Usage:    sqlite_cfg.heap NBYTE NMINALLOC
 */
 static int SQLITE_TCLAPI test_config_heap(
   void * clientData, 
@@ -1094,7 +1094,7 @@ static int SQLITE_TCLAPI test_config_heap(
 }
 
 /*
-** Usage:    sqlite3_config_heap_size NBYTE
+** Usage:    sqlite_cfg.heap_size NBYTE
 */
 static int SQLITE_TCLAPI test_config_heap_size(
   void * clientData, 
@@ -1492,8 +1492,8 @@ int Sqlitetest_malloc_Init(Tcl_Interp *interp){
      { "sqlite3_status",             test_status                   ,0 },
      { "sqlite3_db_status",          test_db_status                ,0 },
      { "install_malloc_faultsim",    test_install_malloc_faultsim  ,0 },
-     { "sqlite3_config_heap",        test_config_heap              ,0 },
-     { "sqlite3_config_heap_size",   test_config_heap_size         ,0 },
+     { "sqlite_cfg.heap",        test_config_heap              ,0 },
+     { "sqlite_cfg.heap_size",   test_config_heap_size         ,0 },
      { "sqlite3_config_memstatus",   test_config_memstatus         ,0 },
      { "sqlite3_config_lookaside",   test_config_lookaside         ,0 },
      { "sqlite3_config_error",       test_config_error             ,0 },

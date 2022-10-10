@@ -842,11 +842,11 @@ ifcapable mem3 {
     catch {db close}
     sqlite3_reset_auto_extension
     sqlite3_shutdown
-    sqlite3_config_heap 25000000 0
+    sqlite_cfg.heap 25000000 0
     sqlite3_config_lookaside 0 0
     ifcapable mem5 {
       # If both memsys3 and memsys5 are enabled in the build, the call to
-      # [sqlite3_config_heap] will initialize the system to use memsys5.
+      # [sqlite_cfg.heap] will initialize the system to use memsys5.
       # The following overrides this preference and installs the memsys3
       # allocator.
       sqlite3_install_memsys3
@@ -857,7 +857,7 @@ ifcapable mem3 {
   } -shutdown {
     catch {db close}
     sqlite3_shutdown
-    sqlite3_config_heap 0 0
+    sqlite_cfg.heap 0 0
     sqlite3_config_lookaside 100 500
     install_malloc_faultsim 1 
     sqlite3_initialize
@@ -878,7 +878,7 @@ ifcapable mem5 {
   }] -initialize {
     catch {db close}
     sqlite3_shutdown
-    sqlite3_config_heap 25000000 64
+    sqlite_cfg.heap 25000000 64
     sqlite3_config_lookaside 0 0
     install_malloc_faultsim 1 
     sqlite3_initialize
@@ -886,7 +886,7 @@ ifcapable mem5 {
   } -shutdown {
     catch {db close}
     sqlite3_shutdown
-    sqlite3_config_heap 0 0
+    sqlite_cfg.heap 0 0
     sqlite3_config_lookaside 100 500
     install_malloc_faultsim 1 
     sqlite3_initialize
@@ -901,7 +901,7 @@ ifcapable mem5 {
     catch {db close}
     sqlite3_shutdown
     sqlite3_config_memstatus 0
-    sqlite3_config_heap 40000000 16
+    sqlite_cfg.heap 40000000 16
     sqlite3_config_lookaside 0 0
     install_malloc_faultsim 1 
     sqlite3_initialize
@@ -909,7 +909,7 @@ ifcapable mem5 {
   } -shutdown {
     catch {db close}
     sqlite3_shutdown
-    sqlite3_config_heap 0 0
+    sqlite_cfg.heap 0 0
     sqlite3_config_lookaside 100 500
     install_malloc_faultsim 1 
     sqlite3_initialize
