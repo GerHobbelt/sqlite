@@ -89,8 +89,10 @@ void sqlite3TableLock(
   u8 isWriteLock,    /* True for a write lock */
   const char *zName  /* Name of the table to be locked */
 ){
+#ifdef SQLITE_OMIT_CONCURRENT
   if( iDb==1 ) return;
   if( !sqlite3BtreeSharable(pParse->db->aDb[iDb].pBt) ) return;
+#endif
   lockTable(pParse, iDb, iTab, isWriteLock, zName);
 }
 

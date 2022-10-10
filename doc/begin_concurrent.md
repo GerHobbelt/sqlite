@@ -104,4 +104,3 @@ can also cause problems (as concurrent transactions may assign similar
 timestamps that will be stored on the same db page to new records). In these
 cases the database schema may need to be rethought to increase the concurrency
 provided by page-level-locking.
-
