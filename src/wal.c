@@ -4193,7 +4193,7 @@ int sqlite3WalLockForCommit(
       rc = SQLITE_BUSY_SNAPSHOT;
     }else if( memcmp(&pWal->hdr, (void*)&head, sizeof(WalIndexHdr))!=0 ){
       int bWal2 = isWalMode2(pWal);
-      int iHash;
+      u32 iHash;
       int nLoop = 1+(bWal2 && walidxGetFile(&head)!=walidxGetFile(&pWal->hdr));
       int iLoop;
 
@@ -4505,7 +4505,7 @@ static int walRestartLog(Wal *pWal){
 
   if( isWalMode2(pWal) ){
     int iApp = walidxGetFile(&pWal->hdr);
-    int nWalSize = WAL_DEFAULT_WALSIZE;
+    u32 nWalSize = WAL_DEFAULT_WALSIZE;
     if( pWal->mxWalSize>0 ){
       nWalSize = (pWal->mxWalSize-WAL_HDRSIZE+pWal->szPage+WAL_FRAME_HDRSIZE-1) 
         / (pWal->szPage+WAL_FRAME_HDRSIZE);
