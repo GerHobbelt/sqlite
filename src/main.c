@@ -3301,7 +3301,7 @@ static int openDatabase(
 #if !defined(SQLITE_DEFAULT_AUTOMATIC_INDEX) || SQLITE_DEFAULT_AUTOMATIC_INDEX
                  | SQLITE_AutoIndex
 #endif
-#if SQLITE_DEFAULT_CKPTFULLFSYNC
+#ifdef SQLITE_DEFAULT_CKPTFULLFSYNC
                  | SQLITE_CkptFullFSync
 #endif
 #if SQLITE_DEFAULT_FILE_FORMAT<4

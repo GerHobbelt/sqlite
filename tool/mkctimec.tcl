@@ -90,7 +90,6 @@ set boolean_defnnz_options {
   {SQLITE_POWERSAFE_OVERWRITE 1}
   {SQLITE_DEFAULT_MEMSTATUS 1}
   {SQLITE_OMIT_TRACE 1}
-  {SQLITE_ALLOW_COVERING_INDEX_SCAN 1}
 }
 
 # All Boolean compile time options which default to 0 or empty.
@@ -286,6 +285,7 @@ set value2_options {
 # and is a single scalar.
 #
 set value_options {
+  SQLITE_ALLOW_COVERING_INDEX_SCAN
   SQLITE_ATOMIC_INTRINSICS
   SQLITE_BITMASK_TYPE
   SQLITE_DEFAULT_CACHE_SIZE
