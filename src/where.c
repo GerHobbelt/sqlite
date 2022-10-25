@@ -2287,24 +2287,12 @@ static void whereInfoFree(sqlite3 *db, WhereInfo *pWInfo){
     pWInfo->pLoops = p->pNextLoop;
     whereLoopDelete(db, p);
   }
-  assert( pWInfo->pExprMods==0 );
   while( pWInfo->pMemToFree ){
     WhereMemBlock *pNext = pWInfo->pMemToFree->pNext;
     sqlite3DbNNFreeNN(db, pWInfo->pMemToFree);
     pWInfo->pMemToFree = pNext;
   }
   sqlite3DbNNFreeNN(db, pWInfo);
-}
-
-/* Undo all Expr node modifications
-*/
-static void whereUndoExprMods(WhereInfo *pWInfo){
-  while( pWInfo->pExprMods ){
-    WhereExprMod *p = pWInfo->pExprMods;
-    pWInfo->pExprMods = p->pNext;
-    memcpy(p->pExpr, &p->orig, sizeof(p->orig));
-    sqlite3DbFree(pWInfo->pParse->db, p);
-  }
 }
 
 /*
@@ -5425,10 +5413,16 @@ static SQLITE_NOINLINE void whereAddIndexedExpr(
   for(i=0; i<pIdx->nColumn; i++){
     Expr *pExpr;
     int j = pIdx->aiColumn[i];
+    int bMaybeNullRow;
     if( j==XN_EXPR ){
       pExpr = pIdx->aColExpr->a[i].pExpr;
+      testcase( pTabItem->fg.jointype & JT_LEFT );
+      testcase( pTabItem->fg.jointype & JT_RIGHT );
+      testcase( pTabItem->fg.jointype & JT_LTORJ );
+      bMaybeNullRow = (pTabItem->fg.jointype & (JT_LEFT|JT_LTORJ|JT_RIGHT))!=0;
     }else if( j>=0 && (pTab->aCol[j].colFlags & COLFLAG_VIRTUAL)!=0 ){
       pExpr = sqlite3ColumnExpr(pTab, &pTab->aCol[j]);
+      bMaybeNullRow = 0;
     }else{
       continue;
     }
@@ -5440,7 +5434,7 @@ static SQLITE_NOINLINE void whereAddIndexedExpr(
     p->iDataCur = pTabItem->iCursor;
     p->iIdxCur = iIdxCur;
     p->iIdxCol = i;
-    p->bMaybeNullRow = (pTabItem->fg.jointype & (JT_LEFT|JT_LTORJ))!=0;
+    p->bMaybeNullRow = bMaybeNullRow;
 #ifdef SQLITE_ENABLE_EXPLAIN_COMMENTS
     p->zIdxName = pIdx->zName;
 #endif
@@ -5614,7 +5608,9 @@ WhereInfo *sqlite3WhereBegin(
   pWInfo->pParse = pParse;
   pWInfo->pTabList = pTabList;
   pWInfo->pOrderBy = pOrderBy;
+#if WHERETRACE_ENABLED
   pWInfo->pWhere = pWhere;
+#endif
   pWInfo->pResultSet = pResultSet;
   pWInfo->aiCurOnePass[0] = pWInfo->aiCurOnePass[1] = -1;
   pWInfo->nLevel = nTabList;
@@ -5996,7 +5992,7 @@ WhereInfo *sqlite3WhereBegin(
         op = OP_ReopenIdx;
       }else{
         iIndexCur = pParse->nTab++;
-        if( pIx->bHasExpr ){
+        if( pIx->bHasExpr && OptimizationEnabled(db, SQLITE_IndexedExpr) ){
           whereAddIndexedExpr(pParse, pIx, iIndexCur, pTabItem);
         }
       }
@@ -6121,8 +6117,6 @@ WhereInfo *sqlite3WhereBegin(
   /* Jump here if malloc fails */
 whereBeginError:
   if( pWInfo ){
-    testcase( pWInfo->pExprMods!=0 );
-    whereUndoExprMods(pWInfo);
     pParse->nQueryLoop = pWInfo->savedNQueryLoop;
     whereInfoFree(db, pWInfo);
   }
@@ -6341,7 +6335,6 @@ void sqlite3WhereEnd(WhereInfo *pWInfo){
   }
 
   assert( pWInfo->nLevel<=pTabList->nSrc );
-  if( pWInfo->pExprMods ) whereUndoExprMods(pWInfo);
   for(i=0, pLevel=pWInfo->a; i<pWInfo->nLevel; i++, pLevel++){
     int k, last;
     VdbeOp *pOp, *pLastOp;

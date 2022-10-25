@@ -1851,6 +1851,7 @@ struct sqlite3 {
 #define SQLITE_FlttnUnionAll  0x00800000 /* Disable the UNION ALL flattener */
    /* TH3 expects this value  ^^^^^^^^^^ See flatten04.test */
 #define SQLITE_SortIfFaster   0x01000000 /* ORDER BY using sorter if faster */
+#define SQLITE_IndexedExpr    0x02000000 /* Pull exprs from index when able */
 #define SQLITE_AllOpts        0xffffffff /* All optimizations */
 
 /*
@@ -2423,7 +2424,7 @@ struct Table {
 #ifndef SQLITE_OMIT_VIRTUALTABLE
 #  define IsVirtual(X)      ((X)->eTabType==TABTYP_VTAB)
 #  define ExprIsVtab(X)  \
-    ((X)->op==TK_COLUMN && (X)->y.pTab!=0 && (X)->y.pTab->eTabType==TABTYP_VTAB)
+   ((X)->op==TK_COLUMN && (X)->y.pTab->eTabType==TABTYP_VTAB)
 #else
 #  define IsVirtual(X)      0
 #  define ExprIsVtab(X)     0
