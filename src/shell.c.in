@@ -292,6 +292,18 @@ static unsigned numCommands;
 /* True if the timer is enabled */
 static int enableTimer = 0;
 
+/* A version of strcmp() that works with NULL values */
+static int cli_strcmp(const char *a, const char *b){
+  if( a==0 ) a = "";
+  if( b==0 ) b = "";
+  return strcmp(a,b);
+}
+static int cli_strncmp(const char *a, const char *b, size_t n){
+  if( a==0 ) a = "";
+  if( b==0 ) b = "";
+  return strncmp(a,b,n);
+}
+
 /* Return the current wall-clock time */
 static sqlite3_int64 timeOfDay(void){
   static sqlite3_vfs *clockVfs = 0;
