@@ -1158,7 +1158,6 @@ self.sqlite3ApiBootstrap = function sqlite3ApiBootstrap(
   */
   capi.sqlite3_web_db_export = function(pDb){
     if(!pDb) toss('Invalid sqlite3* argument.');
-    const wasm = wasm;
     if(!wasm.bigIntEnabled) toss('BigInt64 support is not enabled.');
     const stack = wasm.pstack.pointer;
     let pOut;
@@ -1335,7 +1334,20 @@ self.sqlite3ApiBootstrap = function sqlite3ApiBootstrap(
       //while(lip.length) p = p.then(lip.shift());
       //return p.then(()=>sqlite3);
       return Promise.all(lip).then(()=>sqlite3);
-    }
+    },
+    /**
+       scriptInfo ideally gets injected into this object by the
+       infrastructure which assembles the JS/WASM module. It contains
+       state which must be collected before sqlite3ApiBootstrap() can
+       be declared. It is not necessarily available to any
+       sqlite3ApiBootstrap.initializers but "should" be in place (if
+       it's added at all) by the time that
+       sqlite3ApiBootstrap.initializersAsync is processed.
+
+       This state is not part of the public API, only intended for use
+       with the sqlite3 API bootstrapping and wasm-loading process.
+    */
+    scriptInfo: undefined
   };
   try{
     sqlite3ApiBootstrap.initializers.forEach((f)=>{
@@ -1411,3 +1423,4 @@ self.sqlite3ApiBootstrap.defaultConfig = Object.create(null);
    value which will be stored here.
 */
 self.sqlite3ApiBootstrap.sqlite3 = undefined;
+
