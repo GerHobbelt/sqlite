@@ -2815,16 +2815,15 @@ static char *shell_error_context(const char *zSql, sqlite3 *db){
     zCode = sqlite3_mprintf("%.*s", len, zSql);
     for(i=0; zCode[i]; i++){ if( IsSpace(zSql[i]) ) zCode[i] = ' '; }
     if( iOffset<25 ){
-      zMsg = sqlite3_mprintf("\n  %z\n  %*s^--- error here",
-                             zCode, iOffset, "");
+      zMsg = sqlite3_mprintf("\n  %z\n  %*s^--- error here", zCode, iOffset, "");
     }else{
-      zMsg = sqlite3_mprintf("\n  %z\n  %*serror here ---^",
-                             zCode, iOffset-14, "");
+      zMsg = sqlite3_mprintf("\n  %z\n  %*serror here ---^",  zCode, iOffset-14, "");
     }
   }
   shell_check_oom(zMsg);
   return zMsg;
 }
+
 
 /*
 ** Execute a query statement that will generate SQL output.  Print
@@ -3997,8 +3996,7 @@ static int expertDotCommand(
   if( rc==SQLITE_OK ){
     pState->expert.pExpert = sqlite3_expert_new(pState->db, &zErr);
     if( pState->expert.pExpert==0 ){
-      raw_printf(stderr, "sqlite3_expert_new: %s\n",
-                 zErr ? zErr : "out of memory");
+      raw_printf(stderr, "sqlite3_expert_new: %s\n", zErr ? zErr : "out of memory");
       rc = SQLITE_ERROR;
     }else{
       sqlite3_expert_config(
@@ -4536,7 +4534,7 @@ static int showHelp(FILE *out, const char *zPattern){
    * zPattern anywhere. Show the complete text of all such commands.
    */
   zPat = sqlite3_mprintf("%%%s%%", zPattern);
-  if( zPat==0 ) shell_out_of_memory();
+  shell_check_oom(zPat);
   for(pzH = azHelp; *pzH != 0;){
     if( *pzH[0]=='.' ){
       pzHxtra = pzH;
@@ -5112,7 +5110,9 @@ static char *readline_completion_generator(const char *text, int state){
     if( z!=0 ){
       zRet = strdup(z);
       shell_check_oom(zRet);
-    }
+    }else{
+	  zRet = 0;
+	}
   }else{
     sqlite3_finalize(pStmt);
     pStmt = 0;
@@ -6080,6 +6080,7 @@ static void newTempFile(ShellState *p, const char *zSuffix){
   shell_check_oom(p->zTempFile);
 }
 
+
 /*
 ** The implementation of SQL scalar function fkey_collate_clause(), used
 ** by the ".lint fkey-indexes" command. This scalar function is always
@@ -6257,13 +6258,14 @@ static int lintFkeyIndexes(
       const char *zCI = (const char*)sqlite3_column_text(pSql, 4);
       const char *zParent = (const char*)sqlite3_column_text(pSql, 5);
 
-      if( zEQP==0 || zGlob==0 ) continue;
+      if( zEQP==0 ) continue;
+      if( zGlob==0 ) continue;
       rc = sqlite3_prepare_v2(db, zEQP, -1, &pExplain, 0);
       if( rc!=SQLITE_OK ) break;
       if( SQLITE_ROW==sqlite3_step(pExplain) ){
         const char *zPlan = (const char*)sqlite3_column_text(pExplain, 3);
         res = zPlan!=0 && (  0==sqlite3_strglob(zGlob, zPlan)
-                             || 0==sqlite3_strglob(zGlobIPK, zPlan));
+                          || 0==sqlite3_strglob(zGlobIPK, zPlan));
       }
       rc = sqlite3_finalize(pExplain);
       if( rc!=SQLITE_OK ) break;
@@ -7747,8 +7749,8 @@ DISPATCHABLE_COMMAND( binary 3 2 2 ){
   return 0;
 }
 
-/* The undocumented ".breakpoint" command causes a call
-** to the no-op routine named test_breakpoint().
+/* The undocumented ".breakpoint" command causes a call to the no-op
+** routine named test_breakpoint().
 */
 DISPATCHABLE_COMMAND( breakpoint 3 1 1 ){
   test_breakpoint();
@@ -8151,7 +8153,7 @@ DISPATCHABLE_COMMAND( explain ? 1 2 ){
   /* The ".explain" command is automatic now.  It is largely pointless.  It
   ** retained purely for backwards compatibility */
   int val = 1;
-  if( nArg>1 ){
+  if( nArg>=2 ){
     if( cli_strcmp(azArg[1],"auto")==0 ){
       val = 99;
     }else{
@@ -9979,7 +9981,8 @@ DISPATCHABLE_COMMAND( restore ? 2 3 ){
   sqlite3_backup *pBackup;
   int nTimeout = 0;
 
-  if( p->bSafeMode ) return SHELL_FORBIDDEN_OP;
+  if( p->bSafeMode )
+    return SHELL_FORBIDDEN_OP;
   if( nArg==2 ){
     zSrcFile = azArg[1];
     zDb = "main";
@@ -10235,7 +10238,7 @@ DISPATCHABLE_COMMAND( session 3 2 0 ){
   int rc = 0;
   struct AuxDb *pAuxDb = p->pAuxDb;
   OpenSession *pSession = &pAuxDb->aSession[0];
-    const char **azCmd = &azArg[1];
+  const char **azCmd = &azArg[1];
   int iSes = 0;
   int nCmd = nArg - 1;
   int i;
@@ -10349,9 +10352,7 @@ DISPATCHABLE_COMMAND( session 3 2 0 ){
               sqlite3_free(pSession->azFilter);
               nByte = sizeof(pSession->azFilter[0])*(nCmd-1);
               pSession->azFilter = sqlite3_malloc( nByte );
-              if( pSession->azFilter==0 ){
-                shell_out_of_memory();
-              }
+              shell_check_oom(pSession->azFilter);
               for(ii=1; ii<nCmd; ii++){
                 pSession->azFilter[ii-1] = sqlite3_mprintf("%s", azCmd[ii]);
                 shell_check_oom(pSession->azFilter[ii-1]);
@@ -11776,7 +11777,6 @@ static QuickScanState quickscan(char *zLine, QuickScanState qss){
           goto TermScan;
         }
         break;
-
       case '[':
         cin = ']';
         /* fall thru */
@@ -11799,7 +11799,6 @@ static QuickScanState quickscan(char *zLine, QuickScanState qss){
             continue;
           ++zLine;
           cWait = 0;
-
           qss = QSS_SETV(qss, 0);
           goto PlainScan;
         case '`': case '\'': case '"':
@@ -12469,7 +12468,7 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
     shell_check_oom(z);
     n = strlen(z);
     argv[i] = malloc( n+1 );
-    if( argv[i]==0 ) shell_out_of_memory();
+    shell_check_oom(argv[i]);
     memcpy(argv[i], z, n+1);
     argvToFree[i] = argv[i];
     sqlite3_free(z);
