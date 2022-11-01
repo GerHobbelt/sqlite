@@ -280,6 +280,22 @@ static RecoverGlobal recover_g;
 */
 #define RECOVER_ROWID_DEFAULT 1
 
+#if defined(SQLITE_THREADSAFE) && SQLITE_THREADSAFE==0
+# define recoverEnterMutex()
+# define recoverLeaveMutex()
+# define recoverAssertMutexHeld()
+#else
+static void recoverEnterMutex(void){
+  sqlite3_mutex_enter(sqlite3_mutex_alloc(RECOVER_MUTEX_ID));
+}
+static void recoverLeaveMutex(void){
+  sqlite3_mutex_leave(sqlite3_mutex_alloc(RECOVER_MUTEX_ID));
+}
+static void recoverAssertMutexHeld(void){
+  assert( sqlite3_mutex_held(sqlite3_mutex_alloc(RECOVER_MUTEX_ID)) );
+}
+#endif
+
 
 /*
 ** Like strlen(). But handles NULL pointer arguments.
@@ -474,7 +490,7 @@ static sqlite3_stmt *recoverPreparePrintf(
 */
 static sqlite3_stmt *recoverReset(sqlite3_recover *p, sqlite3_stmt *pStmt){
   int rc = sqlite3_reset(pStmt);
-  if( rc!=SQLITE_OK && p->errCode==SQLITE_OK ){
+  if( rc!=SQLITE_OK && rc!=SQLITE_CONSTRAINT && p->errCode==SQLITE_OK ){
     recoverDbError(p, sqlite3_db_handle(pStmt));
   }
   return pStmt;
@@ -2019,14 +2035,14 @@ static u32 recoverGetU32(const u8 *a){
 ** and return the number of bytes consumed.
 */
 static int recoverGetVarint(const u8 *a, i64 *pVal){
-  sqlite3_int64 v = 0;
+  sqlite3_uint64 u = 0;
   int i;
   for(i=0; i<8; i++){
-    v = (v<<7) + (a[i]&0x7f);
-    if( (a[i]&0x80)==0 ){ *pVal = v; return i+1; }
+    u = (u<<7) + (a[i]&0x7f);
+    if( (a[i]&0x80)==0 ){ *pVal = (sqlite3_int64)u; return i+1; }
   }
-  v = (v<<8) + (a[i]&0xff);
-  *pVal = v;
+  u = (u<<8) + (a[i]&0xff);
+  *pVal = (sqlite3_int64)u;
   return 9;
 }
 
@@ -2245,7 +2261,7 @@ static int recoverVfsDetectPagesize(
         }
       }
     }
-    if( pgsz>p->detected_pgsz ){
+    if( pgsz>(u32)p->detected_pgsz ){
       p->detected_pgsz = pgsz;
       p->nReserve = nReserve;
     }
@@ -2322,7 +2338,6 @@ static int recoverVfsRead(sqlite3_file *pFd, void *aBuf, int nByte, i64 iOff){
       rc = pFd->pMethods->xFileSize(pFd, &dbFileSize);
 
       if( rc==SQLITE_OK && p->detected_pgsz==0 ){
-        u32 pgsz2 = 0;
         rc = recoverVfsDetectPagesize(p, pFd, nReserve, dbFileSize);
       }
       if( p->detected_pgsz ){
@@ -2431,7 +2446,7 @@ static int recoverVfsCheckReservedLock(sqlite3_file *pFd, int *pResOut){
 }
 static int recoverVfsFileControl(sqlite3_file *pFd, int op, void *pArg){
   RECOVER_VFS_WRAPPER (
-      pFd->pMethods->xFileControl(pFd, op, pArg)
+    (pFd->pMethods ?  pFd->pMethods->xFileControl(pFd, op, pArg) : SQLITE_NOTFOUND)
   );
 }
 static int recoverVfsSectorSize(sqlite3_file *pFd){
@@ -2479,11 +2494,14 @@ static int recoverVfsShmUnmap(sqlite3_file *pFd, int deleteFlag){
 static void recoverInstallWrapper(sqlite3_recover *p){
   sqlite3_file *pFd = 0;
   assert( recover_g.pMethods==0 );
-  assert( sqlite3_mutex_held( sqlite3_mutex_alloc(RECOVER_MUTEX_ID) ) );
+  recoverAssertMutexHeld();
   sqlite3_file_control(p->dbIn, p->zDb, SQLITE_FCNTL_FILE_POINTER, (void*)&pFd);
-  if( pFd ){
+  assert( pFd==0 || pFd->pMethods!=&recover_methods );
+  if( pFd && pFd->pMethods ){
+    int iVersion = 1 + (pFd->pMethods->iVersion>1 && pFd->pMethods->xShmMap!=0);
     recover_g.pMethods = pFd->pMethods;
     recover_g.p = p;
+    recover_methods.iVersion = iVersion;
     pFd->pMethods = &recover_methods;
   }
 }
@@ -2494,11 +2512,10 @@ static void recoverInstallWrapper(sqlite3_recover *p){
 ** held when this function is called.
 */
 static void recoverUninstallWrapper(sqlite3_recover *p){
-  assert( sqlite3_mutex_held( sqlite3_mutex_alloc(RECOVER_MUTEX_ID) ) );
-  if( recover_g.pMethods ){
-    sqlite3_file *pFd = 0;
-    sqlite3_file_control(p->dbIn, p->zDb,SQLITE_FCNTL_FILE_POINTER,(void*)&pFd);
-    assert( pFd );
+  recoverAssertMutexHeld();
+  sqlite3_file *pFd = 0;
+  sqlite3_file_control(p->dbIn, p->zDb,SQLITE_FCNTL_FILE_POINTER,(void*)&pFd);
+  if( pFd && pFd->pMethods ){
     pFd->pMethods = recover_g.pMethods;
     recover_g.pMethods = 0;
     recover_g.p = 0;
@@ -2519,7 +2536,7 @@ static void recoverStep(sqlite3_recover *p){
       recoverSqlCallback(p, "BEGIN");
       recoverSqlCallback(p, "PRAGMA writable_schema = on");
 
-      sqlite3_mutex_enter( sqlite3_mutex_alloc(RECOVER_MUTEX_ID) );
+      recoverEnterMutex();
       recoverInstallWrapper(p);
 
       /* Open the output database. And register required virtual tables and 
@@ -2536,7 +2553,7 @@ static void recoverStep(sqlite3_recover *p){
       recoverCacheSchema(p);
 
       recoverUninstallWrapper(p);
-      sqlite3_mutex_leave( sqlite3_mutex_alloc(RECOVER_MUTEX_ID) );
+      recoverLeaveMutex();
 
       recoverExec(p, p->dbOut, "BEGIN");
 
@@ -2801,4 +2818,3 @@ int sqlite3_recover_finish(sqlite3_recover *p){
   }
   return rc;
 }
-
