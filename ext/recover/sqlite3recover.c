@@ -2010,8 +2010,13 @@ static void recoverFinalCleanup(sqlite3_recover *p){
   p->pGetPage = 0;
 
   {
-    int res = sqlite3_close(p->dbOut);
+#ifdef SQLITE_DEBUG
+    int res = 
+#endif
+       sqlite3_close(p->dbOut);
+#ifdef SQLITE_DEBUG
     assert( res==SQLITE_OK );
+#endif
   }
   p->dbOut = 0;
 }
@@ -2687,7 +2692,7 @@ sqlite3_recover *recoverInit(
     pRet->zDb = (char*)&pRet[1];
     pRet->zUri = &pRet->zDb[nDb+1];
     memcpy(pRet->zDb, zDb, nDb);
-    if( nUri>0 ) memcpy(pRet->zUri, zUri, nUri);
+    if( nUri>0 && zUri ) memcpy(pRet->zUri, zUri, nUri);
     pRet->xSql = xSql;
     pRet->pSqlCtx = pSqlCtx;
     pRet->bRecoverRowid = RECOVER_ROWID_DEFAULT;
