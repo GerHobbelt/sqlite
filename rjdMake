@@ -27,8 +27,6 @@ function create_amiga_SDK_package
     SDK_DIRS=(
 	"local/${C_LIB}/bin"
 	"local/${C_LIB}/lib"
-	"local/${C_LIB}/share/libxml2/man"
-	"local/${C_LIB}/share/libxml2/doc"
 	"local/common/include"
     )
 
@@ -37,7 +35,7 @@ function create_amiga_SDK_package
 	mkdir -p "${sdk_dir}"
 	find "${INSTALL_PREFIX}" -type d -iname "$(basename ${sdk_dir})" -exec cp -r {}/. "${sdk_dir}" \;
     done
-    lha a libxml2.lha local/
+    lha a libsqlite3.lha local/
 
 }
 
@@ -52,12 +50,12 @@ function create_amiga_SDK_package
     LDFLAGS="-static -athread=native -mcrt=${C_LIB}"
 # Read rjdInclude.h
 
-# make -j$(nproc) || { echo 1>&2 "ERROR: Failed to build LIBXML2" ; exit 1; }
+make -j$(nproc) || { echo 1>&2 "ERROR: Failed to build LIBXML2" ; exit 1; }
 
-# make install
+make install
 
-# create_amiga_SDK_package
+create_amiga_SDK_package
 
-#echo "FINISHED. See libxml2.lha"
+echo "FINISHED. See libsqlite3.lha"
 
 exit 0
