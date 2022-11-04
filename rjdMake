@@ -1,0 +1,63 @@
+#!/bin/bash --
+
+C_LIB=clib2
+# Too lazy to use getopts!
+if (( ${#} > 0 ))
+then
+    if [[ "${1}" == "clib=newlib" ]]
+    then
+	C_LIB=newlib
+    elif [[ "${1}" != "clib=clib2" ]]
+    then
+	echo "Could not understand argumet ${1}. Only clib=<newlib|clib2[default]> is understood" 1>&2
+	exit 1
+    fi
+fi
+INSTALL_PREFIX="$(pwd)/installAmiga_${C_LIB}"
+
+which ppc-amigaos-gcc 1>/dev/null 2>&1 || { echo "ppc-amigaos-* binaries not found. Check your path" ; exit 1 ; }
+if [[ "Linux" != "$(uname)" ]]
+then
+    echo "Expected the BUILD machine to be Linux"
+    exit 1
+fi
+
+function create_amiga_SDK_package
+{
+    SDK_DIRS=(
+	"local/${C_LIB}/bin"
+	"local/${C_LIB}/lib"
+	"local/${C_LIB}/share/libxml2/man"
+	"local/${C_LIB}/share/libxml2/doc"
+	"local/common/include"
+    )
+
+    for sdk_dir in "${SDK_DIRS[@]}"
+    do
+	mkdir -p "${sdk_dir}"
+	find "${INSTALL_PREFIX}" -type d -iname "$(basename ${sdk_dir})" -exec cp -r {}/. "${sdk_dir}" \;
+    done
+    lha a libxml2.lha local/
+
+}
+
+./configure \
+    --host=ppc-amigaos \
+    --prefix="${INSTALL_PREFIX}" \
+    --disable-shared \
+    --enable-static \
+    CFLAGS="-mcrt=${C_LIB}" \
+    CPPFLAGS="-mcrt=${C_LIB} -include rjdInclude.h" \
+    CXXFLAGS="-mcrt=${C_LIB}" \
+    LDFLAGS="-static -athread=native -mcrt=${C_LIB}"
+# Read rjdInclude.h
+
+# make -j$(nproc) || { echo 1>&2 "ERROR: Failed to build LIBXML2" ; exit 1; }
+
+# make install
+
+# create_amiga_SDK_package
+
+#echo "FINISHED. See libxml2.lha"
+
+exit 0
