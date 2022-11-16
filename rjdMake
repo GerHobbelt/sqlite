@@ -1,12 +1,14 @@
 #!/bin/bash --
 
 C_LIB=clib2
+_CPPFLAGS=
 # Too lazy to use getopts!
 if (( ${#} > 0 ))
 then
     if [[ "${1}" == "clib=newlib" ]]
     then
 	C_LIB=newlib
+	_CPPFLAGS="-DSQLITE_MAX_MMAP_SIZE=0 -DSQLITE_OMIT_WAL -DSQLITE_OMIT_LOAD_EXTENSION"
     elif [[ "${1}" != "clib=clib2" ]]
     then
 	echo "Could not understand argumet ${1}. Only clib=<newlib|clib2[default]> is understood" 1>&2
@@ -45,7 +47,7 @@ function create_amiga_SDK_package
     --disable-shared \
     --enable-static \
     CFLAGS="-mcrt=${C_LIB}" \
-    CPPFLAGS="-mcrt=${C_LIB} -include rjdInclude.h" \
+    CPPFLAGS="-mcrt=${C_LIB} -include rjdInclude.h ${_CPPFLAGS}" \
     CXXFLAGS="-mcrt=${C_LIB}" \
     LDFLAGS="-static -athread=native -mcrt=${C_LIB}"
 # Read rjdInclude.h
