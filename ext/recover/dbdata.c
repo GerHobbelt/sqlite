@@ -88,6 +88,8 @@ SQLITE_EXTENSION_INIT1
 #include <string.h>
 #include <assert.h>
 
+#ifndef SQLITE_OMIT_VIRTUALTABLE
+
 #define DBDATA_PADDING_BYTES 100 
 
 typedef struct DbdataTable DbdataTable;
@@ -941,3 +943,5 @@ int sqlite3_dbdata_init(
   SQLITE_EXTENSION_INIT2(pApi);
   return sqlite3DbdataRegister(db);
 }
+
+#endif /* ifndef SQLITE_OMIT_VIRTUALTABLE */
