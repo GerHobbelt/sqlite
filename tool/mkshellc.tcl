@@ -647,12 +647,12 @@ array set ::typedefsSeen {}
 # Return whether anything changed.
 proc transform_line {lineVar nesting} {
   upvar $lineVar line
-  if {[regexp {^typedef .*;} $line]} {
-    if {[info exists ::typedefsSeen($line)]} {
-      set line "/* $line */"
+  if {[regexp {^typedef .*\y([a-zA-Z0-9_]+);} $line all typename]} {
+    if {[info exists ::typedefsSeen($typename)]} {
+      set line "/* [string map {/* // */ //} $line] */"
       return 1
     }
-    set ::typedefsSeen($line) 1
+    set typedefsSeen($typename) 1
     return 0
   } elseif {$nesting == 0} {
     return 0
