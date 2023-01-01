@@ -69,6 +69,10 @@ static void do_some_sql(int parent){
 }
 
 
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_crashtest1_main(cnt, arr)
+#endif
+
 int main(int argc, const char **argv){
   int i;
   sqlite3 *db;
