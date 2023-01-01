@@ -1276,7 +1276,13 @@ static void unrecognizedArguments(
   exit(1);
 }
 
-int SQLITE_CDECL main(int argc, char **argv){
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_mptest_main(cnt, arr)
+#endif
+
+int SQLITE_CDECL main(int argc, const char **argv){
   const char *zClient;
   int iClient;
   int n, i;
