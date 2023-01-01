@@ -618,16 +618,6 @@ void sqlite3VdbeRegisterDump(Vdbe *v){
 #endif
 
 
-#ifdef VDBE_PROFILE
-
-/* 
-** hwtime.h contains inline assembler code for implementing 
-** high-performance timing routines.
-*/
-#include "hwtime.h"
-
-#endif
-
 #ifndef NDEBUG
 /*
 ** This function is only called from within an assert() expression. It
@@ -5630,6 +5620,7 @@ case OP_Insert: {
     x.nZero = 0;
   }
   x.pKey = 0;
+  assert( BTREE_PREFORMAT==OPFLAG_PREFORMAT );
   rc = sqlite3BtreeInsert(pC->uc.pCursor, &x,
       (pOp->p5 & (OPFLAG_APPEND|OPFLAG_SAVEPOSITION|OPFLAG_PREFORMAT)), 
       seekResult

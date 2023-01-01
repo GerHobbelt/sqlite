@@ -682,18 +682,18 @@ struct BtCursor {
 ** So, this macro is defined instead.
 */
 #ifdef SQLITE_OMIT_AUTOVACUUM
-#define ISAUTOVACUUM 0
+#define ISAUTOVACUUM(pBt) 0
 #else
-#define ISAUTOVACUUM (pBt->autoVacuum)
+#define ISAUTOVACUUM(pBt) (pBt->autoVacuum)
 #endif
 
 #ifdef SQLITE_OMIT_CONCURRENT
-# define ISCONCURRENT 0
+# define ISCONCURRENT(pBt) 0
 #else
-# define ISCONCURRENT (pBt->pMap!=0)
+# define ISCONCURRENT(pBt) (pBt->pMap!=0)
 #endif
 
-#define REQUIRE_PTRMAP (ISAUTOVACUUM || ISCONCURRENT)
+#define REQUIRE_PTRMAP(pBt) (ISAUTOVACUUM(pBt) || ISCONCURRENT(pBt))
 
 /*
 ** This structure is passed around through all the sanity checking routines
