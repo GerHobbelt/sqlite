@@ -70,9 +70,9 @@
 /* Global data
 */
 static struct Global {
-  char *argv0;           /* Name of the executable */
+  const char *argv0;     /* Name of the executable */
   const char *zVfs;      /* Name of VFS to use. Often NULL meaning "default" */
-  char *zDbFile;         /* Name of the database */
+  const char *zDbFile;   /* Name of the database */
   sqlite3 *db;           /* Open connection to database */
   char *zErrLog;         /* Filename for error log */
   FILE *pErrLog;         /* Where to write errors */
@@ -833,7 +833,7 @@ static void waitForClient(int iClient, int iTimeout, char *zErrPrefix){
 
 /* Return a pointer to the tail of a filename
 */
-static char *filenameTail(char *z){
+static const char *filenameTail(const char *z){
   int i, j;
   for(i=j=0; z[i]; i++) if( isDirSep(z[i]) ) j = i+1;
   return z+j;
@@ -873,7 +873,7 @@ static void runScript(
   int iClient,       /* The client number, or 0 for the master */
   int taskId,        /* The task ID for clients.  0 for master */
   char *zScript,     /* Text of the script */
-  char *zFilename    /* File from which script was read. */
+  const char *zFilename    /* File from which script was read. */
 ){
   int lineno = 1;
   int prevLine = 1;
