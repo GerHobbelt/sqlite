@@ -19,7 +19,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+
 #include "sqlite3.h"
+#include "sqliteInt.h"
 
 /*
 ** Extra command-line arguments:

@@ -3,6 +3,7 @@
 
 #include "sqlite3session.h"
 #include "sqlite3changebatch.h"
+#include "sqlite3.h"
 
 #include <assert.h>
 #include <string.h>
@@ -11,6 +12,8 @@ typedef struct BatchTable BatchTable;
 typedef struct BatchIndex BatchIndex;
 typedef struct BatchIndexEntry BatchIndexEntry;
 typedef struct BatchHash BatchHash;
+
+typedef struct sqlite3_changeset_iter sqlite3_changeset_iter;
 
 struct sqlite3_changebatch {
   sqlite3 *db;                    /* Database handle used to read schema */

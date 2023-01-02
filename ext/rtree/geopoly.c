@@ -18,6 +18,18 @@
 */
 #include <stdlib.h>
 
+#include "sqlite3.h"
+
+typedef struct Rtree Rtree;
+typedef struct RtreeCursor RtreeCursor;
+typedef struct RtreeNode RtreeNode;
+typedef struct RtreeCell RtreeCell;
+typedef struct RtreeConstraint RtreeConstraint;
+typedef struct RtreeMatchArg RtreeMatchArg;
+typedef struct RtreeGeomCallback RtreeGeomCallback;
+typedef union RtreeCoord RtreeCoord;
+typedef struct RtreeSearchPoint RtreeSearchPoint;
+
 /* Enable -DGEOPOLY_ENABLE_DEBUG for debugging facilities */
 #ifdef GEOPOLY_ENABLE_DEBUG
   static int geo_debug = 0;

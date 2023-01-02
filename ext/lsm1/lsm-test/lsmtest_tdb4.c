@@ -5,7 +5,9 @@
 
 #include "lsmtest_tdb.h"
 #include "lsmtest.h"
+#ifndef WIN32
 #include <unistd.h>
+#endif
 #include "bt.h"
 
 #include <pthread.h>

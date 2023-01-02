@@ -685,6 +685,11 @@ sqlite3$(TEXE):	shell.c sqlite3.c
 		shell.c sqlite3.c \
 		$(LIBREADLINE) $(TLIBS) -rpath "$(libdir)"
 
+sqlite3r$(TEXE):	shell.c sqlite3r.c
+	$(LTLINK) $(READLINE_FLAGS) $(SHELL_OPT) -o $@ \
+		shell.c sqlite3r.c \
+		$(LIBREADLINE) $(TLIBS) -rpath "$(libdir)"
+
 sqldiff$(TEXE):	$(TOP)/tool/sqldiff.c sqlite3.lo sqlite3.h
 	$(LTLINK) -o $@ $(TOP)/tool/sqldiff.c sqlite3.lo $(TLIBS)
 
@@ -796,6 +801,9 @@ sqlite3r.c: sqlite3.c sqlite3r.h
 	cp $(TOP)/ext/recover/sqlite3recover.h tsrc/
 	cp $(TOP)/ext/recover/dbdata.c tsrc/
 	$(TCLSH_CMD) $(TOP)/tool/mksqlite3c.tcl --enable-recover $(AMALGAMATION_LINE_MACROS)
+
+sqlite3internal.h: sqlite3.h tsrc/sqliteInt.h
+	$(TCLSH_CMD) $(TOP)/tool/mksqlite3internalh.tcl
 
 sqlite3ext.h:	.target_source
 	cp tsrc/sqlite3ext.h .
@@ -1546,6 +1554,8 @@ clean:
 	-rm -f mksourceid$(BEXE)
 	-rm -f sqlite3.dll sqlite3.lib sqlite3.exp sqlite3.def
 	-rm -f sqlite3.c
+	-rm -f sqlite3r.c
+	-rm -f sqlite3r.h
 	-rm -f sqlite3internal.h
 	-rm -f sqlite3-*.c
 	-rm -f sqlite3_checker.c sqltclsh.c
@@ -1591,3 +1601,43 @@ sqlite3.dll: $(REAL_LIBOBJ) sqlite3.def
 #
 fiddle: sqlite3.c shell.c
 	make -C ext/wasm fiddle emcc_opt=-Os
+
+#
+# the collected executables
+#
+exe:                            \
+	LogEst$(TEXE)           \
+	changeset$(TEXE)        \
+	changesetfuzz$(TEXE)    \
+	dbdump$(TEXE)           \
+	dbfuzz$(TEXE)           \
+	dbfuzz2$(TEXE)          \
+	dbhash$(TEXE)           \
+	dbtotxt$(TEXE)          \
+	fuzzcheck$(TEXE)        \
+	fuzzershell$(TEXE)      \
+	index_usage$(TEXE)      \
+	kvtest$(TEXE)           \
+	mptester$(TEXE)         \
+	ossshell$(TEXE)         \
+	rollback-test$(TEXE)    \
+	scrub$(TEXE)            \
+	sessionfuzz$(TEXE)      \
+	showdb$(TEXE)           \
+	showjournal$(TEXE)      \
+	showshm$(TEXE)          \
+	showstat4$(TEXE)        \
+	showwal$(TEXE)          \
+	speedtest1$(TEXE)       \
+	sqldiff$(TEXE)          \
+	sqlite3$(TEXE)          \
+	sqlite3_analyzer$(TEXE) \
+	sqlite3_checker$(TEXE)  \
+	sqlite3_expert$(TEXE)   \
+	sqlite3r$(TEXE)         \
+	sqltclsh$(TEXE)         \
+	startup$(TEXE)          \
+	tclsqlite3$(TEXE)       \
+	testfixture$(TEXE)      \
+	threadtest3$(TEXE)      \
+	wordcount$(TEXE)

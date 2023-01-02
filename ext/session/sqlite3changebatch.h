@@ -2,6 +2,8 @@
 #if !defined(SQLITECHANGEBATCH_H_) 
 #define SQLITECHANGEBATCH_H_ 1
 
+#include "sqlite3.h"
+
 typedef struct sqlite3_changebatch sqlite3_changebatch;
 
 /*

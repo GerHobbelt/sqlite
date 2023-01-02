@@ -17,7 +17,13 @@
 ** for details.
 */
 
+#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
+#include "sqlite_cfg.h"
+#define SQLITECONFIG_H 1
+#endif
+
 #include "sqlite3.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,6 +31,8 @@
 #if !defined(_WIN32)
 #include <unistd.h>
 #endif
+
+typedef struct sqlite3_changeset_iter sqlite3_changeset_iter;
 
 /*************************************************************************
 ** Start of generic command line parser.

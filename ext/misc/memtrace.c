@@ -25,6 +25,8 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "sqlite3.h"
+
 /* The original memory allocation routines */
 static sqlite3_mem_methods memtraceBase;
 static FILE *memtraceOut;

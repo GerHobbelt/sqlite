@@ -17,12 +17,12 @@
 # After the "tsrc" directory has been created and populated, run
 # this script:
 #
-#      tclsh mksqlite3c.tcl
+#      tclsh mksqliteInt_h.tcl
 #
-# The amalgamated SQLite code will be written into sqlite3.c
+# The amalgamated SQLite code will be written into sqliteInt_expanded.h
 #
 
-set help {Usage: tclsh mksqlite3c.tcl <options>
+set help {Usage: tclsh mksqliteInt_h.tcl <options>
  where <options> is zero or more of the following with these effects:
    --nostatic     => Do not generate with compile-time modifiable linkage.
    --linemacros=?  => Emit #line directives into output or not. (? = 1 or 0)
@@ -40,14 +40,11 @@ set help {Usage: tclsh mksqlite3c.tcl <options>
 set addstatic 1
 set linemacros 0
 set useapicall 0
-set enable_recover 0
 set srcdir tsrc
 
 for {set i 0} {$i<[llength $argv]} {incr i} {
   set x [lindex $argv $i]
-  if {[regexp {^-?-enable-recover$} $x]} {
-    set enable_recover 1
-  } elseif {[regexp {^-?-nostatic$} $x]} {
+  if {[regexp {^-?-nostatic$} $x]} {
     set addstatic 0
   } elseif {[regexp {^-?-linemacros(?:=([01]))?$} $x ma ulm]} {
     if {$ulm == ""} {set ulm 1}
@@ -81,8 +78,7 @@ close $in
 # Open the output file and write a header comment at the beginning
 # of the file.
 #
-set fname sqlite3.c
-if {$enable_recover} { set fname sqlite3r.c }
+set fname sqliteInt_expanded.h
 set out [open $fname w]
 # Force the output to use unix line endings, even on Windows.
 fconfigure $out -translation lf
@@ -166,9 +162,9 @@ foreach hdr {
    pcache.h
    pragma.h
    rtree.h
-   sqlite3session.h
-   sqlite3.h
-   sqlite3ext.h
+   #sqlite3session.h
+   #sqlite3.h
+   #sqlite3ext.h
    sqlite3rbu.h
    sqliteicu.h
    sqliteInt.h
@@ -218,7 +214,7 @@ proc section_comment {text} {
 }
 
 # Read the source file named $filename and write it into the
-# sqlite3.c output file.  If any #include statements are seen,
+# sqliteInt_expanded.h output file.  If any #include statements are seen,
 # process them appropriately.
 #
 proc copy_file {filename} {
@@ -280,7 +276,7 @@ proc copy_file {filename} {
 
         # Add the SQLITE_PRIVATE or SQLITE_API keyword before functions.
         # so that linkage can be modified at compile-time.
-        if {[regexp {^sqlite3[a-z]*_} $funcname] || [regexp {^sqlite3.*Var} $funcname]} {
+        if {[regexp {^sqlite3[a-z]*_} $funcname]} {
           set line SQLITE_API
           append line " " [string trim $rettype]
           if {[string index $rettype end] ne "*"} {
@@ -345,132 +341,12 @@ proc copy_file {filename} {
 set flist {
    sqliteInt.h
    os_common.h
-   ctime.c
-
-   global.c
-   status.c
-   date.c
-   os.c
-
-   fault.c
-   mem0.c
-   mem1.c
-   mem2.c
-   mem3.c
-   mem5.c
-   mutex.c
-   mutex_noop.c
-   mutex_unix.c
-   mutex_w32.c
-   malloc.c
-   printf.c
-   treeview.c
-   random.c
-   threads.c
-   utf.c
-   util.c
-   hash.c
-   opcodes.c
-
-   os_kv.c
-   os_unix.c
-   os_win.c
-   memdb.c
-
-   bitvec.c
-   pcache.c
-   pcache1.c
-   rowset.c
-   pager.c
-   wal.c
-
-   btmutex.c
-   btree.c
-   backup.c
-
-   vdbemem.c
-   vdbeaux.c
-   vdbeapi.c
-   vdbetrace.c
-   vdbe.c
-   vdbeblob.c
-   vdbesort.c
-   vdbevtab.c
-   memjournal.c
-
-   walker.c
-   resolve.c
-   expr.c
-   alter.c
-   analyze.c
-   attach.c
-   auth.c
-   build.c
-   callback.c
-   delete.c
-   func.c
-   fkey.c
-   insert.c
-   legacy.c
-   loadext.c
-   pragma.c
-   prepare.c
-   select.c
-   table.c
-   trigger.c
-   update.c
-   upsert.c
-   vacuum.c
-   vtab.c
-   wherecode.c
-   whereexpr.c
-   where.c
-   window.c
-
-   parse.c
-
-   tokenize.c
-   complete.c
-
-   main.c
-   notify.c
-
-   fts3.c
-   fts3_aux.c
-   fts3_expr.c
-   fts3_hash.c
-   fts3_porter.c
-   fts3_tokenizer.c
-   fts3_tokenizer1.c
-   fts3_tokenize_vtab.c
-   fts3_write.c
-   fts3_snippet.c
-   fts3_unicode.c
-   fts3_unicode2.c
-
-   json.c
-   rtree.c
-   icu.c
-   fts3_icu.c
-   sqlite3rbu.c
-   dbstat.c
-   dbpage.c
-   sqlite3session.c
-   fts5.c
-   stmt.c
 } 
-if {$enable_recover} {
-  lappend flist sqlite3recover.c dbdata.c
-}
 foreach file $flist {
   copy_file $srcdir/$file
 }
 
 puts $out \
-"/* Return the source-id for this library */
-SQLITE_API const char *sqlite3_sourceid(void){ return SQLITE_SOURCE_ID; }"
-
-puts $out \
-"/************************** End of sqlite3.c ******************************/"
+"/************************** End of sqliteInt_expanded.h ******************************/"
 
 close $out
