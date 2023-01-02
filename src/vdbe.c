@@ -5630,6 +5630,7 @@ case OP_Insert: {
     x.nZero = 0;
   }
   x.pKey = 0;
+  assert( BTREE_PREFORMAT==OPFLAG_PREFORMAT );
   rc = sqlite3BtreeInsert(pC->uc.pCursor, &x,
       (pOp->p5 & (OPFLAG_APPEND|OPFLAG_SAVEPOSITION|OPFLAG_PREFORMAT)), 
       seekResult
