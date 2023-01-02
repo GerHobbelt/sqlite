@@ -2,14 +2,14 @@
 #if !defined(__SQLITESESSION_H_) && defined(SQLITE_ENABLE_SESSION)
 #define __SQLITESESSION_H_ 1
 
+#include "sqlite3.h"
+
 /*
 ** Make sure we can call this stuff from C++.
 */
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "sqlite3.h"
 
 /*
 ** CAPI3REF: Session Object Handle
