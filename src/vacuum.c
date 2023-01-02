@@ -330,7 +330,6 @@ SQLITE_NOINLINE int sqlite3RunVacuum(
   }
   if( rc ) goto end_of_vacuum;
 
-
   /* At this point, there is a write transaction open on both the 
   ** vacuum database and the main database. Assuming no error occurs,
   ** both transactions are closed by this block - the main database

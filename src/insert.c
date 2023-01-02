@@ -2589,11 +2589,9 @@ void sqlite3CompleteInsertion(
     if( IsPrimaryKeyIndex(pIdx) && !HasRowid(pTab) ){
       pik_flags |= OPFLAG_NCHANGE;
       pik_flags |= (update_flags & OPFLAG_SAVEPOSITION);
-      if( 1 || update_flags==0 ){
-        codeWithoutRowidPreupdate(pParse, pTab, iIdxCur+i, aRegIdx[i],
+      codeWithoutRowidPreupdate(pParse, pTab, iIdxCur+i, aRegIdx[i],
             OPFLAG_ISNOOP|(update_flags & OPFLAG_ISUPDATE)
-        );
-      }
+      );
     }
     sqlite3VdbeAddOp4Int(v, OP_IdxInsert, iIdxCur+i, aRegIdx[i],
                          aRegIdx[i]+1,

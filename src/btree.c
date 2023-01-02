@@ -4654,7 +4654,7 @@ static void btreeEndTransaction(Btree *p){
     unlockBtreeIfUnused(pBt);
   }
 
-  /* If this was an CONCURRENT transaction, delete the pBt->pMap object.
+  /* If this was a CONCURRENT transaction, delete the pBt->pMap object.
   ** Also call PagerEndConcurrent() to ensure that the pager has discarded
   ** the record of all pages read within the transaction.  */
   btreePtrmapDelete(pBt);
