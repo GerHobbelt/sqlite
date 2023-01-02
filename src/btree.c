@@ -8141,12 +8141,12 @@ static int insertCell(
     if( (++data[pPage->hdrOffset+4])==0 ) data[pPage->hdrOffset+3]++;
     assert( get2byte(&data[pPage->hdrOffset+3])==pPage->nCell || CORRUPT_DB );
     if( REQUIRE_PTRMAP(pBt) ){
-      int rc = SQLITE_OK;
+      int rc2 = SQLITE_OK;
       /* The cell may contain a pointer to an overflow page. If so, write
       ** the entry for the overflow page into the pointer map.
       */
-      ptrmapPutOvflPtr(pPage, pPage, pCell, &rc);
-      if( rc ) return rc;
+      ptrmapPutOvflPtr(pPage, pPage, pCell, &rc2);
+      if( rc2 ) return rc2;
     }
   }
   return SQLITE_OK;
