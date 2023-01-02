@@ -208,6 +208,12 @@ static void usage(char const *zAppName){
   fprintf(stderr, "Usage: %s [--keep-first|-k] < input > output\n", zAppName);
 }
 
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      sqlite_stripcomments_main(cnt, arr)
+#endif
+
 int main( int argc, char const * const * argv ){
   int i;
   for(i = 1; i < argc; ++i){
