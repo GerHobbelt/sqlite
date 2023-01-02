@@ -580,7 +580,7 @@ static char *dynamicContinuePrompt(void){
     if( dynPrompt.zScannerAwaits ){
       int ncp = strlen(continuePrompt), ndp = strlen(dynPrompt.zScannerAwaits);
       if( ndp > ncp-3 ) return continuePrompt;
-      strncpy(dynPrompt.dynamicPrompt, dynPrompt.zScannerAwaits, ndp);
+      strcpy(dynPrompt.dynamicPrompt, dynPrompt.zScannerAwaits);
       while( ndp<3 ) dynPrompt.dynamicPrompt[ndp++] = ' ';
       strncpy(dynPrompt.dynamicPrompt+3, continuePrompt+3,
 	      PROMPT_LEN_MAX-4);
@@ -10746,6 +10746,7 @@ DISPATCHABLE_COMMAND( sha3sum 4 1 1 ){
   }else{
     shell_exec(p, zSql, 0);
   }
+#if !defined(SQLITE_OMIT_SCHEMA_PRAGMAS) && !defined(SQLITE_OMIT_VIRTUALTABLE)
   {
       int lrc;
       char *zRevText = /* Query for reversible to-blob-to-text check */
@@ -10796,6 +10797,7 @@ DISPATCHABLE_COMMAND( sha3sum 4 1 1 ){
       }
       sqlite3_free(zRevText);
   }
+#endif /* !defined(*_OMIT_SCHEMA_PRAGMAS) && !defined(*_OMIT_VIRTUALTABLE) */
   sqlite3_free(zSql);
   return 0;
 }
