@@ -263,21 +263,18 @@ const installAsyncProxy = function(self){
     }
   };
   GetSyncHandleError.convertRc = (e,rc)=>{
-    if(0){
-      /* This approach makes the very wild assumption that such a
-         failure _is_ a locking error. In practice that appears to be
-         the most common error, by far, but we cannot unambiguously
-         distinguish that from other errors.
-
-         This approach is highly questionable.
-
-         Note that even if we return SQLITE_IOERR_LOCK from here,
-         it bubbles up to the client as a plain I/O error.
-      */
-      return (e instanceof GetSyncHandleError
-              && e.cause.name==='NoModificationAllowedError')
-        ? state.sq3Codes.SQLITE_IOERR_LOCK
-        : rc;
+    if(1){
+      return (
+        e instanceof GetSyncHandleError
+          && ((e.cause.name==='NoModificationAllowedError')
+              /* Inconsistent exception.name from Chrome/ium with the
+                 same exception.message text: */
+              || (e.cause.name==='DOMException'
+                  && 0===e.cause.message.indexOf('Access Handles cannot')))
+      ) ? (
+        /*console.warn("SQLITE_BUSY",e),*/
+        state.sq3Codes.SQLITE_BUSY
+      ) : rc;
     }else{
       return rc;
     }
@@ -298,7 +295,8 @@ const installAsyncProxy = function(self){
     if(!fh.syncHandle){
       const t = performance.now();
       log("Acquiring sync handle for",fh.filenameAbs);
-      const maxTries = 6, msBase = state.asyncIdleWaitTime * 3;
+      const maxTries = 6,
+            msBase = state.asyncIdleWaitTime * 2;
       let i = 1, ms = msBase;
       for(; true; ms = msBase * ++i){
         try {
@@ -518,15 +516,14 @@ const installAsyncProxy = function(self){
     xFileSize: async function(fid/*sqlite3_file pointer*/){
       mTimeStart('xFileSize');
       const fh = __openFiles[fid];
-      let rc;
+      let rc = 0;
       wTimeStart('xFileSize');
       try{
         affirmLocked('xFileSize',fh);
         const sz = await (await getSyncHandle(fh,'xFileSize')).getSize();
         state.s11n.serialize(Number(sz));
-        rc = 0;
       }catch(e){
-        state.s11n.storeException(2,e);
+        state.s11n.storeException(1,e);
         rc = GetSyncHandleError.convertRc(e,state.sq3Codes.SQLITE_IOERR);
       }
       await releaseImplicitLock(fh);

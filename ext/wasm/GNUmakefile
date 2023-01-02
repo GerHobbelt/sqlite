@@ -488,7 +488,10 @@ emcc.jsflags += -sINITIAL_MEMORY=$(emcc.INITIAL_MEMORY.$(emcc.INITIAL_MEMORY))
 ########################################################################
 
 emcc.jsflags += $(emcc.environment)
-#emcc.jsflags += -sTOTAL_STACK=4194304
+emcc.jsflags += -sSTACK_SIZE=1MB
+# ^^^ ACHTUNG: emsdk 3.1.27 reduced the default stack size from 4MB to
+# a mere 64KB, which leads to silent memory corruption via the kvvfs
+# VFS, which requires twice that for its xRead() and xWrite() methods.
 ########################################################################
 # $(sqlite3.js.init-func) is the name Emscripten assigns our exported
 # module init/load function. This symbol name is hard-coded in
@@ -569,7 +572,7 @@ sqlite3-wasm.c := $(dir.api)/sqlite3-wasm.c
 # instead of building a shared copy of sqlite3-wasm.o.
 $(eval $(call call-make-pre-js,sqlite3,vanilla))
 $(eval $(call call-make-pre-js,sqlite3,esm))
-$(sqlite3.js) $(sqlite3.mjs): $(MAKEFILE) $(sqlite3.wasm.obj) \
+$(sqlite3.js) $(sqlite3.mjs): $(MAKEFILE) $(sqlite3-wasm.c) \
     $(EXPORTED_FUNCTIONS.api)
 $(sqlite3.js):  $(pre-post-sqlite3.deps.vanilla)
 $(sqlite3.mjs): $(pre-post-sqlite3.deps.esm)
@@ -670,6 +673,7 @@ speedtest1.eflags.common += -sSTRICT_JS
 speedtest1.eflags.common += -sMODULARIZE
 speedtest1.eflags.common += -Wno-limited-postlink-optimizations
 EXPORTED_FUNCTIONS.speedtest1 := $(abspath $(dir.tmp)/EXPORTED_FUNCTIONS.speedtest1)
+speedtest1.eflags.common += -sSTACK_SIZE=1MB
 speedtest1.eflags.common += -sEXPORTED_FUNCTIONS=@$(EXPORTED_FUNCTIONS.speedtest1)
 speedtest1.eflags.common += $(emcc.exportedRuntimeMethods)
 speedtest1.eflags.common += -sALLOW_TABLE_GROWTH
@@ -815,8 +819,9 @@ endif
 
 ########################################################################
 # Push files to public wasm-testing.sqlite.org server
-wasm-testing.include = *.js *.html batch-runner.list \
+wasm-testing.include = *.js *.mjs *.html \
   ./tests \
+  batch-runner.list \
   $(dir.dout) $(dir.sql) $(dir.common) $(dir.fiddle) $(dir.jacc)
 wasm-testing.exclude = sql/speedtest1.sql
 wasm-testing.dir     = /jail/sites/wasm-testing
@@ -854,3 +859,7 @@ update-docs:
 endif
 # end /wasm docs
 ########################################################################
+
+# Run local web server for the test/demo pages.
+httpd:
+	althttpd -max-age 1 -enable-sab -page index.html
