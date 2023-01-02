@@ -1,5 +1,5 @@
-C Small\sperformance\simprovement\sin\ssqlite3BtreeTransferRow().
-D 2022-11-21T13:35:00.374
+C OPFS\scontention\stest:\sgive\seach\sworker\sa\sdistinct\srecognizable\sname\sinstead\sof\sa\srandom\sone.
+D 2022-11-21T16:00:26.047
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -553,8 +553,8 @@ F ext/wasm/tester1-worker.html 5ef353348c37cf2e4fd0b23da562d3275523e036260b51073
 F ext/wasm/tester1.c-pp.html 74aa9b31c75f12490653f814b53c3dd39f40cd3f70d6a53a716f4e8587107399
 F ext/wasm/tester1.c-pp.js 0c129495d057c77788b59715152d51f9bf9002ebbcce759ef8b028272ce3519d
 F ext/wasm/tests/opfs/concurrency/index.html bb9b0f6da86df34c67fa506db9c45b7c4cf0045a211611cc6b8d2b53fa983481
-F ext/wasm/tests/opfs/concurrency/test.js cea04456ffae7bbfd726ef0e859d2afc2a51ead66940fc4a2499884ac44d16dd
-F ext/wasm/tests/opfs/concurrency/worker.js a92fa4da1431d3c6db3e1dd0b98794e09d1021e23a8c490335410cce283b11c1
+F ext/wasm/tests/opfs/concurrency/test.js 5993c08657d547d3a26b78ff3480122aed2b7361823bc127e96e558931093aff
+F ext/wasm/tests/opfs/concurrency/worker.js df065bb386ff994951f7fbdd76e12f16e58fbef0e929b2caf74553359da40afc
 F ext/wasm/version-info.c 3b36468a90faf1bbd59c65fd0eb66522d9f941eedd364fabccd72273503ae7d5
 F ext/wasm/wasmfs.make 8fea9b4f3cde06141de1fc4c586ab405bd32c3f401554f4ebb18c797401a678d
 F install-sh 9d4de14ab9fb0facae2f48780b874848cbf2f895 x
@@ -580,9 +580,9 @@ F src/auth.c f4fa91b6a90bbc8e0d0f738aa284551739c9543a367071f55574681e0f24f8cf
 F src/backup.c a2891172438e385fdbe97c11c9745676bec54f518d4447090af97189fd8e52d7
 F src/bitvec.c 7c849aac407230278445cb069bebc5f89bf2ddd87c5ed9459b070a9175707b3d
 F src/btmutex.c 6ffb0a22c19e2f9110be0964d0731d2ef1c67b5f7fabfbaeb7b9dabc4b7740ca
-F src/btree.c 89e0e5af46d1921a0a1d17bc5ec95cd0ec89b050b32373d825c76b5d3f3a2ec9
+F src/btree.c 522df0f1173495e06c5589f0b17a61f53a212017b82be53171133fcfc0e1e90a
 F src/btree.h 4fcbb0b041013071dd5e9f53c538d49916c092e6ad8842185985e5270a0792de
-F src/btreeInt.h 8ce1332edd89dfd2461d561ac10a0ab5601c8e06200cb5230596c3caaf54482e
+F src/btreeInt.h 88ad499c92b489afedbfefc3f067c4d15023ec021afe622db240dc9d2277cfa5
 F src/build.c d3e43e950e4e377c1d451a4862556792acdef1faba14a03f899d30d09731c48b
 F src/callback.c 4cd7225b26a97f7de5fee5ae10464bed5a78f2adefe19534cc2095b3a8ca484a
 F src/complete.c a3634ab1e687055cd002e11b8f43eb75c17da23e
@@ -2059,8 +2059,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P 07182dca9f2a4ffea1af0684c93e55e105465b2ee9820c70764e3e7bc1c28efc
-R 06d7ab66cd3f5a521e55d8df4889b401
-U drh
-Z a6fa3008dc4759fddba2bf18530ff99d
+P bee94d1bb0daade023cc1e274339daafc249e1978c0765fc45042b5f9060e478
+R 24e9b381879a473eda77c6d52873b2a6
+U stephan
+Z 5200ed97b9b65f90e5d50e34624e223d
 # Remove this line to create a well-formed Fossil manifest.
