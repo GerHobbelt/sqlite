@@ -316,13 +316,11 @@ self.WhWasmUtilInstaller = function(target){
 
      Throws if passed an invalid n.
 
-     Pedantic side note: the name "heap" is a bit of a misnomer. In an
-     Emscripten environment, the memory managed via the stack
-     allocation API is in the same Memory object as the heap (which
-     makes sense because otherwise arbitrary pointer X would be
-     ambiguous: is it in the heap or the stack?).
+     Pedantic side note: the name "heap" is a bit of a misnomer. In a
+     WASM environment, the stack and heap memory are all accessed via
+     the same view(s) of the memory.
   */
-  target.heapForSize = function(n,unsigned = false){
+  target.heapForSize = function(n,unsigned = true){
     let ctor;
     const c = (cache.memory && cache.heapSize === cache.memory.buffer.byteLength)
           ? cache : heapWrappers();
@@ -599,19 +597,24 @@ self.WhWasmUtilInstaller = function(target){
      type triggers an exception if this.bigIntEnabled is
      falsy). Throws if given an invalid type.
 
+     If the first argument is an array, it is treated as an array of
+     addresses and the result is an array of the values from each of
+     those address, using the same 2nd argument for determining the
+     value type to fetch.
+
      As a special case, if type ends with a `*`, it is considered to
      be a pointer type and is treated as the WASM numeric type
      appropriate for the pointer size (`i32`).
 
-     While likely not obvious, this routine and its setMemValue()
+     While likely not obvious, this routine and its poke()
      counterpart are how pointer-to-value _output_ parameters
      in WASM-compiled C code can be interacted with:
 
      ```
      const ptr = alloc(4);
-     setMemValue(ptr, 0, 'i32'); // clear the ptr's value
+     poke(ptr, 0, 'i32'); // clear the ptr's value
      aCFuncWithOutputPtrToInt32Arg( ptr ); // e.g. void foo(int *x);
-     const result = getMemValue(ptr, 'i32'); // fetch ptr's value
+     const result = peek(ptr, 'i32'); // fetch ptr's value
      dealloc(ptr);
      ```
 
@@ -623,15 +626,15 @@ self.WhWasmUtilInstaller = function(target){
      const scope = scopedAllocPush();
      try{
        const ptr = scopedAlloc(4);
-       setMemValue(ptr, 0, 'i32');
+       poke(ptr, 0, 'i32');
        aCFuncWithOutputPtrArg( ptr );
-       result = getMemValue(ptr, 'i32');
+       result = peek(ptr, 'i32');
      }finally{
        scopedAllocPop(scope);
      }
      ```
 
-     As a rule setMemValue() must be called to set (typically zero
+     As a rule poke() must be called to set (typically zero
      out) the pointer's value, else it will contain an essentially
      random value.
 
@@ -639,70 +642,105 @@ self.WhWasmUtilInstaller = function(target){
      painful impact on performance. Rather than doing so, use
      heapForSize() to fetch the heap object and read directly from it.
 
-     See: setMemValue()
+     See: poke()
   */
-  target.getMemValue = function(ptr, type='i8'){
+  target.peek = function f(ptr, type='i8'){
     if(type.endsWith('*')) type = ptrIR;
     const c = (cache.memory && cache.heapSize === cache.memory.buffer.byteLength)
           ? cache : heapWrappers();
-    switch(type){
-        case 'i1':
-        case 'i8': return c.HEAP8[ptr>>0];
-        case 'i16': return c.HEAP16[ptr>>1];
-        case 'i32': return c.HEAP32[ptr>>2];
-        case 'i64':
-          if(target.bigIntEnabled) return BigInt(c.HEAP64[ptr>>3]);
-          break;
-        case 'float': case 'f32': return c.HEAP32F[ptr>>2];
-        case 'double': case 'f64': return Number(c.HEAP64F[ptr>>3]);
-        default: break;
-    }
-    toss('Invalid type for getMemValue():',type);
+    const list = Array.isArray(ptr) ? [] : undefined;
+    let rc;
+    do{
+      if(list) ptr = arguments[0].shift();
+      switch(type){
+          case 'i1':
+          case 'i8': rc = c.HEAP8[ptr>>0]; break;
+          case 'i16': rc = c.HEAP16[ptr>>1]; break;
+          case 'i32': rc = c.HEAP32[ptr>>2]; break;
+          case 'float': case 'f32': rc = c.HEAP32F[ptr>>2]; break;
+          case 'double': case 'f64': rc = Number(c.HEAP64F[ptr>>3]); break;
+          case 'i64':
+            if(target.bigIntEnabled){
+              rc = BigInt(c.HEAP64[ptr>>3]);
+              break;
+            }
+            /* fallthru */
+          default:
+            toss('Invalid type for peek():',type);
+      }
+      if(list) list.push(rc);
+    }while(list && arguments[0].length);
+    return list || rc;
   };
 
   /**
-     The counterpart of getMemValue(), this sets a numeric value at
+     The counterpart of peek(), this sets a numeric value at
      the given WASM heap address, using the type to define how many
      bytes are written. Throws if given an invalid type. See
-     getMemValue() for details about the type argument. If the 3rd
+     peek() for details about the type argument. If the 3rd
      argument ends with `*` then it is treated as a pointer type and
      this function behaves as if the 3rd argument were `i32`.
 
-     This function returns itself.
+     If the first argument is an array, it is treated like a list
+     of pointers and the given value is written to each one.
+
+     Returns `this`. (Prior to 2022-12-09 it returns this function.)
 
      ACHTUNG: calling this often, e.g. in a loop, can have a noticably
      painful impact on performance. Rather than doing so, use
-     heapForSize() to fetch the heap object and assign directly to it.
+     heapForSize() to fetch the heap object and assign directly to it
+     or use the heap's set() method.
   */
-  target.setMemValue = function f(ptr, value, type='i8'){
+  target.poke = function(ptr, value, type='i8'){
     if (type.endsWith('*')) type = ptrIR;
     const c = (cache.memory && cache.heapSize === cache.memory.buffer.byteLength)
           ? cache : heapWrappers();
-    switch (type) {
-        case 'i1': 
-        case 'i8': c.HEAP8[ptr>>0] = value; return f;
-        case 'i16': c.HEAP16[ptr>>1] = value; return f;
-        case 'i32': c.HEAP32[ptr>>2] = value; return f;
-        case 'i64':
-          if(c.HEAP64){
-            c.HEAP64[ptr>>3] = BigInt(value);
-            return f;
-          }
-          break;
-        case 'float': case 'f32': c.HEAP32F[ptr>>2] = value; return f;
-        case 'double': case 'f64': c.HEAP64F[ptr>>3] = value; return f;
+    for(const p of (Array.isArray(ptr) ? ptr : [ptr])){
+      switch (type) {
+          case 'i1': 
+          case 'i8': c.HEAP8[p>>0] = value; continue;
+          case 'i16': c.HEAP16[p>>1] = value; continue;
+          case 'i32': c.HEAP32[p>>2] = value; continue;
+          case 'float': case 'f32': c.HEAP32F[p>>2] = value; continue;
+          case 'double': case 'f64': c.HEAP64F[p>>3] = value; continue;
+          case 'i64':
+            if(c.HEAP64){
+              c.HEAP64[p>>3] = BigInt(value);
+              continue;
+            }
+            /* fallthru */
+          default:
+            toss('Invalid type for poke(): ' + type);
+      }
     }
-    toss('Invalid type for setMemValue(): ' + type);
+    return this;
   };
 
+  /**
+     Convenience form of peek() intended for fetching
+     pointer-to-pointer values. If passed a single non-array argument
+     it returns the value of that one pointer address. If passed
+     multiple arguments, or a single array of arguments, it returns an
+     array of their values.
+  */
+  target.peekPtr = (...ptr)=>target.peek( (1===ptr.length ? ptr[0] : ptr), ptrIR );
 
-  /** Convenience form of getMemValue() intended for fetching
-      pointer-to-pointer values. */
-  target.getPtrValue = (ptr)=>target.getMemValue(ptr, ptrIR);
+  /**
+     A variant of poke() intended for setting
+     pointer-to-pointer values. Its differences from poke() are
+     that (1) it defaults to a value of 0, (2) it always writes
+     to the pointer-sized heap view, and (3) it returns `this`.
+  */
+  target.pokePtr = (ptr, value=0)=>target.poke(ptr, value, ptrIR);
 
-  /** Convenience form of setMemValue() intended for setting
-      pointer-to-pointer values. */
-  target.setPtrValue = (ptr, value)=>target.setMemValue(ptr, value, ptrIR);
+  /** Deprecated alias for getMemValue() */
+  target.getMemValue = target.peek;
+  /** Deprecated alias for peekPtr() */
+  target.getPtrValue = target.peekPtr;
+  /** Deprecated alias for poke() */
+  target.setMemValue = target.poke;
+  /** Deprecated alias for pokePtr() */
+  target.setPtrValue = target.pokePtr;
 
   /**
      Returns true if the given value appears to be legal for use as
@@ -1096,12 +1134,12 @@ self.WhWasmUtilInstaller = function(target){
     ]((list.length + 1) * target.ptrSizeof);
     let i = 0;
     list.forEach((e)=>{
-      target.setPtrValue(pList + (target.ptrSizeof * i++),
+      target.pokePtr(pList + (target.ptrSizeof * i++),
                          target[
                            isScoped ? 'scopedAllocCString' : 'allocCString'
                          ](""+e));
     });
-    target.setPtrValue(pList + (target.ptrSizeof * i), 0);
+    target.pokePtr(pList + (target.ptrSizeof * i), 0);
     return pList;
   };
 
@@ -1146,7 +1184,7 @@ self.WhWasmUtilInstaller = function(target){
   target.cArgvToJs = (argc, pArgv)=>{
     const list = [];
     for(let i = 0; i < argc; ++i){
-      const arg = target.getPtrValue(pArgv + (target.ptrSizeof * i));
+      const arg = target.peekPtr(pArgv + (target.ptrSizeof * i));
       list.push( arg ? target.cstrToJs(arg) : null );
     }
     return list;
@@ -1170,7 +1208,7 @@ self.WhWasmUtilInstaller = function(target){
     __affirmAlloc(target, method);
     const pIr = safePtrSize ? 'i64' : ptrIR;
     let m = target[method](howMany * (safePtrSize ? 8 : ptrSizeof));
-    target.setMemValue(m, 0, pIr)
+    target.poke(m, 0, pIr)
     if(1===howMany){
       return m;
     }
@@ -1178,7 +1216,7 @@ self.WhWasmUtilInstaller = function(target){
     for(let i = 1; i < howMany; ++i){
       m += (safePtrSize ? 8 : ptrSizeof);
       a[i] = m;
-      target.setMemValue(m, 0, pIr);
+      target.poke(m, 0, pIr);
     }
     return a;
   };
@@ -1209,7 +1247,7 @@ self.WhWasmUtilInstaller = function(target){
 
      When one of the returned pointers will refer to a 64-bit value,
      e.g. a double or int64, an that value must be written or fetched,
-     e.g. using setMemValue() or getMemValue(), it is important that
+     e.g. using poke() or peek(), it is important that
      the pointer in question be aligned to an 8-byte boundary or else
      it will not be fetched or written properly and will corrupt or
      read neighboring memory. It is only safe to pass false when the
@@ -1488,8 +1526,8 @@ self.WhWasmUtilInstaller = function(target){
      - Figure out how/whether we can (semi-)transparently handle
        pointer-type _output_ arguments. Those currently require
        explicit handling by allocating pointers, assigning them before
-       the call using setMemValue(), and fetching them with
-       getMemValue() after the call. We may be able to automate some
+       the call using poke(), and fetching them with
+       peek() after the call. We may be able to automate some
        or all of that.
 
      - Figure out whether it makes sense to extend the arg adapter
@@ -1516,18 +1554,19 @@ self.WhWasmUtilInstaller = function(target){
     /*Verify the arg type conversions are valid...*/;
     if(undefined!==resultType && null!==resultType) __xResultAdapterCheck(resultType);
     argTypes.forEach(__xArgAdapterCheck);
+    const cxw = cache.xWrap;
     if(0===xf.length){
       // No args to convert, so we can create a simpler wrapper...
       return (...args)=>(args.length
                          ? __argcMismatch(fname, xf.length)
-                         : cache.xWrap.convertResult(resultType, xf.call(null)));
+                         : cxw.convertResult(resultType, xf.call(null)));
     }
     return function(...args){
       if(args.length!==xf.length) __argcMismatch(fname, xf.length);
       const scope = target.scopedAllocPush();
       try{
-        const rc = xf.apply(null,args.map((v,i)=>cache.xWrap.convertArg(argTypes[i], v)));
-        return cache.xWrap.convertResult(resultType, rc);
+        for(const i in args) args[i] = cxw.convertArg(argTypes[i], args[i]);
+        return cxw.convertResult(resultType, xf.apply(null,args));
       }finally{
         target.scopedAllocPop(scope);
       }

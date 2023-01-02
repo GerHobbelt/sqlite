@@ -80,17 +80,19 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     /**
        Add some descriptive xWrap() aliases for '*' intended to (A)
        initially improve readability/correctness of capi.signatures
-       and (B) eventually perhaps provide automatic conversion from
-       higher-level representations, e.g. capi.sqlite3_vfs to
-       `sqlite3_vfs*` via capi.sqlite3_vfs.pointer.
+       and (B) provide automatic conversion from higher-level
+       representations, e.g. capi.sqlite3_vfs to `sqlite3_vfs*` via
+       capi.sqlite3_vfs.pointer.
     */
     const aPtr = wasm.xWrap.argAdapter('*');
     const nilType = function(){};
     wasm.xWrap.argAdapter('sqlite3_filename', aPtr)
-    ('sqlite3_stmt*', aPtr)
     ('sqlite3_context*', aPtr)
     ('sqlite3_value*', aPtr)
     ('void*', aPtr)
+    ('sqlite3_stmt*', (v)=>
+      aPtr((v instanceof (sqlite3?.oo1?.Stmt || nilType))
+           ? v.pointer : v))
     ('sqlite3*', (v)=>
       aPtr((v instanceof (sqlite3?.oo1?.DB || nilType))
            ? v.pointer : v))
@@ -116,14 +118,17 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
         return capi.sqlite3_vfs_find(v)
           || sqlite3.SQLite3Error.toss("Unknown sqlite3_vfs name:",v);
       }
-      return aPtr((v instanceof capi.sqlite3_vfs) ? v.pointer : v);
+      return aPtr((v instanceof (capi.sqlite3_vfs || nilType))
+                  ? v.pointer : v);
     });
 
-    wasm.xWrap.resultAdapter('sqlite3*', aPtr)
-    ('sqlite3_context*', aPtr)
-    ('sqlite3_stmt*', aPtr)
-    ('sqlite3_vfs*', aPtr)
-    ('void*', aPtr);
+    const rPtr = wasm.xWrap.resultAdapter('*');
+    wasm.xWrap.resultAdapter('sqlite3*', rPtr)
+    ('sqlite3_context*', rPtr)
+    ('sqlite3_stmt*', rPtr)
+    ('sqlite3_value*', rPtr)
+    ('sqlite3_vfs*', rPtr)
+    ('void*', rPtr);
 
     /**
        Populate api object with sqlite3_...() by binding the "raw" wasm
@@ -154,9 +159,35 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     delete wasm.bindingSignatures;
 
     if(wasm.exports.sqlite3_wasm_db_error){
-      util.sqlite3_wasm_db_error = wasm.xWrap(
+      const __db_err = wasm.xWrap(
         'sqlite3_wasm_db_error', 'int', 'sqlite3*', 'int', 'string'
       );
+      /**
+         Sets the given db's error state. Accepts:
+
+         - (sqlite3*, int code, string msg)
+         - (sqlite3*, Error [,string msg])
+
+         If passed a WasmAllocError, the message is ingored and the
+         result code is SQLITE_NOMEM. If passed any other Error type,
+         the result code defaults to SQLITE_ERROR unless the Error
+         object has a resultCode property, in which case that is used
+         (e.g. SQLite3Error has that). If passed a non-WasmAllocError
+         exception, the message string defaults to theError.message.
+
+         Returns the resulting code. Pass (pDb,0,0) to clear the error
+         state.
+       */
+      util.sqlite3_wasm_db_error = function(pDb, resultCode, message){
+        if(resultCode instanceof sqlite3.WasmAllocError){
+          resultCode = capi.SQLITE_NOMEM;
+          message = 0 /*avoid allocating message string*/;
+        }else if(resultCode instanceof Error){
+          message = message || resultCode.message;
+          resultCode = (resultCode.resultCode || capi.SQLITE_ERROR);
+        }
+        return __db_err(pDb, resultCode, message);
+      };
     }else{
       util.sqlite3_wasm_db_error = function(pDb,errCode,msg){
         console.warn("sqlite3_wasm_db_error() is not exported.",arguments);
@@ -176,6 +207,61 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
                                               (1===n?"":'s')+".");
   };
 
+  if(1){/* Bindings for sqlite3_create_collation() */
+
+    const __ccv2 = wasm.xWrap(
+      'sqlite3_create_collation_v2', 'int',
+      'sqlite3*','string','int','*','*','*'
+      /* int(*xCompare)(void*,int,const void*,int,const void*) */
+      /* void(*xDestroy(void*) */);
+
+    /**
+       Works exactly like C's sqlite3_create_collation_v2() except that:
+
+       1) It permits its two function arguments to be JS functions,
+          for which it will install WASM-bound proxies.
+
+       2) It returns capi.SQLITE_FORMAT if the 3rd argument is not
+          capi.SQLITE_UTF8. No other encodings are supported.
+
+       Returns 0 on success, non-0 on error, in which case the error
+       state of pDb (of type `sqlite3*` or argument-convertible to it)
+       may contain more information.
+    */
+    capi.sqlite3_create_collation_v2 = function(pDb,zName,eTextRep,pArg,xCompare,xDestroy){
+      if(6!==arguments.length) return __dbArgcMismatch(pDb, 'sqlite3_create_collation_v2', 6);
+      else if(capi.SQLITE_UTF8!==eTextRep){
+        return util.sqlite3_wasm_db_error(
+          pDb, capi.SQLITE_FORMAT, "SQLITE_UTF8 is the only supported encoding."
+        );
+      }
+      let rc, pfCompare, pfDestroy;
+      try{
+        if(xCompare instanceof Function){
+          pfCompare = wasm.installFunction(xCompare, 'i(pipip)');
+        }
+        if(xDestroy instanceof Function){
+          pfDestroy = wasm.installFunction(xDestroy, 'v(p)');
+        }
+        rc = __ccv2(pDb, zName, eTextRep, pArg,
+                    pfCompare || xCompare, pfDestroy || xDestroy);
+      }catch(e){
+        if(pfCompare) wasm.uninstallFunction(pfCompare);
+        if(pfDestroy) wasm.uninstallFunction(pfDestroy);
+        rc = util.sqlite3_wasm_db_error(pDb, e);
+      }
+      return rc;
+    };
+
+    capi.sqlite3_create_collation = (pDb,zName,eTextRep,pArg,xCompare)=>{
+      return (5===arguments.length)
+        ? capi.sqlite3_create_collation_v2(pDb,zName,eTextRep,pArg,xCompare,0)
+        : __dbArgcMismatch(pDb, 'sqlite3_create_collation', 5);
+    }
+
+
+  }/*sqlite3_create_collation() and friends*/
+
   if(1){/* Special-case handling of sqlite3_exec() */
     const __exec = wasm.xWrap("sqlite3_exec", "int",
                               ["sqlite3*", "string:flexible", "*", "*", "**"]);
@@ -193,8 +279,8 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
         try {
           let aVals = [], aNames = [], i = 0, offset = 0;
           for( ; i < nCols; offset += (wasm.ptrSizeof * ++i) ){
-            aVals.push( wasm.cstrToJs(wasm.getPtrValue(pColVals + offset)) );
-            aNames.push( wasm.cstrToJs(wasm.getPtrValue(pColNames + offset)) );
+            aVals.push( wasm.cstrToJs(wasm.peekPtr(pColVals + offset)) );
+            aNames.push( wasm.cstrToJs(wasm.peekPtr(pColNames + offset)) );
           }
           rc = callback(pVoid, nCols, aVals, aNames) | 0;
           /* The first 2 args of the callback are useless for JS but
@@ -287,49 +373,19 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     }/*__udfSetResult()*/;
 
     const __udfConvertArgs = function(argc, pArgv){
-      let i, pVal, valType, arg;
+      let i;
       const tgt = [];
       for(i = 0; i < argc; ++i){
-        pVal = wasm.getPtrValue(pArgv + (wasm.ptrSizeof * i));
         /**
            Curiously: despite ostensibly requiring 8-byte
            alignment, the pArgv array is parcelled into chunks of
            4 bytes (1 pointer each). The values those point to
            have 8-byte alignment but the individual argv entries
            do not.
-        */            
-        valType = capi.sqlite3_value_type(pVal);
-        switch(valType){
-            case capi.SQLITE_INTEGER:
-              if(wasm.bigIntEnabled){
-                arg = capi.sqlite3_value_int64(pVal);
-                if(util.bigIntFitsDouble(arg)) arg = Number(arg);
-              }
-              else arg = capi.sqlite3_value_double(pVal)/*yes, double, for larger integers*/;
-              break;
-            case capi.SQLITE_FLOAT:
-              arg = capi.sqlite3_value_double(pVal);
-              break;
-            case capi.SQLITE_TEXT:
-              arg = capi.sqlite3_value_text(pVal);
-              break;
-            case capi.SQLITE_BLOB:{
-              const n = capi.sqlite3_value_bytes(pVal);
-              const pBlob = capi.sqlite3_value_blob(pVal);
-              if(n && !pBlob) sqlite3.WasmAllocError.toss(
-                "Cannot allocate memory for blob argument of",n,"byte(s)"
-              );
-              arg = n ? wasm.heap8u().slice(pBlob, pBlob + Number(n)) : null;
-              break;
-            }
-            case capi.SQLITE_NULL:
-              arg = null; break;
-            default:
-              toss3("Unhandled sqlite3_value_type()",valType,
-                    "is possibly indicative of incorrect",
-                    "pointer size assumption.");
-        }
-        tgt.push(arg);
+        */
+        tgt.push(capi.sqlite3_value_to_js(
+          wasm.peekPtr(pArgv + (wasm.ptrSizeof * i))
+        ));
       }
       return tgt;
     }/*__udfConvertArgs()*/;
@@ -614,10 +670,13 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     //console.debug('wasm.ctype length =',wasm.cstrlen(cJson));
     const defineGroups = ['access', 'authorizer',
                           'blobFinalizers', 'dataTypes',
+                          'dbConfig', 'dbStatus',
                           'encodings', 'fcntl', 'flock', 'ioCap',
                           'limits', 'openFlags',
                           'prepareFlags', 'resultCodes',
-                          'serialize', 'syncFlags', 'trace', 'udfFlags',
+                          'serialize', 'sqlite3Status',
+                          'stmtStatus', 'syncFlags',
+                          'trace', 'udfFlags',
                           'version' ];
     if(wasm.bigIntEnabled){
       defineGroups.push('vtab');
@@ -686,7 +745,7 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
             pstack = wasm.pstack;
 
       const kvvfsStorage = (zClass)=>
-            ((115/*=='s'*/===wasm.getMemValue(zClass))
+            ((115/*=='s'*/===wasm.peek(zClass))
              ? sessionStorage : localStorage);
 
       /**
@@ -710,13 +769,13 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
                                     C-string's byte length. */;
             if(nBuf<=0) return nV;
             else if(1===nBuf){
-              wasm.setMemValue(zBuf, 0);
+              wasm.poke(zBuf, 0);
               return nV;
             }
             const zV = wasm.scopedAllocCString(jV);
             if(nBuf > nV + 1) nBuf = nV + 1;
             wasm.heap8u().copyWithin(zBuf, zV, zV + nBuf - 1);
-            wasm.setMemValue(zBuf + nBuf - 1, 0);
+            wasm.poke(zBuf + nBuf - 1, 0);
             return nBuf - 1;
           }catch(e){
             console.error("kvstorageRead()",e);
