@@ -252,6 +252,8 @@ LPWSTR utf8_to_utf16(const char *z){
 }
 #endif
 
+extern LPWSTR sqlite3_win32_utf8_to_unicode(const char*);
+
 /*
 ** This function attempts to normalize the time values found in the stat()
 ** buffer to UTC.  This is necessary on Win32, where the runtime library
@@ -264,7 +266,6 @@ static void statTimesToUtc(
   HANDLE hFindFile;
   WIN32_FIND_DATAW fd;
   LPWSTR zUnicodeName;
-  extern LPWSTR sqlite3_win32_utf8_to_unicode(const char*);
   zUnicodeName = sqlite3_win32_utf8_to_unicode(zPath);
   if( zUnicodeName ){
     memset(&fd, 0, sizeof(WIN32_FIND_DATAW));
