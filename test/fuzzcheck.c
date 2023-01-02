@@ -84,8 +84,10 @@
 #include <stdarg.h>
 #include <ctype.h>
 #include <assert.h>
+
 #include "sqlite3.h"
 #include "sqlite3recover.h"
+
 #define ISSPACE(X) isspace((unsigned char)(X))
 #define ISDIGIT(X) isdigit((unsigned char)(X))
 
