@@ -69,6 +69,7 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
   wasm.bindingSignatures = [
     // Please keep these sorted by function name!
     ["sqlite3_aggregate_context","void*", "sqlite3_context*", "int"],
+    /* sqlite3_auto_extension() has a hand-written binding. */
     /* sqlite3_bind_blob() and sqlite3_bind_text() have hand-written
        bindings to permit more flexible inputs. */
     ["sqlite3_bind_double","int", "sqlite3_stmt*", "int", "f64"],
@@ -87,7 +88,9 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
       "*"
     ]],
     ["sqlite3_busy_timeout","int", "sqlite3*", "int"],
-    ["sqlite3_close_v2", "int", "sqlite3*"],
+    /* sqlite3_cancel_auto_extension() has a hand-written binding. */
+    /* sqlite3_close_v2() is implemented by hand to perform some
+       extra work. */
     ["sqlite3_changes", "int", "sqlite3*"],
     ["sqlite3_clear_bindings","int", "sqlite3_stmt*"],
     ["sqlite3_collation_needed", "int", "sqlite3*", "*", "*"/*=>v(ppis)*/],
@@ -100,6 +103,15 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     ["sqlite3_column_text","string", "sqlite3_stmt*", "int"],
     ["sqlite3_column_type","int", "sqlite3_stmt*", "int"],
     ["sqlite3_column_value","sqlite3_value*", "sqlite3_stmt*", "int"],
+    ["sqlite3_commit_hook", "void*", [
+      "sqlite3*",
+      new wasm.xWrap.FuncPtrAdapter({
+        name: 'sqlite3_commit_hook',
+        signature: 'i(p)',
+        contextKey: (argv)=>argv[0/* sqlite3* */]
+      }),
+      '*'
+    ]],
     ["sqlite3_compileoption_get", "string", "int"],
     ["sqlite3_compileoption_used", "int", "string"],
     ["sqlite3_complete", "int", "string:flexible"],
@@ -189,6 +201,7 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     ]],
     ["sqlite3_realloc", "*","*","int"],
     ["sqlite3_reset", "int", "sqlite3_stmt*"],
+    /* sqlite3_reset_auto_extension() has a hand-written binding. */
     ["sqlite3_result_blob", undefined, "sqlite3_context*", "*", "int", "*"],
     ["sqlite3_result_double", undefined, "sqlite3_context*", "f64"],
     ["sqlite3_result_error", undefined, "sqlite3_context*", "string", "int"],
@@ -202,6 +215,15 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     ["sqlite3_result_subtype", undefined, "sqlite3_value*", "int"],
     ["sqlite3_result_text", undefined, "sqlite3_context*", "string", "int", "*"],
     ["sqlite3_result_zeroblob", undefined, "sqlite3_context*", "int"],
+    ["sqlite3_rollback_hook", "void*", [
+      "sqlite3*",
+      new wasm.xWrap.FuncPtrAdapter({
+        name: 'sqlite3_rollback_hook',
+        signature: 'v(p)',
+        contextKey: (argv)=>argv[0/* sqlite3* */]
+      }),
+      '*'
+    ]],
     ["sqlite3_set_authorizer", "int", [
       "sqlite3*",
       new wasm.xWrap.FuncPtrAdapter({
@@ -323,6 +345,20 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     ["sqlite3_set_last_insert_rowid", undefined, ["sqlite3*", "i64"]],
     ["sqlite3_status64", "int", "int", "*", "*", "int"],
     ["sqlite3_total_changes64", "i64", ["sqlite3*"]],
+    ["sqlite3_update_hook", "*", [
+      "sqlite3*",
+      new wasm.xWrap.FuncPtrAdapter({
+        name: 'sqlite3_update_hook',
+        signature: "v(iippj)",
+        contextKey: (argv)=>argv[0/* sqlite3* */],
+        callProxy: (callback)=>{
+          return (p,op,z0,z1,rowid)=>{
+            callback(p, op, wasm.cstrToJs(z0), wasm.cstrToJs(z1), rowid);
+          };
+        }
+      }),
+      "*"
+    ]],
     ["sqlite3_uri_int64", "i64", ["sqlite3_filename", "string", "i64"]],
     ["sqlite3_value_int64","i64", "sqlite3_value*"],
     ["sqlite3_vtab_collation","string","sqlite3_index_info*","int"],
@@ -489,7 +525,7 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
       ]],
       ['sqlite3session_config', 'int', ['int', 'void*']],
       ['sqlite3session_create', 'int', ['sqlite3*', 'string', '**']],
-      ['sqlite3session_delete', undefined, ['sqlite3_session*']],
+      //sqlite3session_delete() is bound manually
       ['sqlite3session_diff', 'int', ['sqlite3_session*', 'string', 'string', '**']],
       ['sqlite3session_enable', 'int', ['sqlite3_session*', 'int']],
       ['sqlite3session_indirect', 'int', ['sqlite3_session*', 'int']],
@@ -542,8 +578,10 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
   });
   delete self.Jaccwabyt;
 
-  {/* Convert Arrays and certain TypedArrays to strings for
-      'string:flexible'-type arguments */
+  {// wasm.xWrap() bindings...
+
+    /* Convert Arrays and certain TypedArrays to strings for
+       'string:flexible'-type arguments */
     const __xString = wasm.xWrap.argAdapter('string');
     wasm.xWrap.argAdapter(
       'string:flexible', (v)=>__xString(util.flexibleString(v))
@@ -579,9 +617,7 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
         return rc || (this[v] = wasm.allocCString(v));
       }.bind(Object.create(null))
     );
-  }/* special-case string-type argument conversions */
 
-  if(1){// wasm.xWrap() bindings...
     /**
        Add some descriptive xWrap() aliases for '*' intended to (A)
        initially improve readability/correctness of
@@ -589,27 +625,27 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
        from higher-level representations, e.g. capi.sqlite3_vfs to
        `sqlite3_vfs*` via capi.sqlite3_vfs.pointer.
     */
-    const aPtr = wasm.xWrap.argAdapter('*');
-    const nilType = function(){};
-    wasm.xWrap.argAdapter('sqlite3_filename', aPtr)
-    ('sqlite3_context*', aPtr)
-    ('sqlite3_value*', aPtr)
-    ('void*', aPtr)
-    ('sqlite3_changegroup*', aPtr)
-    ('sqlite3_changeset_iter*', aPtr)
-    //('sqlite3_rebaser*', aPtr)
-    ('sqlite3_session*', aPtr)
+    const __xArgPtr = wasm.xWrap.argAdapter('*');
+    const nilType = function(){}/*a class no value can ever be an instance of*/;
+    wasm.xWrap.argAdapter('sqlite3_filename', __xArgPtr)
+    ('sqlite3_context*', __xArgPtr)
+    ('sqlite3_value*', __xArgPtr)
+    ('void*', __xArgPtr)
+    ('sqlite3_changegroup*', __xArgPtr)
+    ('sqlite3_changeset_iter*', __xArgPtr)
+    //('sqlite3_rebaser*', __xArgPtr)
+    ('sqlite3_session*', __xArgPtr)
     ('sqlite3_stmt*', (v)=>
-      aPtr((v instanceof (sqlite3?.oo1?.Stmt || nilType))
+      __xArgPtr((v instanceof (sqlite3?.oo1?.Stmt || nilType))
            ? v.pointer : v))
     ('sqlite3*', (v)=>
-      aPtr((v instanceof (sqlite3?.oo1?.DB || nilType))
+      __xArgPtr((v instanceof (sqlite3?.oo1?.DB || nilType))
            ? v.pointer : v))
     ('sqlite3_index_info*', (v)=>
-      aPtr((v instanceof (capi.sqlite3_index_info || nilType))
+      __xArgPtr((v instanceof (capi.sqlite3_index_info || nilType))
            ? v.pointer : v))
     ('sqlite3_module*', (v)=>
-      aPtr((v instanceof (capi.sqlite3_module || nilType))
+      __xArgPtr((v instanceof (capi.sqlite3_module || nilType))
            ? v.pointer : v))
     /**
        `sqlite3_vfs*`:
@@ -630,8 +666,8 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
             "Unknown sqlite3_vfs name:", v
           );
       }
-      return aPtr((v instanceof (capi.sqlite3_vfs || nilType))
-                  ? v.pointer : v);
+      return __xArgPtr((v instanceof (capi.sqlite3_vfs || nilType))
+                       ? v.pointer : v);
     });
 
     const __xRcPtr = wasm.xWrap.resultAdapter('*');
@@ -700,7 +736,7 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
           message = message || ''+resultCode;
           resultCode = (resultCode.resultCode || capi.SQLITE_ERROR);
         }
-        return __db_err(pDb, resultCode, message);
+        return pDb ? __db_err(pDb, resultCode, message) : resultCode;
       };
     }else{
       util.sqlite3_wasm_db_error = function(pDb,errCode,msg){
@@ -708,7 +744,83 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
         return errCode;
       };
     }
-  }/*xWrap() bindings*/;
+  }/*xWrap() bindings*/
+
+  {/* Import C-level constants and structs... */
+    const cJson = wasm.xCall('sqlite3_wasm_enum_json');
+    if(!cJson){
+      toss("Maintenance required: increase sqlite3_wasm_enum_json()'s",
+           "static buffer size!");
+    }
+    //console.debug('wasm.ctype length =',wasm.cstrlen(cJson));
+    wasm.ctype = JSON.parse(wasm.cstrToJs(cJson));
+    // Groups of SQLITE_xyz macros...
+    const defineGroups = ['access', 'authorizer',
+                          'blobFinalizers', 'changeset',
+                          'config', 'dataTypes',
+                          'dbConfig', 'dbStatus',
+                          'encodings', 'fcntl', 'flock', 'ioCap',
+                          'limits', 'openFlags',
+                          'prepareFlags', 'resultCodes',
+                          'sqlite3Status',
+                          'stmtStatus', 'syncFlags',
+                          'trace', 'txnState', 'udfFlags',
+                          'version' ];
+    if(wasm.bigIntEnabled){
+      defineGroups.push('serialize', 'session', 'vtab');
+    }
+    for(const t of defineGroups){
+      for(const e of Object.entries(wasm.ctype[t])){
+        // ^^^ [k,v] there triggers a buggy code transformation via
+        // one of the Emscripten-driven optimizers.
+        capi[e[0]] = e[1];
+      }
+    }
+    const __rcMap = Object.create(null);
+    for(const t of ['resultCodes']){
+      for(const e of Object.entries(wasm.ctype[t])){
+        __rcMap[e[1]] = e[0];
+      }
+    }
+    /**
+       For the given integer, returns the SQLITE_xxx result code as a
+       string, or undefined if no such mapping is found.
+    */
+    capi.sqlite3_js_rc_str = (rc)=>__rcMap[rc];
+    /* Bind all registered C-side structs... */
+    const notThese = Object.assign(Object.create(null),{
+      // For each struct to NOT register, map its name to true:
+      WasmTestStruct: true,
+      /* We unregister the kvvfs VFS from Worker threads below. */
+      sqlite3_kvvfs_methods: !util.isUIThread(),
+      /* sqlite3_index_info and friends require int64: */
+      sqlite3_index_info: !wasm.bigIntEnabled,
+      sqlite3_index_constraint: !wasm.bigIntEnabled,
+      sqlite3_index_orderby: !wasm.bigIntEnabled,
+      sqlite3_index_constraint_usage: !wasm.bigIntEnabled
+    });
+    for(const s of wasm.ctype.structs){
+      if(!notThese[s.name]){
+        capi[s.name] = sqlite3.StructBinder(s);
+      }
+    }
+    if(capi.sqlite3_index_info){
+      /* Move these inner structs into sqlite3_index_info.  Binding
+      ** them to WASM requires that we create global-scope structs to
+      ** model them with, but those are no longer needed after we've
+      ** passed them to StructBinder. */
+      for(const k of ['sqlite3_index_constraint',
+                      'sqlite3_index_orderby',
+                      'sqlite3_index_constraint_usage']){
+        capi.sqlite3_index_info[k] = capi[k];
+        delete capi[k];
+      }
+      capi.sqlite3_vtab_config = wasm.xWrap(
+        'sqlite3_wasm_vtab_config','int',[
+          'sqlite3*', 'int', 'int']
+      );
+    }/* end vtab-related setup */
+  }/*end C constant and struct imports*/
 
   /**
      Internal helper to assist in validating call argument counts in
@@ -729,6 +841,160 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
       pDb, capi.SQLITE_FORMAT, "SQLITE_UTF8 is the only supported encoding."
     );
   };
+
+  /**
+     __dbCleanupMap is infrastructure for recording registration of
+     UDFs and collations so that sqlite3_close_v2() can clean up any
+     automated JS-to-WASM function conversions installed by those.
+  */
+  const __argPDb = (pDb)=>wasm.xWrap.argAdapter('sqlite3*')(pDb);
+  const __argStr = (str)=>wasm.isPtr(str) ? wasm.cstrToJs(str) : str;
+  const __dbCleanupMap = function(
+    pDb, mode/*0=remove, >0=create if needed, <0=do not create if missing*/
+  ){
+    pDb = __argPDb(pDb);
+    let m = this.dbMap.get(pDb);
+    if(!mode){
+      this.dbMap.delete(pDb);
+      return m;
+    }else if(!m && mode>0){
+      this.dbMap.set(pDb, (m = Object.create(null)));
+    }
+    return m;
+  }.bind(Object.assign(Object.create(null),{
+    dbMap: new Map
+  }));
+
+  __dbCleanupMap.addCollation = function(pDb, name){
+    const m = __dbCleanupMap(pDb, 1);
+    if(!m.collation) m.collation = new Set;
+    m.collation.add(__argStr(name).toLowerCase());
+  };
+
+  __dbCleanupMap._addUDF = function(pDb, name, arity, map){
+    /* Map UDF name to a Set of arity values */
+    name = __argStr(name).toLowerCase();
+    let u = map.get(name);
+    if(!u) map.set(name, (u = new Set));
+    u.add((arity<0) ? -1 : arity);
+  };
+
+  __dbCleanupMap.addFunction = function(pDb, name, arity){
+    const m = __dbCleanupMap(pDb, 1);
+    if(!m.udf) m.udf = new Map;
+    this._addUDF(pDb, name, arity, m.udf);
+  };
+
+  __dbCleanupMap.addWindowFunc = function(pDb, name, arity){
+    const m = __dbCleanupMap(pDb, 1);
+    if(!m.wudf) m.wudf = new Map;
+    this._addUDF(pDb, name, arity, m.wudf);
+  };
+
+  /**
+     Intended to be called _only_ from sqlite3_close_v2(),
+     passed its non-0 db argument.
+
+     This function freees up certain automatically-installed WASM
+     function bindings which were installed on behalf of the given db,
+     as those may otherwise leak.
+
+     Notable caveat: this is only ever run via
+     sqlite3.capi.sqlite3_close_v2(). If a client, for whatever
+     reason, uses sqlite3.wasm.exports.sqlite3_close_v2() (the
+     function directly exported from WASM), this cleanup will not
+     happen.
+
+     This is not a silver bullet for avoiding automation-related
+     leaks but represents "an honest effort."
+
+     The issue being addressed here is covered at:
+
+     https://sqlite.org/wasm/doc/trunk/api-c-style.md#convert-func-ptr
+  */
+  __dbCleanupMap.cleanup = function(pDb){
+    pDb = __argPDb(pDb);
+    wasm.xWrap.FuncPtrAdapter.debugFuncInstall = false;
+    /**
+       Installing NULL functions in the C API will remove those
+       bindings. The FuncPtrAdapter which sits between us and the C
+       API will also treat that as an opportunity to
+       wasm.uninstallFunction() any WASM function bindings it has
+       installed for pDb.
+    */
+    try{capi.sqlite3_busy_handler(pDb, 0, 0)} catch(e){/*ignored*/}
+    try{capi.sqlite3_commit_hook(pDb, 0, 0)} catch(e){/*ignored*/}
+    try{capi.sqlite3_progress_handler(pDb, 0, 0, 0)} catch(e){/*ignored*/}
+    try{capi.sqlite3_rollback_hook(pDb, 0, 0)} catch(e){/*ignored*/}
+    try{capi.sqlite3_set_authorizer(pDb, 0, 0)} catch(e){/*ignored*/}
+    try{capi.sqlite3_trace_v2(pDb, 0, 0, 0, 0)} catch(e){/*ignored*/}
+    try{capi.sqlite3_update_hook(pDb, 0, 0)} catch(e){/*ignored*/}
+    const m = __dbCleanupMap(pDb, 0);
+    if(!m) return;
+    if(m.collation){
+      for(const name of m.collation){
+        try{
+          capi.sqlite3_create_collation_v2(
+            pDb, name, capi.SQLITE_UTF8, 0, 0, 0
+          );
+        }catch(e){
+          /*ignored*/
+        }
+      }
+      delete m.collation;
+    }
+    let i;
+    for(i = 0; i < 2; ++i){ /* Clean up UDFs... */
+      const fmap = i ? m.wudf : m.udf;
+      if(!fmap) continue;
+      const func = i
+            ? capi.sqlite3_create_window_function
+            : capi.sqlite3_create_function_v2;
+      for(const e of fmap){
+        const name = e[0], arities = e[1];
+        const fargs = [pDb, name, 0/*arity*/, capi.SQLITE_UTF8, 0, 0, 0, 0, 0];
+        if(i) fargs.push(0);
+        for(const arity of arities){
+          try{ fargs[2] = arity; func.apply(null, fargs); }
+          catch(e){/*ignored*/}
+        }
+        arities.clear();
+      }
+      fmap.clear();
+    }
+    delete m.udf;
+    delete m.wudf;
+  }/*__dbCleanupMap.cleanup()*/;
+
+  {/* Binding of sqlite3_close_v2() */
+    const __sqlite3CloseV2 = wasm.xWrap("sqlite3_close_v2", "int", "sqlite3*");
+    capi.sqlite3_close_v2 = function(pDb){
+      if(1!==arguments.length) return __dbArgcMismatch(pDb, 'sqlite3_close_v2', 1);
+      if(pDb){
+        try{__dbCleanupMap.cleanup(pDb)} catch(e){/*ignored*/}
+      }
+      return __sqlite3CloseV2(pDb);
+    };
+  }/*sqlite3_close_v2()*/
+
+  if(capi.sqlite3session_table_filter){
+    const __sqlite3SessionDelete = wasm.xWrap(
+      'sqlite3session_delete', undefined, ['sqlite3_session*']
+    );
+    capi.sqlite3session_delete = function(pSession){
+      if(1!==arguments.length){
+        return __dbArgcMismatch(pDb, 'sqlite3session_delete', 1);
+        /* Yes, we're returning a value from a void function. That seems
+           like the lesser evil compared to not maintaining arg-count
+           consistency as we do with other similar bindings. */
+      }
+      else if(pSession){
+        //wasm.xWrap.FuncPtrAdapter.debugFuncInstall = true;
+        capi.sqlite3session_table_filter(pSession, 0, 0);
+      }
+      __sqlite3SessionDelete(pSession);
+    };
+  }
 
   {/* Bindings for sqlite3_create_collation[_v2]() */
     // contextKey() impl for wasm.xWrap.FuncPtrAdapter
@@ -782,7 +1048,11 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
         return __errEncoding(pDb);
       }
       try{
-        return __sqlite3CreateCollationV2(pDb, zName, eTextRep, pArg, xCompare, xDestroy);
+        const rc = __sqlite3CreateCollationV2(pDb, zName, eTextRep, pArg, xCompare, xDestroy);
+        if(0===rc && xCompare instanceof Function){
+          __dbCleanupMap.addCollation(pDb, zName);
+        }
+        return rc;
       }catch(e){
         return util.sqlite3_wasm_db_error(pDb, e);
       }
@@ -798,13 +1068,13 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
 
   {/* Special-case handling of sqlite3_create_function_v2()
       and sqlite3_create_window_function(). */
-    /**
-       FuncPtrAdapter for contextKey() for sqlite3_create_function().
-    */
+    /** FuncPtrAdapter for contextKey() for sqlite3_create_function()
+        and friends. */
     const contextKey = function(argv,argIndex){
       return (
         argv[0/* sqlite3* */]
-          +':'+argIndex
+          +':'+(argv[2/*number of UDF args*/] < 0 ? -1 : argv[2])
+          +':'+argIndex/*distinct for each xAbc callback type*/
           +':'+wasm.cstrToJs(argv[1]).toLowerCase()
       )
     };
@@ -899,8 +1169,15 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
         return __errEncoding(pDb);
       }
       try{
-        return __sqlite3CreateFunction(pDb, funcName, nArg, eTextRep,
-                                       pApp, xFunc, xStep, xFinal, xDestroy);
+        const rc = __sqlite3CreateFunction(pDb, funcName, nArg, eTextRep,
+                                           pApp, xFunc, xStep, xFinal, xDestroy);
+        if(0===rc && (xFunc instanceof Function
+                      || xStep instanceof Function
+                      || xFinal instanceof Function
+                      || xDestroy instanceof Function)){
+          __dbCleanupMap.addFunction(pDb, funcName, nArg);
+        }
+        return rc;
       }catch(e){
         console.error("sqlite3_create_function_v2() setup threw:",e);
         return util.sqlite3_wasm_db_error(pDb, e, "Creation of UDF threw: "+e);
@@ -935,9 +1212,17 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
         return __errEncoding(pDb);
       }
       try{
-        return __sqlite3CreateWindowFunction(pDb, funcName, nArg, eTextRep,
-                                             pApp, xStep, xFinal, xValue,
-                                             xInverse, xDestroy);
+        const rc = __sqlite3CreateWindowFunction(pDb, funcName, nArg, eTextRep,
+                                                 pApp, xStep, xFinal, xValue,
+                                                 xInverse, xDestroy);
+        if(0===rc && (xStep instanceof Function
+                      || xFinal instanceof Function
+                      || xValue instanceof Function
+                      || xInverse instanceof Function
+                      || xDestroy instanceof Function)){
+          __dbCleanupMap.addWindowFunc(pDb, funcName, nArg);
+        }
+        return rc;
       }catch(e){
         console.error("sqlite3_create_window_function() setup threw:",e);
         return util.sqlite3_wasm_db_error(pDb, e, "Creation of UDF threw: "+e);
@@ -969,22 +1254,24 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
 
   }/*sqlite3_create_function_v2() and sqlite3_create_window_function() proxies*/;
 
-  if(1){/* Special-case handling of sqlite3_prepare_v2() and
-           sqlite3_prepare_v3() */
+  {/* Special-case handling of sqlite3_prepare_v2() and
+      sqlite3_prepare_v3() */
 
     /**
        Helper for string:flexible conversions which require a
        byte-length counterpart argument. Passed a value and its
-       ostensible length, this function returns [V,N], where V
-       is either v or a transformed copy of v and N is either n,
-       -1, or the byte length of v (if it's a byte array).
+       ostensible length, this function returns [V,N], where V is
+       either v or a transformed copy of v and N is either n, -1, or
+       the byte length of v (if it's a byte array or ArrayBuffer).
     */
     const __flexiString = (v,n)=>{
       if('string'===typeof v){
         n = -1;
       }else if(util.isSQLableTypedArray(v)){
         n = v.byteLength;
-        v = util.typedArrayToString(v);
+        v = util.typedArrayToString(
+          (v instanceof ArrayBuffer) ? new Uint8Array(v) : v
+        );
       }else if(Array.isArray(v)){
         v = v.join("");
         n = -1;
@@ -1173,81 +1460,41 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     };
   }/* sqlite3_config() */
 
-  {/* Import C-level constants and structs... */
-    const cJson = wasm.xCall('sqlite3_wasm_enum_json');
-    if(!cJson){
-      toss("Maintenance required: increase sqlite3_wasm_enum_json()'s",
-           "static buffer size!");
-    }
-    //console.debug('wasm.ctype length =',wasm.cstrlen(cJson));
-    wasm.ctype = JSON.parse(wasm.cstrToJs(cJson));
-    // Groups of SQLITE_xyz macros...
-    const defineGroups = ['access', 'authorizer',
-                          'blobFinalizers', 'changeset',
-                          'config', 'dataTypes',
-                          'dbConfig', 'dbStatus',
-                          'encodings', 'fcntl', 'flock', 'ioCap',
-                          'limits', 'openFlags',
-                          'prepareFlags', 'resultCodes',
-                          'sqlite3Status',
-                          'stmtStatus', 'syncFlags',
-                          'trace', 'txnState', 'udfFlags',
-                          'version' ];
-    if(wasm.bigIntEnabled){
-      defineGroups.push('serialize', 'session', 'vtab');
-    }
-    for(const t of defineGroups){
-      for(const e of Object.entries(wasm.ctype[t])){
-        // ^^^ [k,v] there triggers a buggy code transformation via
-        // one of the Emscripten-driven optimizers.
-        capi[e[0]] = e[1];
+  {/*auto-extension bindings.*/
+    const __autoExtFptr = new Set;
+
+    capi.sqlite3_auto_extension = function(fPtr){
+      if( fPtr instanceof Function ){
+        fPtr = wasm.installFunction('i(ppp)', fPtr);
+      }else if( 1!==arguments.length || !wasm.isPtr(fPtr) ){
+        return capi.SQLITE_MISUSE;
       }
-    }
-    const __rcMap = Object.create(null);
-    for(const t of ['resultCodes']){
-      for(const e of Object.entries(wasm.ctype[t])){
-        __rcMap[e[1]] = e[0];
+      const rc = wasm.exports.sqlite3_auto_extension(fPtr);
+      if( fPtr!==arguments[0] ){
+        if(0===rc) __autoExtFptr.add(fPtr);
+        else wasm.uninstallFunction(fPtr);
       }
-    }
-    /**
-       For the given integer, returns the SQLITE_xxx result code as a
-       string, or undefined if no such mapping is found.
-    */
-    capi.sqlite3_js_rc_str = (rc)=>__rcMap[rc];
-    /* Bind all registered C-side structs... */
-    const notThese = Object.assign(Object.create(null),{
-      // For each struct to NOT register, map its name to true:
-      WasmTestStruct: true,
-      /* We unregister the kvvfs VFS from Worker threads below. */
-      sqlite3_kvvfs_methods: !util.isUIThread(),
-      /* sqlite3_index_info and friends require int64: */
-      sqlite3_index_info: !wasm.bigIntEnabled,
-      sqlite3_index_constraint: !wasm.bigIntEnabled,
-      sqlite3_index_orderby: !wasm.bigIntEnabled,
-      sqlite3_index_constraint_usage: !wasm.bigIntEnabled
-    });
-    for(const s of wasm.ctype.structs){
-      if(!notThese[s.name]){
-        capi[s.name] = sqlite3.StructBinder(s);
-      }
-    }
-    if(capi.sqlite3_index_info){
-      /* Move these inner structs into sqlite3_index_info.  Binding
-      ** them to WASM requires that we create global-scope structs to
-      ** model them with, but those are no longer needed after we've
-      ** passed them to StructBinder. */
-      for(const k of ['sqlite3_index_constraint',
-                      'sqlite3_index_orderby',
-                      'sqlite3_index_constraint_usage']){
-        capi.sqlite3_index_info[k] = capi[k];
-        delete capi[k];
-      }
-      capi.sqlite3_vtab_config = wasm.xWrap(
-        'sqlite3_wasm_vtab_config','int',[
-          'sqlite3*', 'int', 'int']
-      );
-    }/* end vtab-related setup */
-  }/*end C constant and struct imports*/
+      return rc;
+    };
+
+    capi.sqlite3_cancel_auto_extension = function(fPtr){
+     /* We do not do an automatic JS-to-WASM function conversion here
+        because it would be senseless: the converted pointer would
+        never possibly match an already-installed one. */;
+      if(!fPtr || 1!==arguments.length || !wasm.isPtr(fPtr)) return 0;
+      return wasm.exports.sqlite3_cancel_auto_extension(fPtr);
+      /* Note that it "cannot happen" that a client passes a pointer which
+         is in __autoExtFptr because __autoExtFptr only contains automatic
+         conversions created inside sqlite3_auto_extension() and
+         never exposed to the client. */
+    };
+
+    capi.sqlite3_reset_auto_extension = function(){
+      wasm.exports.sqlite3_reset_auto_extension();
+      for(const fp of __autoExtFptr) wasm.uninstallFunction(fp);
+      __autoExtFptr.clear();
+    };
+  }/* auto-extension */
 
   const pKvvfs = capi.sqlite3_vfs_find("kvvfs");
   if( pKvvfs ){/* kvvfs-specific glue */

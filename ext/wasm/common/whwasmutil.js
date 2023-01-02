@@ -1499,7 +1499,7 @@ self.WhWasmUtilInstaller = function(target){
   */
   const AbstractArgAdapter = class {
     constructor(opt){
-      this.name = opt.name;
+      this.name = opt.name || 'unnamed adapter';
     }
     /**
        Gets called via xWrap() to "convert" v to whatever type
@@ -1559,6 +1559,10 @@ self.WhWasmUtilInstaller = function(target){
          and possibly dependent on a small amount of call-time
          context. This mode is the default if bindScope is _not_ set
          but a property named contextKey (described below) is.
+
+       - 'permanent': the function is installed and left there
+         forever. There is no way to recover its pointer address
+         later on.
 
      - callProxy (function): if set, this must be a function which
        will act as a proxy for any "converted" JS function. It is
@@ -1645,16 +1649,31 @@ self.WhWasmUtilInstaller = function(target){
       }
       this.isTransient = 'transient'===this.bindScope;
       this.isContext = 'context'===this.bindScope;
+      this.isPermanent = 'permanent'===this.bindScope;
       this.singleton = ('singleton'===this.bindScope) ? [] : undefined;
       //console.warn("FuncPtrAdapter()",opt,this);
       this.callProxy = (opt.callProxy instanceof Function)
         ? opt.callProxy : undefined;
     }
 
+    /** If true, the constructor emits a warning. The intent is that
+        this be set to true after bootstrapping of the higher-level
+        client library is complete, to warn downstream clients that
+        they shouldn't be relying on this implemenation detail which
+        does not have a stable interface. */
     static warnOnUse = false;
 
+    /** If true, convertArg() will FuncPtrAdapter.debugOut() when it
+        (un)installs a function binding to/from WASM. Note that
+        deinstallation of bindScope=transient bindings happens
+        via scopedAllocPop() so will not be output. */
+    static debugFuncInstall = false;
+
+    /** Function used for debug output. */
+    static debugOut = console.debug.bind(console);
+
     static bindScopes = [
-      'transient', 'context', 'singleton'
+      'transient', 'context', 'singleton', 'permanent'
     ];
 
     /* Dummy impl. Overwritten per-instance as needed. */
@@ -1692,7 +1711,7 @@ self.WhWasmUtilInstaller = function(target){
        exactly the 2nd and 3rd arguments are.
     */
     convertArg(v,argv,argIndex){
-      //console.warn("FuncPtrAdapter.convertArg()",this.signature,this.transient,v);
+      //FuncPtrAdapter.debugOut("FuncPtrAdapter.convertArg()",this.signature,this.transient,v);
       let pair = this.singleton;
       if(!pair && this.isContext){
         pair = this.contextMap(this.contextKey(argv,argIndex));
@@ -1702,9 +1721,17 @@ self.WhWasmUtilInstaller = function(target){
         /* Install a WASM binding and return its pointer. */
         if(this.callProxy) v = this.callProxy(v);
         const fp = __installFunction(v, this.signature, this.isTransient);
+        if(FuncPtrAdapter.debugFuncInstall){
+          FuncPtrAdapter.debugOut("FuncPtrAdapter installed", this,
+                                  this.contextKey(argv,argIndex), '@'+fp, v);
+        }
         if(pair){
           /* Replace existing stashed mapping */
           if(pair[1]){
+            if(FuncPtrAdapter.debugFuncInstall){
+              FuncPtrAdapter.debugOut("FuncPtrAdapter uninstalling", this,
+                                      this.contextKey(argv,argIndex), '@'+pair[1], v);
+            }
             try{target.uninstallFunction(pair[1])}
             catch(e){/*ignored*/}
           }
@@ -1715,7 +1742,10 @@ self.WhWasmUtilInstaller = function(target){
       }else if(target.isPtr(v) || null===v || undefined===v){
         if(pair && pair[1] && pair[1]!==v){
           /* uninstall stashed mapping and replace stashed mapping with v. */
-          //console.warn("FuncPtrAdapter is uninstalling function", this.contextKey(argv,argIndex),v);
+          if(FuncPtrAdapter.debugFuncInstall){
+            FuncPtrAdapter.debugOut("FuncPtrAdapter uninstalling", this,
+                                    this.contextKey(argv,argIndex), '@'+pair[1], v);
+          }
           try{target.uninstallFunction(pair[1])}
           catch(e){/*ignored*/}
           pair[0] = pair[1] = (v | 0);

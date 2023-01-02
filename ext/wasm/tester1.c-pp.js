@@ -1629,7 +1629,6 @@ self.sqlite3InitModule = sqlite3InitModule;
   ////////////////////////////////////////////////////////////////////
     .t({
       name:'Scalar UDFs',
-      //predicate: ()=>false,
       test: function(sqlite3){
         const db = this.db;
         db.createFunction("foo",(pCx,a,b)=>a+b);
@@ -1696,6 +1695,45 @@ self.sqlite3InitModule = sqlite3InitModule;
           sqlite3.capi.SQLITE_MISUSE === rc,
           "For invalid arg count."
         );
+
+        /* Confirm that we can map and unmap the same function with
+           multiple arities... */
+        const fCounts = [0,0];
+        const fArityCheck = function(pCx){
+          return ++fCounts[arguments.length-1];
+        };
+        //wasm.xWrap.FuncPtrAdapter.debugFuncInstall = true;
+        rc = capi.sqlite3_create_function_v2(
+          db, "nary", 0, capi.SQLITE_UTF8, 0, fArityCheck, 0, 0, 0
+        );
+        T.assert( 0===rc );
+        rc = capi.sqlite3_create_function_v2(
+          db, "nary", 1, capi.SQLITE_UTF8, 0, fArityCheck, 0, 0, 0
+        );
+        T.assert( 0===rc );
+        const sqlFArity0 = "select nary()";
+        const sqlFArity1 = "select nary(1)";
+        T.assert( 1 === db.selectValue(sqlFArity0) )
+          .assert( 1 === fCounts[0] ).assert( 0 === fCounts[1] );
+        T.assert( 1 === db.selectValue(sqlFArity1) )
+          .assert( 1 === fCounts[0] ).assert( 1 === fCounts[1] );
+        capi.sqlite3_create_function_v2(
+          db, "nary", 0, capi.SQLITE_UTF8, 0, 0, 0, 0, 0
+        );
+        T.mustThrowMatching((()=>db.selectValue(sqlFArity0)),
+                            (e)=>((e instanceof sqlite3.SQLite3Error)
+                                  && e.message.indexOf("wrong number of arguments")>0),
+                            "0-arity variant was uninstalled.");
+        T.assert( 2 === db.selectValue(sqlFArity1) )
+          .assert( 1 === fCounts[0] ).assert( 2 === fCounts[1] );
+        capi.sqlite3_create_function_v2(
+          db, "nary", 1, capi.SQLITE_UTF8, 0, 0, 0, 0, 0
+        );
+        T.mustThrowMatching((()=>db.selectValue(sqlFArity1)),
+                            (e)=>((e instanceof sqlite3.SQLite3Error)
+                                  && e.message.indexOf("no such function")>0),
+                            "1-arity variant was uninstalled.");
+        //wasm.xWrap.FuncPtrAdapter.debugFuncInstall = false;
       }
     })
 
@@ -2648,6 +2686,115 @@ self.sqlite3InitModule = sqlite3InitModule;
       }
     }/*OPFS util sanity checks*/)
   ;/* end OPFS tests */
+
+  ////////////////////////////////////////////////////////////////////////
+  T.g('Hook APIs')
+    .t({
+      name: "Commit/rollback/update hooks",
+      predicate: ()=>wasm.bigIntEnabled || "Update hook requires int64",
+      test: function(sqlite3){
+        let countCommit = 0, countRollback = 0;;
+        const db = new sqlite3.oo1.DB(':memory:',1 ? 'c' : 'ct');
+        let rc = capi.sqlite3_commit_hook(db, (p)=>{
+          ++countCommit;
+          return (1 === p) ? 0 : capi.SQLITE_ERROR;
+        }, 1);
+        T.assert( 0 === rc /*void pointer*/ );
+
+        // Commit hook...
+        db.exec("BEGIN; SELECT 1; COMMIT");
+        T.assert(0 === countCommit,
+                 "No-op transactions (mostly) do not trigger commit hook.");
+        db.exec("BEGIN EXCLUSIVE; SELECT 1; COMMIT");
+        T.assert(1 === countCommit,
+                 "But EXCLUSIVE transactions do.");
+        db.transaction((d)=>{d.exec("create table t(a)");});
+        T.assert(2 === countCommit);
+
+        // Rollback hook:
+        rc = capi.sqlite3_rollback_hook(db, (p)=>{
+          ++countRollback;
+          T.assert( 2 === p );
+        }, 2);
+        T.assert( 0 === rc /*void pointer*/ );
+        T.mustThrowMatching(()=>{
+          db.transaction('drop table t',()=>{})
+        }, (e)=>{
+          return (capi.SQLITE_MISUSE === e.resultCode)
+            && ( e.message.indexOf('Invalid argument') > 0 );
+        });
+        T.assert(0 === countRollback, "Transaction was not started.");
+        T.mustThrowMatching(()=>{
+          db.transaction('immediate', ()=>{
+            sqlite3.SQLite3Error.toss(capi.SQLITE_FULL,'testing rollback hook');
+          });
+        }, (e)=>{
+          return capi.SQLITE_FULL === e.resultCode
+        });
+        T.assert(1 === countRollback);
+
+        // Update hook...
+        const countUpdate = Object.create(null);
+        capi.sqlite3_update_hook(db, (p,op,dbName,tbl,rowid)=>{
+          T.assert('main' === dbName.toLowerCase())
+            .assert('t' === tbl.toLowerCase())
+            .assert(3===p)
+            .assert('bigint' === typeof rowid);
+          switch(op){
+              case capi.SQLITE_INSERT:
+              case capi.SQLITE_UPDATE:
+              case capi.SQLITE_DELETE:
+                countUpdate[op] = (countUpdate[op]||0) + 1;
+                break;
+              default: return;
+          }
+        }, 3);
+        db.transaction((d)=>{
+          d.exec([
+            "insert into t(a) values(1);",
+            "update t set a=2;",
+            "update t set a=3;",
+            "delete from t where a=3"
+            // update hook is not called for an unqualified DELETE
+          ]);
+        });
+        T.assert(1 === countRollback)
+          .assert(3 === countCommit)
+          .assert(1 === countUpdate[capi.SQLITE_INSERT])
+          .assert(2 === countUpdate[capi.SQLITE_UPDATE])
+          .assert(1 === countUpdate[capi.SQLITE_DELETE]);
+        //wasm.xWrap.FuncPtrAdapter.debugFuncInstall = true;
+        T.assert(1 === capi.sqlite3_commit_hook(db, 0, 0));
+        T.assert(2 === capi.sqlite3_rollback_hook(db, 0, 0));
+        T.assert(3 === capi.sqlite3_update_hook(db, 0, 0));
+        //wasm.xWrap.FuncPtrAdapter.debugFuncInstall = false;
+        db.close();
+      }
+    });
+
+  ////////////////////////////////////////////////////////////////////////
+  T.g('Auto-extension API')
+    .t({
+      name: "Auto-extension sanity checks.",
+      test: function(sqlite3){
+        let counter = 0;
+        const fp = wasm.installFunction('i(ppp)', function(pDb,pzErr,pApi){
+          ++counter;
+          return 0;
+        });
+        (new sqlite3.oo1.DB()).close();
+        T.assert( 0===counter );
+        capi.sqlite3_auto_extension(fp);
+        (new sqlite3.oo1.DB()).close();
+        T.assert( 1===counter );
+        (new sqlite3.oo1.DB()).close();
+        T.assert( 2===counter );
+        capi.sqlite3_cancel_auto_extension(fp);
+        wasm.uninstallFunction(fp);
+        (new sqlite3.oo1.DB()).close();
+        T.assert( 2===counter );
+      }
+    });
 
   ////////////////////////////////////////////////////////////////////////
   T.g('Session API')
