@@ -83,8 +83,8 @@ main(
      * Make sure the compiler and linker aren't effected by the outside world.
      */
 
-    SetEnvironmentVariable("CL", "");
-    SetEnvironmentVariable("LINK", "");
+    SetEnvironmentVariableA("CL", "");
+    SetEnvironmentVariableA("LINK", "");
 
     if (argc > 1 && *argv[1] == '-') {
 	switch (*(argv[1]+1)) {
@@ -243,21 +243,21 @@ CheckForCompilerFeature(
      * Base command line.
      */
 
-    lstrcpy(cmdline, "cl.exe -nologo -c -TC -Zs -X -Fp.\\_junk.pch ");
+    lstrcpyA(cmdline, "cl.exe -nologo -c -TC -Zs -X -Fp.\\_junk.pch ");
 
     /*
      * Append our option for testing
      */
 
-    lstrcat(cmdline, option);
+    lstrcatA(cmdline, option);
 
     /*
      * Filename to compile, which exists, but is nothing and empty.
      */
 
-    lstrcat(cmdline, " .\\nul");
+    lstrcatA(cmdline, " .\\nul");
 
-    ok = CreateProcess(
+    ok = CreateProcessA(
 	    NULL,	    /* Module name. */
 	    cmdline,	    /* Command line. */
 	    NULL,	    /* Process handle not inheritable. */
@@ -274,10 +274,10 @@ CheckForCompilerFeature(
 	int chars = snprintf(msg, sizeof(msg) - 1,
 		"Tried to launch: \"%s\", but got error [%u]: ", cmdline, err);
 
-	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS|
+	FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS|
 		FORMAT_MESSAGE_MAX_WIDTH_MASK, 0L, err, 0, (LPSTR)&msg[chars],
 		(300-chars), 0);
-	WriteFile(GetStdHandle(STD_ERROR_HANDLE), msg, lstrlen(msg), &err,NULL);
+	WriteFile(GetStdHandle(STD_ERROR_HANDLE), msg, lstrlenA(msg), &err,NULL);
 	return 2;
     }
 
@@ -379,19 +379,19 @@ CheckForLinkerFeature(
      * Base command line.
      */
 
-    lstrcpy(cmdline, "link.exe -nologo ");
+    lstrcpyA(cmdline, "link.exe -nologo ");
 
     /*
      * Append our option for testing.
      */
 
     for (i = 0; i < count; i++) {
-	lstrcat(cmdline, " \"");
-	lstrcat(cmdline, options[i]);
-	lstrcat(cmdline, "\"");
+	lstrcatA(cmdline, " \"");
+	lstrcatA(cmdline, options[i]);
+	lstrcatA(cmdline, "\"");
     }
 
-    ok = CreateProcess(
+    ok = CreateProcessA(
 	    NULL,	    /* Module name. */
 	    cmdline,	    /* Command line. */
 	    NULL,	    /* Process handle not inheritable. */
@@ -408,10 +408,10 @@ CheckForLinkerFeature(
 	int chars = snprintf(msg, sizeof(msg) - 1,
 		"Tried to launch: \"%s\", but got error [%u]: ", cmdline, err);
 
-	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS|
+	FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS|
 		FORMAT_MESSAGE_MAX_WIDTH_MASK, 0L, err, 0, (LPSTR)&msg[chars],
 		(300-chars), 0);
-	WriteFile(GetStdHandle(STD_ERROR_HANDLE), msg, lstrlen(msg), &err,NULL);
+	WriteFile(GetStdHandle(STD_ERROR_HANDLE), msg, lstrlenA(msg), &err,NULL);
 	return 2;
     }
 
@@ -706,7 +706,7 @@ QualifyPath(
 {
     char szCwd[MAX_PATH + 1];
 
-    GetFullPathName(szPath, sizeof(szCwd)-1, szCwd, NULL);
+    GetFullPathNameA(szPath, sizeof(szCwd)-1, szCwd, NULL);
     printf("%s\n", szCwd);
     return 0;
 }
@@ -725,7 +725,7 @@ static int LocateDependencyHelper(const char *dir, const char *keypath)
     char path[MAX_PATH+1];
     size_t dirlen;
     int keylen, ret;
-    WIN32_FIND_DATA finfo;
+    WIN32_FIND_DATAA finfo;
 
     if (dir == NULL || keypath == NULL)
 	return 2; /* Have no real error reporting mechanism into nmake */
@@ -744,7 +744,7 @@ static int LocateDependencyHelper(const char *dir, const char *keypath)
      */
     hSearch = FindFirstFileEx(path, 0, &finfo, 1, NULL, 0);
 #else
-    hSearch = FindFirstFile(path, &finfo);
+    hSearch = FindFirstFileA(path, &finfo);
 #endif
     if (hSearch == INVALID_HANDLE_VALUE)
 	return 1; /* Not found */
@@ -765,7 +765,7 @@ static int LocateDependencyHelper(const char *dir, const char *keypath)
 	strncpy(path+dirlen+1, finfo.cFileName, sublen);
 	path[dirlen+1+sublen] = '\\';
 	strncpy(path+dirlen+1+sublen+1, keypath, keylen+1);
-	if (FileExists(path)) {
+	if (FileExistsA(path)) {
 	    /* Found a match, print to stdout */
 	    path[dirlen+1+sublen] = '\0';
 	    QualifyPath(path);
