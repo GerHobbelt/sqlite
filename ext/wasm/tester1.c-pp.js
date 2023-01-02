@@ -345,6 +345,38 @@ self.sqlite3InitModule = sqlite3InitModule;
   ////////////////////////////////////////////////////////////////////
   T.g('Basic sanity checks')
     .t({
+      name:'sqlite3_config()',
+      test:function(sqlite3){
+        for(const k of [
+          'SQLITE_CONFIG_GETMALLOC', 'SQLITE_CONFIG_URI'
+        ]){
+          T.assert(capi[k] > 0);
+        }
+        T.assert(capi.SQLITE_MISUSE===capi.sqlite3_config(
+          capi.SQLITE_CONFIG_URI, 1
+        ), "MISUSE because the library has already been initialized.");
+        T.assert(capi.SQLITE_MISUSE === capi.sqlite3_config(
+          // not enough args
+          capi.SQLITE_CONFIG_GETMALLOC
+        ));
+        T.assert(capi.SQLITE_NOTFOUND === capi.sqlite3_config(
+          // unhandled-in-JS config option
+          capi.SQLITE_CONFIG_GETMALLOC, 1
+        ));
+        if(0){
+          log("We cannot _fully_ test sqlite3_config() after the library",
+              "has been initialized (which it necessarily has been to",
+              "set up various bindings) and we cannot shut it down ",
+              "without losing the VFS registrations.");
+          T.assert(0 === capi.sqlite3_config(
+            capi.SQLITE_CONFIG_URI, 1
+          ));
+        }
+      }
+    })/*sqlite3_config()*/
+
+  ////////////////////////////////////////////////////////////////////
+    .t({
       name: "JS wasm-side allocator",
       test: function(sqlite3){
         if(sqlite3.config.useStdAlloc){
@@ -422,6 +454,7 @@ self.sqlite3InitModule = sqlite3InitModule;
         assert(0===capi.sqlite3_strlike("%.txt", "foo.txt", 0)).
         assert(0!==capi.sqlite3_strlike("%.txt", "foo.xtx", 0));
     })
+
   ////////////////////////////////////////////////////////////////////
   ;/*end of basic sanity checks*/
 
@@ -1331,7 +1364,85 @@ self.sqlite3InitModule = sqlite3InitModule;
         T.assert(e instanceof sqlite3.SQLite3Error)
           .assert(0==e.message.indexOf('Cannot prepare empty'));
       }
-    })
+    })/*setup table T*/
+
+  ////////////////////////////////////////////////////////////////////
+    .t({
+      name: "sqlite3_set_authorizer()",
+      test:function(sqlite3){
+        T.assert(capi.SQLITE_IGNORE>0)
+          .assert(capi.SQLITE_DENY>0);
+        const db = this.db;
+        const ssa = capi.sqlite3_set_authorizer;
+        const n = db.selectValue('select count(*) from t');
+        T.assert(n>0);
+        let authCount = 0;
+        let rc = ssa(db, function(pV, iCode, s0, s1, s2, s3){
+          ++authCount;
+          return capi.SQLITE_IGNORE;
+        }, 0);
+        T.assert(0===rc)
+          .assert(
+            undefined === db.selectValue('select count(*) from t')
+            /* Note that the count() never runs, so we get undefined
+               instead of 0. */
+          )
+          .assert(authCount>0);
+        authCount = 0;
+        db.exec("update t set a=-9999");
+        T.assert(authCount>0);
+        /* Reminder: we don't use DELETE because, from the C API docs:
+
+          "If the action code is [SQLITE_DELETE] and the callback
+          returns [SQLITE_IGNORE] then the [DELETE] operation proceeds
+          but the [truncate optimization] is disabled and all rows are
+          deleted individually."
+        */
+        rc = ssa(db, null, 0);
+        authCount = 0;
+        T.assert(-9999 != db.selectValue('select a from t'))
+          .assert(0===authCount);
+        rc = ssa(db, function(pV, iCode, s0, s1, s2, s3){
+          ++authCount;
+          return capi.SQLITE_DENY;
+        }, 0);
+        T.assert(0===rc);
+        let err;
+        try{ db.exec("select 1 from t") }
+        catch(e){ err = e }
+        T.assert(err instanceof sqlite3.SQLite3Error)
+          .assert(err.message.indexOf('not authorized'>0))
+          .assert(1===authCount);
+        authCount = 0;
+        rc = ssa(db, function(...args){
+          ++authCount;
+          return capi.SQLITE_OK;
+        }, 0);
+        T.assert(0===rc);
+        T.assert(n === db.selectValue('select count(*) from t'))
+          .assert(authCount>0);
+        authCount = 0;
+        rc = ssa(db, function(pV, iCode, s0, s1, s2, s3){
+          ++authCount;
+          throw new Error("Testing catching of authorizer.");
+        }, 0);
+        T.assert(0===rc);
+        authCount = 0;
+        err = undefined;
+        try{ db.exec("select 1 from t") }
+        catch(e){err = e}
+        T.assert(err instanceof Error)
+          .assert(err.message.indexOf('not authorized')>0)
+        /* Note that the thrown message is trumped/overwritten
+           by the authorizer process. */
+          .assert(1===authCount);
+        rc = ssa(db, 0, 0);
+        authCount = 0;
+        T.assert(0===rc);
+        T.assert(n === db.selectValue('select count(*) from t'))
+          .assert(0===authCount);
+      }
+    })/*sqlite3_set_authorizer()*/
 
   ////////////////////////////////////////////////////////////////////////
     .t("sqlite3_table_column_metadata()", function(sqlite3){

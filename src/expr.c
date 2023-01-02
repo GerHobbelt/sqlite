@@ -109,7 +109,8 @@ int sqlite3ExprDataType(const Expr *pExpr){
         break;
       }
       case TK_NULL: {
-        return 0x00;
+        pExpr = 0;
+        break;
       }
       case TK_STRING: {
         return 0x02;
@@ -145,6 +146,9 @@ int sqlite3ExprDataType(const Expr *pExpr){
         for(ii=1; ii<pList->nExpr; ii+=2){
           res |= sqlite3ExprDataType(pList->a[ii].pExpr);
         }
+        if( pList->nExpr % 2 ){
+          res |= sqlite3ExprDataType(pList->a[pList->nExpr-1].pExpr);
+        }
         return res;
       }
       default: {
@@ -152,7 +156,7 @@ int sqlite3ExprDataType(const Expr *pExpr){
       }
     } /* End of switch(op) */
   } /* End of while(pExpr) */
-  return 0;
+  return 0x00;
 }
 
 /*
@@ -4246,7 +4250,7 @@ expr_code_doover:
         assert( pExpr->y.pTab!=0 );
         aff = sqlite3TableColumnAffinity(pExpr->y.pTab, pExpr->iColumn);
         if( aff>SQLITE_AFF_BLOB ){
-          static const char zAff[] = "B\000C\000D\000E";
+          static const char zAff[] = "B\000C\000D\000E\000F";
           assert( SQLITE_AFF_BLOB=='A' );
           assert( SQLITE_AFF_TEXT=='B' );
           sqlite3VdbeAddOp4(v, OP_Affinity, iReg, 1, 0,
@@ -6243,10 +6247,8 @@ int sqlite3ReferencesSrcList(Parse *pParse, Expr *pExpr, SrcList *pSrcList){
 ** it does, make a copy.  This is done because the pExpr argument is
 ** subject to change.
 **
-** The copy is stored on pParse->pConstExpr with a register number of 0.
-** This will cause the expression to be deleted automatically when the
-** Parse object is destroyed, but the zero register number means that it
-** will not generate any code in the preamble.
+** The copy is scheduled for deletion using the sqlite3ExprDeferredDelete()
+** which builds on the sqlite3ParserAddCleanup() mechanism.
 */
 static int agginfoPersistExprCb(Walker *pWalker, Expr *pExpr){
   if( ALWAYS(!ExprHasProperty(pExpr, EP_TokenOnly|EP_Reduced))
@@ -6257,7 +6259,6 @@ static int agginfoPersistExprCb(Walker *pWalker, Expr *pExpr){
     Parse *pParse = pWalker->pParse;
     sqlite3 *db = pParse->db;
     if( pExpr->op!=TK_AGG_FUNCTION ){
-      assert( pExpr->op==TK_AGG_COLUMN || pExpr->op==TK_IF_NULL_ROW );
       assert( iAgg>=0 && iAgg<pAggInfo->nColumn );
       if( pAggInfo->aCol[iAgg].pCExpr==pExpr ){
         pExpr = sqlite3ExprDup(db, pExpr, 0);

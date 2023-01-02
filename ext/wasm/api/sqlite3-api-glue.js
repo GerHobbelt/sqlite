@@ -98,11 +98,6 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     ["sqlite3_db_handle", "sqlite3*", "sqlite3_stmt*"],
     ["sqlite3_db_name", "string", "sqlite3*", "int"],
     ["sqlite3_db_status", "int", "sqlite3*", "int", "*", "*", "int"],
-    ["sqlite3_deserialize", "int", "sqlite3*", "string", "*", "i64", "i64", "int"]
-    /* Careful! Short version: de/serialize() are problematic because they
-       might use a different allocator than the user for managing the
-       deserialized block. de/serialize() are ONLY safe to use with
-       sqlite3_malloc(), sqlite3_free(), and its 64-bit variants. */,
     ["sqlite3_errcode", "int", "sqlite3*"],
     ["sqlite3_errmsg", "string", "sqlite3*"],
     ["sqlite3_error_offset", "int", "sqlite3*"],
@@ -138,7 +133,7 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
        the range of supported argument types. */
     [ 
       "sqlite3_progress_handler", undefined, [
-        "sqlite3*", "int", wasm.xWrap.FuncPtrAdapter({
+        "sqlite3*", "int", new wasm.xWrap.FuncPtrAdapter({
           name: 'xProgressHandler',
           signature: 'i(p)',
           bindScope: 'context',
@@ -161,7 +156,6 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     ["sqlite3_result_subtype", undefined, "sqlite3_value*", "int"],
     ["sqlite3_result_text", undefined, "sqlite3_context*", "string", "int", "*"],
     ["sqlite3_result_zeroblob", undefined, "sqlite3_context*", "int"],
-    ["sqlite3_serialize","*", "sqlite3*", "string", "*", "int"],
     ["sqlite3_set_auxdata", undefined, "sqlite3_context*", "int", "*", "*"/* => v(*) */],
     ["sqlite3_shutdown", undefined],
     ["sqlite3_sourceid", "string"],
@@ -180,7 +174,7 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
      "**", "**", "*", "*", "*"],
     ["sqlite3_total_changes", "int", "sqlite3*"],
     ["sqlite3_trace_v2", "int", "sqlite3*", "int",
-     wasm.xWrap.FuncPtrAdapter({
+     new wasm.xWrap.FuncPtrAdapter({
        name: 'sqlite3_trace_v2::callback',
        signature: 'i(ippp)',
        contextKey: (argIndex, argv)=>'sqlite3@'+argv[0]
@@ -236,6 +230,11 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     ["sqlite3_create_module_v2", "int",
      ["sqlite3*","string","sqlite3_module*","*","*"]],
     ["sqlite3_declare_vtab", "int", ["sqlite3*", "string:flexible"]],
+    ["sqlite3_deserialize", "int", "sqlite3*", "string", "*", "i64", "i64", "int"]
+    /* Careful! Short version: de/serialize() are problematic because they
+       might use a different allocator than the user for managing the
+       deserialized block. de/serialize() are ONLY safe to use with
+       sqlite3_malloc(), sqlite3_free(), and its 64-bit variants. */,
     ["sqlite3_drop_modules", "int", ["sqlite3*", "**"]],
     ["sqlite3_last_insert_rowid", "i64", ["sqlite3*"]],
     ["sqlite3_malloc64", "*","i64"],
@@ -244,6 +243,9 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     ["sqlite3_realloc64", "*","*", "i64"],
     ["sqlite3_result_int64", undefined, "*", "i64"],
     ["sqlite3_result_zeroblob64", "int", "*", "i64"],
+    ["sqlite3_serialize","*", "sqlite3*", "string", "*", "int"],
+    /* sqlite3_set_authorizer() requires a hand-written binding for
+       string conversions, so is defined elsewhere. */
     ["sqlite3_set_last_insert_rowid", undefined, ["sqlite3*", "i64"]],
     ["sqlite3_status64", "int", "int", "*", "*", "int"],
     ["sqlite3_total_changes64", "i64", ["sqlite3*"]],
@@ -469,14 +471,14 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
       'sqlite3*','string','int','*',
       new wasm.xWrap.FuncPtrAdapter({
         /* int(*xCompare)(void*,int,const void*,int,const void*) */
-        name: 'xCompare',
+        name: 'sqlite3_create_collation_v2::xCompare',
         signature: 'i(pipip)',
         bindScope: 'context',
         contextKey: __collationContextKey
       }),
       new wasm.xWrap.FuncPtrAdapter({
         /* void(*xDestroy(void*) */
-        name: 'xDestroy',
+        name: 'sqlite3_create_collation_v2::xDestroy',
         signature: 'v(p)',
         bindScope: 'context',
         contextKey: __collationContextKey
@@ -818,6 +820,83 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     };
   }/*sqlite3_prepare_v2/v3()*/;
 
+  {/* sqlite3_set_authorizer() */
+    const __ssa = wasm.xWrap("sqlite3_set_authorizer", 'int', [
+      "sqlite3*",
+      new wasm.xWrap.FuncPtrAdapter({
+        name: "sqlite3_set_authorizer::xAuth",
+        signature: "i(pi"+"ssss)",
+        contextKey: (argIndex, argv)=>argv[0/*(sqlite3*)*/]
+      }),
+      "*"
+    ]);
+    capi.sqlite3_set_authorizer = function(pDb, xAuth, pUserData){
+      if(3!==arguments.length) return __dbArgcMismatch(pDb, 'sqlite3_set_authorizer', 3);
+      if(xAuth instanceof Function){
+        const xProxy = xAuth;
+        /* Create a proxy which will receive the C-strings from WASM
+           and convert them to JS strings for the client-supplied
+           function. */
+        xAuth = function(pV, iCode, s0, s1, s2, s3){
+          try{
+            s0 = s0 && wasm.cstrToJs(s0); s1 = s1 && wasm.cstrToJs(s1);
+            s2 = s2 && wasm.cstrToJs(s2); s3 = s3 && wasm.cstrToJs(s3);
+            return xProxy(pV, iCode, s0, s1, s2, s3) || 0;
+          }catch(e){
+            return util.sqlite3_wasm_db_error(pDb, e);
+          }
+        };
+      }
+      return __ssa(pDb, xAuth, pUserData);
+    };
+  }/* sqlite3_set_authorizer() */
+
+  {/* sqlite3_config() */
+    /**
+       Wraps a small subset of the C API's sqlite3_config() options.
+       Unsupported options trigger the return of capi.SQLITE_NOTFOUND.
+       Passing fewer than 2 arguments triggers return of
+       capi.SQLITE_MISUSE.
+    */
+    capi.sqlite3_config = function(op, ...args){
+      if(arguments.length<2) return capi.SQLITE_MISUSE;
+      switch(op){
+          case capi.SQLITE_CONFIG_COVERING_INDEX_SCAN: // 20  /* int */
+          case capi.SQLITE_CONFIG_MEMSTATUS:// 9  /* boolean */
+          case capi.SQLITE_CONFIG_SMALL_MALLOC: // 27  /* boolean */
+          case capi.SQLITE_CONFIG_SORTERREF_SIZE: // 28  /* int nByte */
+          case capi.SQLITE_CONFIG_STMTJRNL_SPILL: // 26  /* int nByte */
+          case capi.SQLITE_CONFIG_URI:// 17  /* int */
+            return wasm.exports.sqlite3_wasm_config_i(op, args[0]);
+          case capi.SQLITE_CONFIG_LOOKASIDE: // 13  /* int int */
+            return wasm.exports.sqlite3_wasm_config_ii(op, args[0], args[1]);
+          case capi.SQLITE_CONFIG_MEMDB_MAXSIZE: // 29  /* sqlite3_int64 */
+            return wasm.exports.sqlite3_wasm_config_j(op, args[0]);
+          case capi.SQLITE_CONFIG_GETMALLOC: // 5 /* sqlite3_mem_methods* */
+          case capi.SQLITE_CONFIG_GETMUTEX: // 11  /* sqlite3_mutex_methods* */
+          case capi.SQLITE_CONFIG_GETPCACHE2: // 19  /* sqlite3_pcache_methods2* */
+          case capi.SQLITE_CONFIG_GETPCACHE: // 15  /* no-op */
+          case capi.SQLITE_CONFIG_HEAP: // 8  /* void*, int nByte, int min */
+          case capi.SQLITE_CONFIG_LOG: // 16  /* xFunc, void* */
+          case capi.SQLITE_CONFIG_MALLOC:// 4  /* sqlite3_mem_methods* */
+          case capi.SQLITE_CONFIG_MMAP_SIZE: // 22  /* sqlite3_int64, sqlite3_int64 */
+          case capi.SQLITE_CONFIG_MULTITHREAD: // 2 /* nil */
+          case capi.SQLITE_CONFIG_MUTEX: // 10  /* sqlite3_mutex_methods* */
+          case capi.SQLITE_CONFIG_PAGECACHE: // 7  /* void*, int sz, int N */
+          case capi.SQLITE_CONFIG_PCACHE2: // 18  /* sqlite3_pcache_methods2* */
+          case capi.SQLITE_CONFIG_PCACHE: // 14  /* no-op */
+          case capi.SQLITE_CONFIG_PCACHE_HDRSZ: // 24  /* int *psz */
+          case capi.SQLITE_CONFIG_PMASZ: // 25  /* unsigned int szPma */
+          case capi.SQLITE_CONFIG_SERIALIZED: // 3 /* nil */
+          case capi.SQLITE_CONFIG_SINGLETHREAD: // 1 /* nil */:
+          case capi.SQLITE_CONFIG_SQLLOG: // 21  /* xSqllog, void* */
+          case capi.SQLITE_CONFIG_WIN32_HEAPSIZE: // 23  /* int nByte */
+          default:
+            return capi.SQLITE_NOTFOUND;
+      }
+    };
+  }/* sqlite3_config() */
+
   {/* Import C-level constants and structs... */
     const cJson = wasm.xCall('sqlite3_wasm_enum_json');
     if(!cJson){
@@ -827,7 +906,7 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
     wasm.ctype = JSON.parse(wasm.cstrToJs(cJson));
     //console.debug('wasm.ctype length =',wasm.cstrlen(cJson));
     const defineGroups = ['access', 'authorizer',
-                          'blobFinalizers', 'dataTypes',
+                          'blobFinalizers', 'config', 'dataTypes',
                           'dbConfig', 'dbStatus',
                           'encodings', 'fcntl', 'flock', 'ioCap',
                           'limits', 'openFlags',
@@ -885,9 +964,10 @@ self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
         capi.sqlite3_index_info[k] = capi[k];
         delete capi[k];
       }
-      capi.sqlite3_vtab_config =
-        (pDb, op, arg=0)=>wasm.exports.sqlite3_wasm_vtab_config(
-          wasm.xWrap.argAdapter('sqlite3*')(pDb), op, arg);
+      capi.sqlite3_vtab_config = wasm.xWrap(
+        'sqlite3_wasm_vtab_config','int',[
+          'sqlite3*', 'int', 'int']
+      );
     }/* end vtab-related setup */
   }/*end C constant and struct imports*/
 
