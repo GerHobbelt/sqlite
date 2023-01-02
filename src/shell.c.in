@@ -611,6 +611,7 @@ static void utf8_width_print(FILE *pOut, int w, const char *zUtf){
   int i;
   int n;
   int aw = w<0 ? -w : w;
+  if( zUtf==0 ) zUtf = "";
   for(i=n=0; zUtf[i]; i++){
     if( (zUtf[i]&0xc0)!=0x80 ){
       n++;
@@ -1137,6 +1138,11 @@ INCLUDE ../ext/expert/sqlite3expert.h
 INCLUDE ../ext/expert/sqlite3expert.c
 
 #if !defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_ENABLE_DBPAGE_VTAB)
+#define SQLITE_SHELL_HAVE_RECOVER 1
+#else
+#define SQLITE_SHELL_HAVE_RECOVER 0
+#endif
+#if SQLITE_SHELL_HAVE_RECOVER
 INCLUDE ../ext/recover/dbdata.c
 INCLUDE ../ext/recover/sqlite3recover.h
 INCLUDE ../ext/recover/sqlite3recover.c
@@ -2812,6 +2818,7 @@ static char *shell_error_context(const char *zSql, sqlite3 *db){
       while( (zSql[len]&0xc0)==0x80 ) len--;
     }
     zCode = sqlite3_mprintf("%.*s", len, zSql);
+    shell_check_oom(zCode);
     for(i=0; zCode[i]; i++){ if( IsSpace(zSql[i]) ) zCode[i] = ' '; }
     if( iOffset<25 ){
       zMsg = sqlite3_mprintf("\n  %z\n  %*s^--- error here", zCode, iOffset, "");
@@ -5006,7 +5013,7 @@ static void open_db(ShellState *p, int openFlags){
     sqlite3_fileio_init(p->db, 0, 0);
     sqlite3_completion_init(p->db, 0, 0);
 #endif
-#if !defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_ENABLE_DBPAGE_VTAB)
+#if SQLITE_SHELL_HAVE_RECOVER
     sqlite3_dbdata_init(p->db, 0, 0);
 #endif
 #ifdef SQLITE_HAVE_ZLIB
@@ -5794,7 +5801,7 @@ static int db_int(sqlite3 *db, const char *zSql){
   return res;
 }
 
-#if !defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_ENABLE_DBPAGE_VTAB)
+#if SQLITE_SHELL_HAVE_RECOVER
 /*
 ** Convert a 2-byte or 4-byte big-endian integer into a native integer
 */
@@ -5901,8 +5908,7 @@ static int shell_dbinfo_command(ShellState *p, int nArg, char **azArg){
   utf8_printf(p->out, "%-20s %u\n", "data version", iDataVersion);
   return 0;
 }
-#endif /* !defined(SQLITE_OMIT_VIRTUALTABLE)
-          && defined(SQLITE_ENABLE_DBPAGE_VTAB) */
+#endif /* SQLITE_SHELL_HAVE_RECOVER */
 
 /*
 ** Print the current sqlite3_errmsg() value to stderr and return 1.
@@ -7244,7 +7250,7 @@ static char *shellMPrintf(int *pRc, const char *zFmt, ...){
 }
 
 
-#if !defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_ENABLE_DBPAGE_VTAB)
+#if SQLITE_SHELL_HAVE_RECOVER
 
 /*
 ** This function is used as a callback by the recover extension. Simply
@@ -7263,9 +7269,9 @@ static int recoverSqlCb(void *pCtx, const char *zSql){
 */
 static int recoverDatabaseCmd(ShellState *pState, int nArg, char **azArg){
   int rc = SQLITE_OK;
-  const char *zRecoveryDb = "";   /* Name of "recovery" database */
+  const char *zRecoveryDb = "";   /* Name of "recovery" database.  Debug only */
   const char *zLAF = "lost_and_found";
-  int bFreelist = 1;              /* 0 if --freelist-corrupt is specified */
+  int bFreelist = 1;              /* 0 if --ignore-freelist is specified */
   int bRowids = 1;                /* 0 if --no-rowids */
   sqlite3_recover *p = 0;
   int i = 0;
@@ -7275,10 +7281,15 @@ static int recoverDatabaseCmd(ShellState *pState, int nArg, char **azArg){
     int n;
     if( z[0]=='-' && z[1]=='-' ) z++;
     n = strlen30(z);
-    if( n<=17 && memcmp("-freelist-corrupt", z, n)==0 ){
+    if( n<=17 && memcmp("-ignore-freelist", z, n)==0 ){
       bFreelist = 0;
     }else
     if( n<=12 && memcmp("-recovery-db", z, n)==0 && i<(nArg-1) ){
+      /* This option determines the name of the ATTACH-ed database used
+      ** internally by the recovery extension.  The default is "" which
+      ** means to use a temporary database that is automatically deleted
+      ** when closed.  This option is undocumented and might disappear at
+      ** any moment. */
       i++;
       zRecoveryDb = azArg[i];
     }else
@@ -7300,7 +7311,7 @@ static int recoverDatabaseCmd(ShellState *pState, int nArg, char **azArg){
       pState->db, "main", recoverSqlCb, (void*)pState
   );
 
-  sqlite3_recover_config(p, SQLITE_RECOVER_TESTDB, (void*)zRecoveryDb);
+  sqlite3_recover_config(p, SQLITE_RECOVER_TESTDB, (void*)zRecoveryDb);  /* Debug use only */
   sqlite3_recover_config(p, SQLITE_RECOVER_LOST_AND_FOUND, (void*)zLAF);
   sqlite3_recover_config(p, SQLITE_RECOVER_ROWIDS, (void*)&bRowids);
   sqlite3_recover_config(p, SQLITE_RECOVER_FREELIST_CORRUPT,(void*)&bFreelist);
@@ -7314,7 +7325,7 @@ static int recoverDatabaseCmd(ShellState *pState, int nArg, char **azArg){
   rc = sqlite3_recover_finish(p);
   return rc;
 }
-#endif /* !(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_ENABLE_DBPAGE_VTAB) */
+#endif /* SQLITE_SHELL_HAVE_RECOVER */
 
 
 /*
@@ -7962,7 +7973,7 @@ DISPATCHABLE_COMMAND( dbconfig 3 1 3 ){
   }   
   return 0;
 }
-CONDITION_COMMAND(dbinfo (!defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_ENABLE_DBPAGE_VTAB)) );
+CONDITION_COMMAND(dbinfo SQLITE_SHELL_HAVE_RECOVER);
 DISPATCHABLE_COMMAND( dbinfo 3 1 2 ){
   return shell_dbinfo_command(p, nArg, azArg);
 }
@@ -9610,12 +9621,12 @@ DISPATCHABLE_COMMAND( prompt ? 1 3 ){
 /*****************
  * The .read, .recover and .restore commands
  */
-CONDITION_COMMAND( recover (!defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_ENABLE_DBPAGE_VTAB)) );
+CONDITION_COMMAND( recover SQLITE_SHELL_HAVE_RECOVER );
 COLLECT_HELP_TEXT[
   ".read FILE               Read input from FILE or command output",
   "    If FILE begins with \"|\", it is a command that generates the input.",
   ".recover                 Recover as much data as possible from corrupt db.",
-  "   --freelist-corrupt       Assume the freelist is corrupt",
+  "   --ignore-freelist        Ignore pages that appear to be on db freelist",
   "   --recovery-db NAME       Store recovery metadata in database file NAME",
   "   --lost-and-found TABLE   Alternative name for the lost-and-found table",
   "   --no-rowids              Do not attempt to recover rowid values",
@@ -9671,14 +9682,14 @@ DISPATCHABLE_COMMAND( recover ? 1 7 ){
   int nOrphan = -1;
   RecoverTable *pOrphan = 0;
 
-  int bFreelist = 1;              /* 0 if --freelist-corrupt is specified */
+  int bFreelist = 1;              /* 0 if --ignore-freelist is specified */
   int bRowids = 1;                /* 0 if --no-rowids */
   for(i=1; i<nArg; i++){
     char *z = azArg[i];
     int n;
     if( z[0]=='-' && z[1]=='-' ) z++;
     n = strlen30(z);
-    if( n<=17 && memcmp("-freelist-corrupt", z, n)==0 ){
+    if( n<=17 && memcmp("-ignore-freelist", z, n)==0 ){
       bFreelist = 0;
     }else
     if( n<=12 && memcmp("-recovery-db", z, n)==0 && i<(nArg-1) ){
@@ -9735,7 +9746,7 @@ DISPATCHABLE_COMMAND( recover ? 1 7 ){
 
   /* If this is an auto-vacuum database, add all pointer-map pages to
   ** the freelist table. Do this regardless of whether or not 
-  ** --freelist-corrupt was specified.  */
+  ** --ignore-freelist was specified.  */
   shellExec(p->db, &rc, 
     "WITH ptrmap(pgno) AS ("
     "  SELECT 2 WHERE shell_int32("
