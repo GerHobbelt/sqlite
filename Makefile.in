@@ -787,6 +787,9 @@ sqlite3.c:	.target_source $(TOP)/tool/mksqlite3c.tcl
 	cp tsrc/sqlite3ext.h .
 	cp $(TOP)/ext/session/sqlite3session.h .
 
+sqlite3internal.h: sqlite3.h tsrc/sqliteInt.h
+	$(TCLSH_CMD) $(TOP)/tool/mksqlite3internalh.tcl
+
 sqlite3ext.h:	.target_source
 	cp tsrc/sqlite3ext.h .
 
@@ -1536,6 +1539,8 @@ clean:
 	-rm -f mksourceid$(BEXE)
 	-rm -f sqlite3.dll sqlite3.lib sqlite3.exp sqlite3.def
 	-rm -f sqlite3.c
+	-rm -f sqlite3r.c
+	-rm -f sqlite3r.h
 	-rm -f sqlite3internal.h
 	-rm -f sqlite3-*.c
 	-rm -f sqlite3_checker.c sqltclsh.c
