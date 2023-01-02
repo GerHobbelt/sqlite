@@ -14,10 +14,7 @@
 ** testing of the SQLite library.
 */
 
-#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
-#include "sqlite_cfg.h"
-#define SQLITECONFIG_H 1
-#endif
+#include "sqlite3_config.h"
 
 /* The code in this file defines a sqlite3 virtual-table module that
 ** provides a read-only view of the current database schema. There is one

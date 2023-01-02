@@ -28,10 +28,7 @@
 **     provide case-independent matching.
 */
 
-#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
-#include "sqlite_cfg.h"
-#define SQLITECONFIG_H 1
-#endif
+#include "sqlite3_config.h"
 
 #if !defined(SQLITE_CORE)                  \
  || defined(SQLITE_ENABLE_ICU)             \

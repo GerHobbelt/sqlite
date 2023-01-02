@@ -16,7 +16,13 @@
 ** This file is #include-ed onto the end of "rtree.c" so that it has
 ** access to all of the R-Tree internals.
 */
+#include "sqlite3_config.h"
+
+#include "sqlite3.h"
+
 #include <stdlib.h>
+
+#include "sqliteInt.h"   // defines testcase(), assert()
 
 /* Enable -DGEOPOLY_ENABLE_DEBUG for debugging facilities */
 #ifdef GEOPOLY_ENABLE_DEBUG

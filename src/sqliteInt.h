@@ -15,10 +15,7 @@
 #ifndef SQLITEINT_H
 #define SQLITEINT_H
 
-#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
-#include "sqlite_cfg.h"
-#define SQLITECONFIG_H 1
-#endif
+#include "sqlite3_config.h"
 
 /* Special Comments:
 **
@@ -212,10 +209,7 @@
 ** Include the configuration header output by 'configure' if we're using the
 ** autoconf-based build
 */
-#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
-#include "sqlite_cfg.h"
-#define SQLITECONFIG_H 1
-#endif
+#include "sqlite3_config.h"
 
 #include "sqliteLimit.h"
 

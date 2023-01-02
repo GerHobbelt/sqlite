@@ -21,6 +21,8 @@
 ** This extension is used to implement the --memtrace option of the
 ** command-line shell.
 */
+#include "sqlite3.h"
+
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>

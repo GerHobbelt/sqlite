@@ -1,8 +1,5 @@
 
-#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
-#include "sqlite_cfg.h"
-#define SQLITECONFIG_H 1
-#endif
+#include "sqlite3_config.h"
 
 /* fts2 has a design flaw which can lead to database corruption (see
 ** below).  It is recommended not to use it any longer, instead use

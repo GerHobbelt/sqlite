@@ -116,10 +116,7 @@ puts $out \
 ** Include the configuration header output by 'configure' if we're using the
 ** autoconf-based build
 */
-#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
-#include "sqlite_cfg.h"
-#define SQLITECONFIG_H 1
-#endif
+#include "sqlite3_config.h"
 }
 
 # Examine the parse.c file.  If it contains lines of the form:

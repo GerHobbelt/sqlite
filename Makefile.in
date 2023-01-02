@@ -30,7 +30,7 @@ BCC = @BUILD_CC@ @BUILD_CFLAGS@
 #
 CC = @CC@
 CFLAGS = @CPPFLAGS@ @CFLAGS@
-TCC = ${CC} ${CFLAGS} -I. -I${TOP}/src -I${TOP}/ext/rtree -I${TOP}/ext/icu
+TCC = ${CC} ${CFLAGS} -I. -I${TOP}/src -I$(TOP)/include -I${TOP}/ext/rtree -I${TOP}/ext/icu
 TCC += -I${TOP}/ext/fts3 -I${TOP}/ext/async -I${TOP}/ext/session
 TCC += -I${TOP}/ext/userauth
 

@@ -42,10 +42,7 @@ set ::headCode "
 ** Include the configuration header output by 'configure' if we're using the
 ** autoconf-based build
 */
-#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
-#include \"sqlite_cfg.h\"
-#define SQLITECONFIG_H 1
-#endif
+#include "sqlite3_config.h"
 
 /* These macros are provided to \"stringify\" the value of the define
 ** for those options in which the value is meaningful. */

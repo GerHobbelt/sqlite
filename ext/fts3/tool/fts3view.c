@@ -14,12 +14,15 @@
 ** to see various aspects of the TABLE table.  Type fts3view with no
 ** arguments for a list of available COMMANDs.
 */
+#include "sqlite3.h"
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include "sqlite3.h"
+
+#include "sqliteInt.h"   // defines getVarintI()
 
 /*
 ** Extra command-line arguments:

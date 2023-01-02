@@ -17,7 +17,14 @@
 ** for details.
 */
 
+#include "sqlite3_config.h"
+
 #include "sqlite3.h"
+#if !defined(SQLITE_ENABLE_SESSION)
+#error b0rkb0rkb0rk
+#endif
+#include "sqlite3session.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

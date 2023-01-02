@@ -59,10 +59,7 @@
 **        into SQLite using the sqlite3_load_extension() interface.
 */
 
-#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
-#include "sqlite_cfg.h"
-#define SQLITECONFIG_H 1
-#endif
+#include "sqlite3_config.h"
 
 #include "sqlite3ext.h"
 SQLITE_EXTENSION_INIT1

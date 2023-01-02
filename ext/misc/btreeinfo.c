@@ -62,10 +62,7 @@
 **       WHERE type='table' AND NOT hasRowid;
 */
 
-#if defined(_HAVE_SQLITE_CONFIG_H) && !defined(SQLITECONFIG_H)
-#include "sqlite_cfg.h"
-#define SQLITECONFIG_H 1
-#endif
+#include "sqlite3_config.h"
 
 #if !defined(SQLITEINT_H)
 #include "sqlite3ext.h"
