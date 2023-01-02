@@ -6316,7 +6316,7 @@ static void printAggInfo(AggInfo *pAggInfo){
   }
   for(ii=0; ii<pAggInfo->nFunc; ii++){
     sqlite3DebugPrintf("agg-func[%d]: iMem=%d\n",
-        ii, AggInfoFuncReg(pAggInfo,ii));
+        ii, pAggInfo->iFirstReg+pAggInfo->nColumn+ii);
     sqlite3TreeViewExpr(0, pAggInfo->aFunc[ii].pFExpr, 0);
   }
 }
@@ -7687,6 +7687,9 @@ int sqlite3Select(
       goto select_end;
     }
     pAggInfo->selId = p->selId;
+#ifdef SQLITE_DEBUG
+    pAggInfo->pSelect = p;
+#endif
     memset(&sNC, 0, sizeof(sNC));
     sNC.pParse = pParse;
     sNC.pSrcList = pTabList;
