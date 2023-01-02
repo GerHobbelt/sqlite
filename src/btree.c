@@ -3744,7 +3744,7 @@ int sqlite3BtreeBeginTrans(Btree *p, int wrflag, int *pSchemaVersion){
   BtShared *pBt = p->pBt;
   Pager *pPager = pBt->pPager;
   int rc = SQLITE_OK;
-  int bConcurrent = (p->db->eConcurrent && !ISAUTOVACUUM);
+  int bConcurrent = (p->db->eConcurrent && !ISAUTOVACUUM(pBt));
 
   sqlite3BtreeEnter(p);
   btreeIntegrity(p);
@@ -4590,7 +4590,7 @@ int sqlite3BtreeCommitPhaseOne(Btree *p, const char *zSuperJrnl){
 
 #ifndef SQLITE_OMIT_AUTOVACUUM
     if( pBt->autoVacuum ){
-      assert( ISCONCURRENT==0 );
+      assert( ISCONCURRENT(pBt) == 0 );
       rc = autoVacuumCommit(p);
       if( rc!=SQLITE_OK ){
         sqlite3BtreeLeave(p);
@@ -4601,7 +4601,7 @@ int sqlite3BtreeCommitPhaseOne(Btree *p, const char *zSuperJrnl){
       sqlite3PagerTruncateImage(pBt->pPager, pBt->nPage);
     }
 #endif
-    if( rc==SQLITE_OK && ISCONCURRENT && p->db->eConcurrent==CONCURRENT_OPEN ){
+    if( rc==SQLITE_OK && ISCONCURRENT(pBt) && p->db->eConcurrent==CONCURRENT_OPEN ){
       rc = btreeFixUnlocked(p);
     }
     if( rc==SQLITE_OK ){
@@ -7257,7 +7257,7 @@ static int allocateBtreePage(
   Pgno mxPage;     /* Total size of the database file */
 
   assert( sqlite3_mutex_held(pBt->mutex) );
-  assert( eMode==BTALLOC_ANY || (nearby>0 && REQUIRE_PTRMAP ) );
+  assert( eMode==BTALLOC_ANY || (nearby>0 && REQUIRE_PTRMAP(pBt)) );
   pPage1 = pBt->pPage1;
   mxPage = btreePagecount(pBt);
   /* EVIDENCE-OF: R-21003-45125 The 4-byte big-endian integer at offset 36
@@ -7287,8 +7287,8 @@ static int allocateBtreePage(
     ** the entire-list will be searched for that page.
     */
     if( eMode==BTALLOC_EXACT ){
-      assert( ISAUTOVACUUM!=ISCONCURRENT );
-      if( ISAUTOVACUUM ){
+      assert( ISAUTOVACUUM(pBt) != ISCONCURRENT(pBt) );
+      if( ISAUTOVACUUM(pBt) ){
         if( nearby<=mxPage ){
           u8 eType;
           assert( nearby>0 );
@@ -7958,7 +7958,7 @@ static int fillInCell(
       ** may misinterpret the uninitialized values and delete the
       ** wrong pages from the database.
       */
-      if( REQUIRE_PTRMAP && rc==SQLITE_OK ){
+      if( REQUIRE_PTRMAP(pBt) && rc==SQLITE_OK ){
         u8 eType = (pgnoPtrmap?PTRMAP_OVERFLOW2:PTRMAP_OVERFLOW1);
         ptrmapPut(pBt, pgnoOvfl, eType, pgnoPtrmap, &rc);
         if( rc ){
@@ -11793,7 +11793,7 @@ char *sqlite3BtreeIntegrityCheck(
   ** may fail as pages that were part of the free-list when the transaction
   ** was opened cannot be counted).  */
   if( !bPartial ){
-    for(i=1; ISCONCURRENT==0 && i<=sCheck.nPage && sCheck.mxErr; i++){
+    for(i=1; ISCONCURRENT(pBt) == 0 && i<=sCheck.nPage && sCheck.mxErr; i++){
 #ifdef SQLITE_OMIT_AUTOVACUUM
       if( getPageReferenced(&sCheck, i)==0 ){
         checkAppendMsg(&sCheck, "Page %d is never used", i);
