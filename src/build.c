@@ -2586,6 +2586,7 @@ int sqlite3ShadowTableName(sqlite3 *db, const char *zName){
 ** not pass them into code generator routines by mistake.
 */
 static int markImmutableExprStep(Walker *pWalker, Expr *pExpr){
+  (void)pWalker;
   ExprSetVVAProperty(pExpr, EP_Immutable);
   return WRC_Continue;
 }

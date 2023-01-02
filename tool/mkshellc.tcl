@@ -96,7 +96,7 @@ for {set i 0} {$i<[llength $argv]} {incr i} {
     set nextOpt [lindex $argv $i]
     if {![regexp {^(\w+)=(.+)$} $nextOpt ma k v]} {
       puts stderr "Get help with --help."
-      exit 1 
+      exit 1
     }
     set ::incTypes($k) $v
   } elseif {$opt eq "-top-dir"} {
@@ -657,7 +657,7 @@ proc transform_line {lineVar nesting} {
   } elseif {$nesting == 0} {
     return 0
   }
-  if {[regexp {^#include "sqlite.*"} $line]
+  if {[regexp {^# *include "sqlite.*"} $line]
     || [regexp {^# *include "test_windirent.h"} $line]} {
     set line "/* $line */"
     return 1
