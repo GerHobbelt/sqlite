@@ -12709,7 +12709,7 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
     if( pVfs ){
       sqlite3_vfs_register(pVfs, 1);
     }else{
-      utf8_printf(STD_ERR, "no such VFS: \"%s\"\n", argv[i]);
+      utf8_printf(STD_ERR, "no such VFS: \"%s\"\n", zVfs);
       rc = 1;
       goto shell_bail;
     }
