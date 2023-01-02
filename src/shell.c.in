@@ -1114,6 +1114,7 @@ static void shellAddSchemaName(
 */
 #define SQLITE_EXTENSION_INIT1
 #define SQLITE_EXTENSION_INIT2(X) (void)(X)
+#define SQLITE_EXTENSION_INIT3
 
 #if defined(_WIN32) && defined(_MSC_VER)
 INCLUDE test_windirent.h

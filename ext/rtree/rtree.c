@@ -59,8 +59,15 @@
   || (defined(SQLITE_ENABLE_RTREE) && !defined(SQLITE_OMIT_VIRTUALTABLE))
 
 #ifndef SQLITE_CORE
-  #include "sqlite3ext.h"
-  SQLITE_EXTENSION_INIT1
+
+#include "sqlite3ext.h"
+
+#if !defined(BUILD_MONOLITHIC)
+SQLITE_EXTENSION_INIT1
+#else
+SQLITE_EXTENSION_INIT3
+#endif
+
 #else
   #include "sqlite3.h"
 #endif

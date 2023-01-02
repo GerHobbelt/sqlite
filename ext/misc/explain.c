@@ -29,7 +29,13 @@
 #if !defined(SQLITEINT_H)
 #include "sqlite3ext.h"
 #endif
+
+#if !defined(BUILD_MONOLITHIC)
 SQLITE_EXTENSION_INIT1
+#else
+SQLITE_EXTENSION_INIT3
+#endif
+
 #include <assert.h>
 #include <string.h>
 

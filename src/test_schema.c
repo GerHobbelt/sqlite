@@ -44,8 +44,15 @@
 #    include "tcl.h"
 #  endif
 #else
+
 #  include "sqlite3ext.h"
-  SQLITE_EXTENSION_INIT1
+
+#if !defined(BUILD_MONOLITHIC)
+SQLITE_EXTENSION_INIT1
+#else
+SQLITE_EXTENSION_INIT3
+#endif
+
 #endif
 
 #include <stdlib.h>

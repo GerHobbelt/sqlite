@@ -16,7 +16,12 @@
 
 #include <string.h>
 #include "sqlite3ext.h"
+
+#if !defined(BUILD_MONOLITHIC)
 SQLITE_EXTENSION_INIT1
+#else
+SQLITE_EXTENSION_INIT3
+#endif
 
 /*
 ** The half() SQL function returns half of its input value.

@@ -171,7 +171,13 @@
 #ifndef TH3_VERSION
   /* These bits for separate compilation as a loadable extension, only */
   #include "sqlite3ext.h"
-  SQLITE_EXTENSION_INIT1
+
+#if !defined(BUILD_MONOLITHIC)
+SQLITE_EXTENSION_INIT1
+#else
+SQLITE_EXTENSION_INIT3
+#endif
+
   #include <stdlib.h>
   #include <string.h>
   #include <assert.h>

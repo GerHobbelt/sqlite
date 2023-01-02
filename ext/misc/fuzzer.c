@@ -145,7 +145,12 @@
 #include "sqlite3_config.h"
 
 #include "sqlite3ext.h"
+
+#if !defined(BUILD_MONOLITHIC)
 SQLITE_EXTENSION_INIT1
+#else
+SQLITE_EXTENSION_INIT3
+#endif
 
 /* If SQLITE_DEBUG is not defined, disable assert statements. */
 #if !defined(NDEBUG) && !defined(SQLITE_DEBUG)

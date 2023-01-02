@@ -27,7 +27,12 @@
 #include "sqlite3ext.h"
 
 #ifndef SQLITE_OMIT_LOAD_EXTENSION
+
+#if !defined(BUILD_MONOLITHIC)
 SQLITE_EXTENSION_INIT1
+#else
+SQLITE_EXTENSION_INIT3
+#endif
 
 /*
 ** The sqr() SQL function returns the square of its input value.

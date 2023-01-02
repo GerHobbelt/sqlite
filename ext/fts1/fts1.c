@@ -55,7 +55,12 @@
 #include "fts1_tokenizer.h"
 #include "sqlite3.h"
 #include "sqlite3ext.h"
+
+#if !defined(BUILD_MONOLITHIC)
 SQLITE_EXTENSION_INIT1
+#else
+SQLITE_EXTENSION_INIT3
+#endif
 
 
 #if 0

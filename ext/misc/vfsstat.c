@@ -18,7 +18,12 @@
 #include "sqlite3_config.h"
 
 #include <sqlite3ext.h>
+
+#if !defined(BUILD_MONOLITHIC)
 SQLITE_EXTENSION_INIT1
+#else
+SQLITE_EXTENSION_INIT3
+#endif
 
 /*
 ** This module contains code for a wrapper VFS that cause stats for

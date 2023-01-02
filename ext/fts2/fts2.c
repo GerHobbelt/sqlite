@@ -314,7 +314,12 @@
 #include "fts2_tokenizer.h"
 #include "sqlite3.h"
 #include "sqlite3ext.h"
+
+#if !defined(BUILD_MONOLITHIC)
 SQLITE_EXTENSION_INIT1
+#else
+SQLITE_EXTENSION_INIT3
+#endif
 
 
 /* TODO(shess) MAN, this thing needs some refactoring.  At minimum, it

@@ -91,7 +91,13 @@
 #include "sqlite3_config.h"
 
 #include "sqlite3ext.h"
+
+#if !defined(BUILD_MONOLITHIC)
 SQLITE_EXTENSION_INIT1
+#else
+SQLITE_EXTENSION_INIT3
+#endif
+
 #include "lsm.h"
 #include <assert.h>
 #include <string.h>
