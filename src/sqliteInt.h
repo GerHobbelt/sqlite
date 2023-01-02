@@ -1900,6 +1900,7 @@ struct sqlite3 {
    /* TH3 expects this value  ^^^^^^^^^^ See flatten04.test */
 #define SQLITE_SortIfFaster   0x01000000 /* ORDER BY using sorter if faster */
 #define SQLITE_IndexedExpr    0x02000000 /* Pull exprs from index when able */
+#define SQLITE_Coroutines     0x04000000 /* Co-routines for subqueries */
 #define SQLITE_AllOpts        0xffffffff /* All optimizations */
 
 /*
@@ -3521,6 +3522,7 @@ struct Select {
 #define SF_MultiPart     0x2000000 /* Has multiple incompatible PARTITIONs */
 #define SF_CopyCte       0x4000000 /* SELECT statement is a copy of a CTE */
 #define SF_OrderByReqd   0x8000000 /* The ORDER BY clause may not be omitted */
+#define SF_UpdateFrom   0x10000000 /* Query originates with UPDATE FROM */
 
 /* True if S exists and has SF_NestedFrom */
 #define IsNestedFrom(S) ((S)!=0 && ((S)->selFlags&SF_NestedFrom)!=0)
