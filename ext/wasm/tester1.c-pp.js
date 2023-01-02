@@ -1219,7 +1219,7 @@ self.sqlite3InitModule = sqlite3InitModule;
     })
 
   ////////////////////////////////////////////////////////////////////
-    .t('DB.Stmt', function(S){
+    .t('DB.Stmt', function(sqlite3){
       let st = this.db.prepare(
         new TextEncoder('utf-8').encode("select 3 as a")
       );
@@ -1274,6 +1274,12 @@ self.sqlite3InitModule = sqlite3InitModule;
       }
       T.assert(!st.pointer)
         .assert(0===this.db.openStatementCount());
+
+      T.mustThrowMatching(()=>new sqlite3.oo1.Stmt("hi"), function(err){
+        return (err instanceof sqlite3.SQLite3Error)
+          && capi.SQLITE_MISUSE === err.resultCode
+          && 0 < err.message.indexOf("Do not call the Stmt constructor directly.")
+      });
     })
 
   ////////////////////////////////////////////////////////////////////////
@@ -1391,6 +1397,14 @@ self.sqlite3InitModule = sqlite3InitModule;
                db.selectValue("SELECT "+Number.MIN_SAFE_INTEGER)).
         assert(Number.MAX_SAFE_INTEGER ===
                db.selectValue("SELECT "+Number.MAX_SAFE_INTEGER));
+
+      counter = 0;
+      db.exec({
+        sql: "SELECT a FROM t",
+        callback: ()=>(1===++counter),
+      });
+      T.assert(2===counter,
+               "Expecting exec step() loop to stop if callback returns false.");
       if(wasm.bigIntEnabled && haveWasmCTests()){
         const mI = wasm.xCall('sqlite3_wasm_test_int64_max');
         const b = BigInt(Number.MAX_SAFE_INTEGER * 2);
@@ -1634,7 +1648,10 @@ self.sqlite3InitModule = sqlite3InitModule;
           assert(T.eqApprox(1.3,db.selectValue("select asis(1 + 0.3)")));
 
         let blobArg = new Uint8Array([0x68, 0x69]);
-        let blobRc = db.selectValue("select asis(?1)", blobArg);
+        let blobRc = db.selectValue(
+          "select asis(?1)",
+          blobArg.buffer/*confirm that ArrayBuffer is handled as a Uint8Array*/
+        );
         T.assert(blobRc instanceof Uint8Array).
           assert(2 === blobRc.length).
           assert(0x68==blobRc[0] && 0x69==blobRc[1]);
@@ -1970,7 +1987,6 @@ self.sqlite3InitModule = sqlite3InitModule;
       name: 'virtual table #1: eponymous w/ manual exception handling',
       predicate: ()=>!!capi.sqlite3_index_info,
       test: function(sqlite3){
-        warn("The vtab/module JS bindings are experimental and subject to change.");
         const VT = sqlite3.vtab;
         const tmplCols = Object.assign(Object.create(null),{
           A: 0, B: 1
@@ -2168,7 +2184,6 @@ self.sqlite3InitModule = sqlite3InitModule;
       name: 'virtual table #2: non-eponymous w/ automated exception wrapping',
       predicate: ()=>!!capi.sqlite3_index_info,
       test: function(sqlite3){
-        warn("The vtab/module JS bindings are experimental and subject to change.");
         const VT = sqlite3.vtab;
         const tmplCols = Object.assign(Object.create(null),{
           A: 0, B: 1
