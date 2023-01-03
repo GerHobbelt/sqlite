@@ -2121,7 +2121,7 @@ int sqlite3_stmt_scanstatus_v2(
   void *pOut                      /* OUT: Write the answer here */
 ){
   Vdbe *p = (Vdbe*)pStmt;
-  ScanStatus *pScan;
+  ScanStatus *pScan = NULL;
   int idx;
 
   if( iScan<0 ){
@@ -2154,6 +2154,7 @@ int sqlite3_stmt_scanstatus_v2(
 
   switch( iScanStatusOp ){
     case SQLITE_SCANSTAT_NLOOP: {
+      assert(pScan != NULL);
       if( pScan->addrLoop>0 ){
         *(sqlite3_int64*)pOut = p->aOp[pScan->addrLoop].nExec;
       }else{
@@ -2162,6 +2163,7 @@ int sqlite3_stmt_scanstatus_v2(
       break;
     }
     case SQLITE_SCANSTAT_NVISIT: {
+      assert(pScan != NULL);
       if( pScan->addrVisit>0 ){
         *(sqlite3_int64*)pOut = p->aOp[pScan->addrVisit].nExec;
       }else{
@@ -2170,6 +2172,7 @@ int sqlite3_stmt_scanstatus_v2(
       break;
     }
     case SQLITE_SCANSTAT_EST: {
+      assert(pScan != NULL);
       double r = 1.0;
       LogEst x = pScan->nEst;
       while( x<100 ){
@@ -2180,10 +2183,12 @@ int sqlite3_stmt_scanstatus_v2(
       break;
     }
     case SQLITE_SCANSTAT_NAME: {
+      assert(pScan != NULL);
       *(const char**)pOut = pScan->zName;
       break;
     }
     case SQLITE_SCANSTAT_EXPLAIN: {
+      assert(pScan != NULL);
       if( pScan->addrExplain ){
         *(const char**)pOut = p->aOp[ pScan->addrExplain ].p4.z;
       }else{
@@ -2192,6 +2197,7 @@ int sqlite3_stmt_scanstatus_v2(
       break;
     }
     case SQLITE_SCANSTAT_SELECTID: {
+      assert(pScan != NULL);
       if( pScan->addrExplain ){
         *(int*)pOut = p->aOp[ pScan->addrExplain ].p1;
       }else{
@@ -2200,6 +2206,7 @@ int sqlite3_stmt_scanstatus_v2(
       break;
     }
     case SQLITE_SCANSTAT_PARENTID: {
+      assert(pScan != NULL);
       if( pScan->addrExplain ){
         *(int*)pOut = p->aOp[ pScan->addrExplain ].p2;
       }else{
@@ -2209,6 +2216,7 @@ int sqlite3_stmt_scanstatus_v2(
     }
     case SQLITE_SCANSTAT_NCYCLE: {
       i64 res = 0;
+      assert(pScan != NULL);
       if( pScan->aAddrRange[0]==0 ){
         res = -1;
       }else{
