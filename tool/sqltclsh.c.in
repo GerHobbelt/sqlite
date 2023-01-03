@@ -39,8 +39,8 @@ const char *sqlite3_tclapp_init_proc(Tcl_Interp *interp){
   (void)interp;
   sqlite3_appendvfs_init(0,0,0);
 #ifdef SQLITE_HAVE_ZLIB
-  sqlite3_auto_extension((void(*)(void))sqlite3_sqlar_init);
-  sqlite3_auto_extension((void(*)(void))sqlite3_zipfile_init);
+  sqlite3_auto_extension(sqlite3_sqlar_init);
+  sqlite3_auto_extension(sqlite3_zipfile_init);
 #endif
 
   return

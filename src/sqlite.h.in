@@ -6935,6 +6935,15 @@ int sqlite3_load_extension(
 );
 
 /*
+** This is the function signature used for all extension entry points.
+*/
+typedef int (*sqlite3_loadext_entry)(
+  sqlite3 *db,                       /* Handle to the database. */
+  char **pzErrMsg,                   /* Used to set error string on failure. */
+  const sqlite3_api_routines *pThunk /* Extension API function pointers. */
+);
+
+/*
 ** CAPI3REF: Enable Or Disable Extension Loading
 ** METHOD: sqlite3
 **
@@ -6997,7 +7006,7 @@ int sqlite3_enable_load_extension(sqlite3 *db, int onoff);
 ** See also: [sqlite3_reset_auto_extension()]
 ** and [sqlite3_cancel_auto_extension()]
 */
-int sqlite3_auto_extension(void(*xEntryPoint)(void));
+int sqlite3_auto_extension(sqlite3_loadext_entry xEntryPoint);
 
 /*
 ** CAPI3REF: Cancel Automatic Extension Loading
@@ -7009,7 +7018,7 @@ int sqlite3_auto_extension(void(*xEntryPoint)(void));
 ** unregistered and it returns 0 if X was not on the list of initialization
 ** routines.
 */
-int sqlite3_cancel_auto_extension(void(*xEntryPoint)(void));
+int sqlite3_cancel_auto_extension(sqlite3_loadext_entry xEntryPoint);
 
 /*
 ** CAPI3REF: Reset Automatic Extension Loading

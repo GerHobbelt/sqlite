@@ -673,7 +673,7 @@ int sqlite3_appendvfs_init(
   rc = sqlite3_vfs_register(&apnd_vfs, 0);
 #ifdef APPENDVFS_TEST
   if( rc==SQLITE_OK ){
-    rc = sqlite3_auto_extension((void(*)(void))apndvfsRegister);
+    rc = sqlite3_auto_extension(apndvfsRegister);
   }
 #endif
   if( rc==SQLITE_OK ) rc = SQLITE_OK_LOAD_PERMANENTLY;

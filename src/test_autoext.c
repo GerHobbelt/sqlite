@@ -110,7 +110,7 @@ static int SQLITE_TCLAPI autoExtSqrObjCmd(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  int rc = sqlite3_auto_extension((void(*)(void))sqr_init);
+  int rc = sqlite3_auto_extension(sqr_init);
   Tcl_SetObjResult(interp, Tcl_NewIntObj(rc));
   return SQLITE_OK;
 }
@@ -142,7 +142,7 @@ static int SQLITE_TCLAPI autoExtCubeObjCmd(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  int rc = sqlite3_auto_extension((void(*)(void))cube_init);
+  int rc = sqlite3_auto_extension(cube_init);
   Tcl_SetObjResult(interp, Tcl_NewIntObj(rc));
   return SQLITE_OK;
 }
@@ -174,7 +174,7 @@ static int SQLITE_TCLAPI autoExtBrokenObjCmd(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  int rc = sqlite3_auto_extension((void(*)(void))broken_init);
+  int rc = sqlite3_auto_extension(broken_init);
   Tcl_SetObjResult(interp, Tcl_NewIntObj(rc));
   return SQLITE_OK;
 }

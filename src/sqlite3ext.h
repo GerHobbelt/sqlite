@@ -250,12 +250,12 @@ struct sqlite3_api_routines {
   char *(*xvsnprintf)(int,char*,const char*,va_list);
   int (*wal_checkpoint_v2)(sqlite3*,const char*,int,int*,int*);
   /* Version 3.8.7 and later */
-  int (*auto_extension)(void(*)(void));
+  int (*auto_extension)(sqlite3_loadext_entry);
   int (*bind_blob64)(sqlite3_stmt*,int,const void*,sqlite3_uint64,
                      void(*)(void*));
   int (*bind_text64)(sqlite3_stmt*,int,const char*,sqlite3_uint64,
                       void(*)(void*),unsigned char);
-  int (*cancel_auto_extension)(void(*)(void));
+  int (*cancel_auto_extension)(sqlite3_loadext_entry);
   int (*load_extension)(sqlite3*,const char*,const char*,char**);
   void *(*malloc64)(sqlite3_uint64);
   sqlite3_uint64 (*msize)(void*);
@@ -362,15 +362,7 @@ struct sqlite3_api_routines {
   int (*value_encoding)(sqlite3_value*);
 };
 
-/*
-** This is the function signature used for all extension entry points.  It
-** is also defined in the file "loadext.c".
-*/
-typedef int (*sqlite3_loadext_entry)(
-  sqlite3 *db,                       /* Handle to the database. */
-  char **pzErrMsg,                   /* Used to set error string on failure. */
-  const sqlite3_api_routines *pThunk /* Extension API function pointers. */
-);
+// typedef sqlite3_loadext_entry is already defined in sqlite3.h.in 
 
 /*
 ** The following macros redefine the API routines so that they are

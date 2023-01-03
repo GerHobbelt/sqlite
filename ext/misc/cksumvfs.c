@@ -838,7 +838,7 @@ static int cksmRegisterVfs(void){
   cksm_vfs.szOsFile = pOrig->szOsFile + sizeof(CksmFile);
   rc = sqlite3_vfs_register(&cksm_vfs, 1);
   if( rc==SQLITE_OK ){
-    rc = sqlite3_auto_extension((void(*)(void))cksmRegisterFunc);
+    rc = sqlite3_auto_extension(cksmRegisterFunc);
   }
   return rc;
 }
@@ -854,7 +854,7 @@ int sqlite3_register_cksumvfs(const char *NotUsed){
 int sqlite3_unregister_cksumvfs(void){
   if( sqlite3_vfs_find("cksmvfs") ){
     sqlite3_vfs_unregister(&cksm_vfs);
-    sqlite3_cancel_auto_extension((void(*)(void))cksmRegisterFunc);
+    sqlite3_cancel_auto_extension(cksmRegisterFunc);
   }
   return SQLITE_OK;
 }

@@ -573,7 +573,7 @@ int sqlite3_memvfs_init(
   rc = sqlite3_vfs_register(&mem_vfs, 1);
 #ifdef MEMVFS_TEST
   if( rc==SQLITE_OK ){
-    rc = sqlite3_auto_extension((void(*)(void))memvfsRegister);
+    rc = sqlite3_auto_extension(memvfsRegister);
   }
   if( rc==SQLITE_OK ){
     rc = memvfsRegister(db, pzErrMsg, pApi);

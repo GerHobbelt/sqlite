@@ -741,7 +741,7 @@ int sqlite3_enable_load_extension(sqlite3 *db, int onoff){
 typedef struct sqlite3AutoExtList sqlite3AutoExtList;
 static SQLITE_WSD struct sqlite3AutoExtList {
   u32 nExt;              /* Number of entries in aExt[] */          
-  void (**aExt)(void);   /* Pointers to the extension init functions */
+  sqlite3_loadext_entry *aExt;   /* Pointers to the extension init functions */
 } sqlite3Autoext = { 0, 0 };
 
 /* The "wsdAutoext" macro will resolve to the autoextension
@@ -765,7 +765,7 @@ static SQLITE_WSD struct sqlite3AutoExtList {
 ** loaded by every new database connection.
 */
 int sqlite3_auto_extension(
-  void (*xInit)(void)
+	sqlite3_loadext_entry xInit
 ){
   int rc = SQLITE_OK;
 #ifndef SQLITE_OMIT_AUTOINIT
@@ -786,8 +786,7 @@ int sqlite3_auto_extension(
     }
     if( i==wsdAutoext.nExt ){
       u64 nByte = (wsdAutoext.nExt+1)*sizeof(wsdAutoext.aExt[0]);
-      void (**aNew)(void);
-      aNew = sqlite3_realloc64(wsdAutoext.aExt, nByte);
+      sqlite3_loadext_entry *aNew = sqlite3_realloc64(wsdAutoext.aExt, nByte);
       if( aNew==0 ){
         rc = SQLITE_NOMEM_BKPT;
       }else{
@@ -812,7 +811,7 @@ int sqlite3_auto_extension(
 ** was not on the list.
 */
 int sqlite3_cancel_auto_extension(
-  void (*xInit)(void)
+	sqlite3_loadext_entry xInit
 ){
 #if SQLITE_THREADSAFE
   sqlite3_mutex *mutex = sqlite3MutexAlloc(SQLITE_MUTEX_STATIC_MAIN);
@@ -884,7 +883,7 @@ void sqlite3AutoLoadExtensions(sqlite3 *db){
       xInit = 0;
       go = 0;
     }else{
-      xInit = (sqlite3_loadext_entry)wsdAutoext.aExt[i];
+      xInit = wsdAutoext.aExt[i];
     }
     sqlite3_mutex_leave(mutex);
     zErrmsg = 0;
