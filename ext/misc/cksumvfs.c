@@ -864,14 +864,12 @@ int sqlite3_unregister_cksumvfs(void){
 /* This variant of the initializer function is used when the
 ** extension is shared library to be loaded at run-time.
 */
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
+
 /* 
 ** This routine is called by sqlite3_load_extension() when the
 ** extension is first loaded.
 ***/
-int sqlite3_cksumvfs_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_cksumvfs_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

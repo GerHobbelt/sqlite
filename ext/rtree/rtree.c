@@ -4576,10 +4576,7 @@ int sqlite3_rtree_query_callback(
 }
 
 #if !SQLITE_CORE
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_rtree_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_rtree_init(
   sqlite3 *db,
   char **pzErrMsg,
   const sqlite3_api_routines *pApi

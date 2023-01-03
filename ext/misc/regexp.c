@@ -857,10 +857,7 @@ re_bytecode_func_err:
 ** Invoke this routine to register the regexp() function with the
 ** SQLite database connection.
 */
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_regexp_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_regexp_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

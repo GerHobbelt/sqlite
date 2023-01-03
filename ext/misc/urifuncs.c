@@ -183,10 +183,7 @@ static void func_filename_wal(
   sqlite3_result_text(context, zRes, -1, SQLITE_TRANSIENT);
 }
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_urifuncs_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_urifuncs_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

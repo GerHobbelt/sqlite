@@ -96,7 +96,9 @@
 **      with no non-PK, non-undefined fields, the entire change is removed.
 */
 
+#include "sqlite3_config.h"
 #include "sqlite3.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

@@ -1473,7 +1473,12 @@ static void lsmtest_rusage_report(void){
 }
 #endif
 
-int main(int argc, char **argv){
+
+#if defined(BUILD_MONOLITHIC)
+#define main   sqlite_lsmtest_main
+#endif
+
+int main(int argc, const char **argv){
   struct TestFunc {
     const char *zName;
     int bRusageReport;

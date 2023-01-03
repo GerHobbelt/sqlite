@@ -3077,10 +3077,7 @@ static int spellfix1Register(sqlite3 *db){
 /*
 ** Extension load function.
 */
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_spellfix_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_spellfix_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

@@ -369,10 +369,7 @@ int sqlite3StmtVtabInit(sqlite3 *db){
 }
 
 #ifndef SQLITE_CORE
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_stmt_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_stmt_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

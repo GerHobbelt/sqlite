@@ -600,10 +600,7 @@ mul_end:
   decimal_free(pB);
 }
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_decimal_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_decimal_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

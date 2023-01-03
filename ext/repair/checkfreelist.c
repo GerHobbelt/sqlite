@@ -304,10 +304,7 @@ static int cflRegister(sqlite3 *db){
 /*
 ** Extension load function.
 */
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_checkfreelist_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_checkfreelist_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

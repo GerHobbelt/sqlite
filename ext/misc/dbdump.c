@@ -692,7 +692,7 @@ int sqlite3_db_dump(
 /*
 ** Command-line interface
 */
-int main(int argc, char **argv){
+int main(int argc, const char **argv){
   sqlite3 *db;
   const char *zDb;
   const char *zSchema;

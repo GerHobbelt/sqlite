@@ -798,16 +798,13 @@ static int vstatRegister(
   return sqlite3_create_module(db, "vfsstat", &VfsStatModule, 0);
 }
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
 /* 
 ** This routine is called when the extension is loaded.
 **
 ** Register the new VFS.  Make arrangement to register the virtual table
 ** for each new database connection.
 */
-int sqlite3_vfsstat_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_vfsstat_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

@@ -2219,10 +2219,7 @@ static int zipfileRegister(sqlite3 *db){
 # define zipfileRegister(x) SQLITE_OK
 #endif
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_zipfile_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_zipfile_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

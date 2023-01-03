@@ -500,10 +500,7 @@ static void torealFunc(
 #pragma warning(default: 4748)
 #endif
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_totype_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_totype_init(
   sqlite3 *db,
   char **pzErrMsg,
   const sqlite3_api_routines *pApi

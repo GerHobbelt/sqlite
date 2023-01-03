@@ -587,7 +587,7 @@ static void errorLogCallback(void *pNotUsed, int iErr, const char *zMsg){
 }
 
 /* The main() routine when this utility is run as a stand-alone program */
-int main(int argc, char **argv){
+int main(int argc, const char **argv){
   char *zErr = 0;
   int rc;
   if( argc!=3 ){

@@ -446,10 +446,7 @@ static sqlite3_module seriesModule = {
 
 #endif /* SQLITE_OMIT_VIRTUALTABLE */
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_series_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_series_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

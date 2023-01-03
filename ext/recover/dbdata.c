@@ -941,10 +941,7 @@ static int sqlite3DbdataRegister(sqlite3 *db){
   return rc;
 }
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_dbdata_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_dbdata_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

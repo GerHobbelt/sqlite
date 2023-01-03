@@ -269,10 +269,7 @@ static void ieee754func_to_blob(
 }
 
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_ieee_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_ieee_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

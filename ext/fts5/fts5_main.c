@@ -2895,10 +2895,7 @@ static int fts5Init(sqlite3 *db){
 ** sqlite3_fts_init() and sqlite3_fts5_init() defined instead.
 */
 #ifndef SQLITE_CORE
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_fts_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_fts_init(
   sqlite3 *db,
   char **pzErrMsg,
   const sqlite3_api_routines *pApi
@@ -2908,10 +2905,7 @@ int sqlite3_fts_init(
   return fts5Init(db);
 }
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_fts5_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_fts5_init(
   sqlite3 *db,
   char **pzErrMsg,
   const sqlite3_api_routines *pApi

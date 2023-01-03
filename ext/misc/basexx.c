@@ -64,10 +64,7 @@ typedef unsigned char u8;
 #define sqlite3_base_init sqlite3_base85_init
 #include "base85.c"
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_basexx_init(sqlite3 *db, char **pzErr,
+SQLITE_EXTENSION_EXPORT int sqlite3_basexx_init(sqlite3 *db, char **pzErr,
                                const sqlite3_api_routines *pApi){
   init_api_ptr(pApi);
   int rc1 = BASE64_INIT(db);

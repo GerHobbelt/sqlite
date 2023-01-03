@@ -1,4 +1,6 @@
 
+#include "sqlite3_config.h"
+
 #if defined(SQLITE_TEST) && defined(SQLITE_ENABLE_SESSION) \
  && defined(SQLITE_ENABLE_PREUPDATE_HOOK)
 

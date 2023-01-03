@@ -14,6 +14,7 @@
 
 
 #include "sqlite3recover.h"
+#include "sqlite3ext.h"
 #include <assert.h>
 #include <string.h>
 
@@ -24,10 +25,7 @@
 ** with NULL as the final two arguments to register the sqlite_dbptr and
 ** sqlite_dbdata virtual tables with a database handle.
 */
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_dbdata_init(sqlite3*, char**, const sqlite3_api_routines*);
+SQLITE_EXTENSION_EXPORT int sqlite3_dbdata_init(sqlite3*, char**, const sqlite3_api_routines*);
 
 typedef unsigned int u32;
 typedef unsigned char u8;

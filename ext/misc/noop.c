@@ -47,10 +47,7 @@ static void noopfunc(
   sqlite3_result_value(context, argv[0]);
 }
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_noop_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_noop_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

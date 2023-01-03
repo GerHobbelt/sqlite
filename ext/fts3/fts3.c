@@ -6106,10 +6106,7 @@ int sqlite3Fts3Corrupt(){
 /*
 ** Initialize API pointer table, if required.
 */
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_fts3_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_fts3_init(
   sqlite3 *db, 
   char **pzErrMsg,
   const sqlite3_api_routines *pApi

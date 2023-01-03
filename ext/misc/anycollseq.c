@@ -52,10 +52,7 @@ static void anyCollNeeded(
   sqlite3_create_collation(db, zCollName, eTextRep, 0, anyCollFunc); 
 }
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_anycollseq_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_anycollseq_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

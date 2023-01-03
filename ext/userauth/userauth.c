@@ -21,6 +21,9 @@
 ** compile-time option.  See the user-auth.txt file in the same source
 ** directory as this file for additional information.
 */
+
+#include "sqlite3_config.h"
+
 #ifdef SQLITE_USER_AUTHENTICATION
 #ifndef SQLITEINT_H
 # include "sqliteInt.h"

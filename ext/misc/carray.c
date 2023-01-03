@@ -514,7 +514,7 @@ static void inttoptrFunc(
 
 #endif /* SQLITE_OMIT_VIRTUALTABLE */
 
-SQLITE_API int sqlite3_carray_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_carray_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

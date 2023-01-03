@@ -425,10 +425,7 @@ int sqlite3BinfoRegister(sqlite3 *db){
   return sqlite3_create_module(db, "sqlite_btreeinfo", &binfo_module, 0);
 }
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_btreeinfo_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_btreeinfo_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

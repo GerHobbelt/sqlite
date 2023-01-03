@@ -23,6 +23,7 @@
 **       SQLite (in which case SQLITE_ENABLE_FTS3 is defined).
 */
 #include "fts3Int.h"
+
 #if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3)
 
 #include <assert.h>

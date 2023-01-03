@@ -553,14 +553,11 @@ static int memvfsRegister(
 #endif /* MEMVFS_TEST */
 
   
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
 /* 
 ** This routine is called when the extension is loaded.
 ** Register the new VFS.
 */
-int sqlite3_memvfs_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_memvfs_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

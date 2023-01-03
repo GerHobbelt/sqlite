@@ -1492,10 +1492,7 @@ static sqlite3_module amatchModule = {
 /*
 ** Register the amatch virtual table
 */
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_amatch_init(
+SQLITE_EXTENSION_EXPORT int sqlite3_amatch_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi

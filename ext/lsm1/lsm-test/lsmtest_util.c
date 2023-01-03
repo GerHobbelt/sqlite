@@ -11,7 +11,7 @@
 ** Global variables used within this module.
 */
 static struct TestutilGlobal {
-  char **argv;
+  const char **argv;
   int argc;
 } g = {0, 0};
 
@@ -127,7 +127,7 @@ void testPrngString(unsigned int iVal, char *aOut, int nOut){
   aOut[i] = '\0';
 }
 
-void testErrorInit(int argc, char **argv){
+void testErrorInit(int argc, const char **argv){
   g.argc = argc;
   g.argv = argv;
 }

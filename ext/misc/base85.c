@@ -330,10 +330,7 @@ static void base85(sqlite3_context *context, int na, sqlite3_value *av[]){
 ** Establish linkage to running SQLite library.
 */
 #ifndef SQLITE_SHELL_EXTFUNCS
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
-int sqlite3_base_init
+SQLITE_EXTENSION_EXPORT int sqlite3_base_init
 #else
 static int sqlite3_base85_init
 #endif
@@ -365,7 +362,7 @@ static int sqlite3_base85_init
 
 #else /* standalone program */
 
-int main(int na, char *av[]){
+int main(int na, const char **av){
   int cin;
   int rc = 0;
   u8 bBuf[4*(B85_DARK_MAX/5)];
