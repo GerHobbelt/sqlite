@@ -103,14 +103,9 @@ puts $out [subst \
 ** language. The code for the "sqlite3" command-line shell is also in a
 ** separate file. This file contains only code for the core SQLite library.
 */
-#define SQLITE_CORE 1
-#define SQLITE_AMALGAMATION 1}]
-if {$addstatic} {
-  puts $out \
-{#ifndef SQLITE_PRIVATE
-# define SQLITE_PRIVATE static
-#endif}
-}
+
+}]
+
 puts $out \
 {
 /*
@@ -273,7 +268,7 @@ proc copy_file {filename} {
 
         # Add the SQLITE_PRIVATE or SQLITE_API keyword before functions.
         # so that linkage can be modified at compile-time.
-        if {[regexp {^sqlite3[a-z]*_} $funcname]} {
+        if {[regexp {^sqlite3[a-z]*_} $funcname] || [regexp {^sqlite3.*Var} $funcname]} {
           set line SQLITE_API
           append line " " [string trim $rettype]
           if {[string index $rettype end] ne "*"} {
@@ -302,6 +297,7 @@ proc copy_file {filename} {
           # definitions for internal use
           regsub {^SQLITE_API } $line {} line
           if {![regexp {^sqlite3_} $varname]
+              && ![regexp {^sqlite3Config} $varname]
               && ![regexp {^sqlite3Show[A-Z]} $varname]} {
             regsub {^extern } $line {} line
             puts $out "SQLITE_PRIVATE $line"
