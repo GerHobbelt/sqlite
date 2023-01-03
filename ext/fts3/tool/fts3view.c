@@ -132,6 +132,8 @@ static void showSchema(sqlite3 *db, const char *zTab){
   sqlite3_finalize(pStmt);
 }
 
+#if !defined(BUILD_MONOLITHIC)
+
 /*
 ** Read a 64-bit variable-length integer from memory starting at p[0].
 ** Return the number of bytes read, or 0 on error.
@@ -149,6 +151,7 @@ int getVarint(const unsigned char *p, sqlite_uint64 *v){
   return (q - p);
 }
 
+#endif
 
 /* Show the content of the %_stat table
 */
