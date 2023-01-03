@@ -15,6 +15,7 @@ extern int sqlite_fast_vacuum_main(int argc, const char** argv);
 extern int sqlite_getlock_main(int argc, const char** argv);
 extern int sqlite_index_usage_main(int argc, const char** argv);
 extern int sqlite_kvtest_main(int argc, const char** argv);
+extern int sqlite_lemon_main(int argc, const char** argv);
 extern int sqlite_libvers_main(int argc, const char** argv);
 extern int sqlite_logest_main(int argc, const char** argv);
 extern int sqlite_main(int argc, const char** argv);
