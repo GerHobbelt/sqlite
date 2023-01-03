@@ -52,8 +52,11 @@ typedef unsigned long long int u64;
 #endif
 
 
+#undef ArraySize
 #define ArraySize(x) ((int)(sizeof(x) / sizeof((x)[0])))
 
+#undef MIN
+#undef MAX
 #define MIN(x,y) ((x)<(y) ? (x) : (y))
 #define MAX(x,y) ((x)>(y) ? (x) : (y))
 
@@ -141,7 +144,7 @@ u32  testPrngValue(u32 iVal);
 void testPrngArray(u32 iVal, u32 *aOut, int nOut);
 void testPrngString(u32 iVal, char *aOut, int nOut);
 
-void testErrorInit(int argc, char **);
+void testErrorInit(int argc, const char **);
 void testPrintError(const char *zFormat, ...);
 void testPrintUsage(const char *zArgs);
 void testPrintFUsage(const char *zFormat, ...);
