@@ -681,18 +681,30 @@ struct sqlite3_api_routines {
 #endif /* !defined(SQLITE_CORE) && !defined(SQLITE_OMIT_LOAD_EXTENSION) */
 
 #if !defined(SQLITE_CORE) && !defined(SQLITE_OMIT_LOAD_EXTENSION)
+
   /* This case when the file really is being compiled as a loadable 
   ** extension */
 # define SQLITE_EXTENSION_INIT1     const sqlite3_api_routines *sqlite3_api=0;
 # define SQLITE_EXTENSION_INIT2(v)  sqlite3_api=v;
 # define SQLITE_EXTENSION_INIT3     \
     extern const sqlite3_api_routines *sqlite3_api;
+
+#ifdef _WIN32
+# define SQLITE_EXTENSION_EXPORT    __declspec(dllexport)
 #else
+# define SQLITE_EXTENSION_EXPORT    
+#endif
+
+#else
+
   /* This case when the file is being statically linked into the 
   ** application */
 # define SQLITE_EXTENSION_INIT1     /*no-op*/
 # define SQLITE_EXTENSION_INIT2(v)  (void)v; /* unused parameter */
 # define SQLITE_EXTENSION_INIT3     /*no-op*/
+
+# define SQLITE_EXTENSION_EXPORT    
+
 #endif
 
 #endif /* SQLITE3EXT_H */
