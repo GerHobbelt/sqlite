@@ -111,13 +111,16 @@ typedef unsigned short int u16;
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
+
 #include "sqlite3.h"
+
 typedef sqlite3_int64 i64;
 typedef sqlite3_uint64 u64;
 typedef unsigned char u8;
 #if SQLITE_USER_AUTHENTICATION
 # include "sqlite3userauth.h"
 #endif
+
 #include <ctype.h>
 #include <stdarg.h>
 
@@ -1203,6 +1206,8 @@ static void shellAddSchemaName(
 #define SQLITE_EXTENSION_INIT1
 #define SQLITE_EXTENSION_INIT2(X) (void)(X)
 #define SQLITE_EXTENSION_INIT3
+
+# define SQLITE_EXTENSION_EXPORT    
 
 #if defined(_WIN32) && defined(_MSC_VER)
 INCLUDE test_windirent.h
