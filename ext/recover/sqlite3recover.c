@@ -12,6 +12,9 @@
 **
 */
 
+#if 0
+#define SQLITE_CORE
+#endif
 
 #include "sqlite3recover.h"
 #include "sqlite3ext.h"
