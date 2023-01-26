@@ -44,7 +44,6 @@ extern int sqlite_fts3view_main(int argc, const char** argv);
 extern int sqlite_lsmtest_main(int argc, const char** argv);
 extern int sqlite_rbu_main(int argc, const char** argv);
 extern int sqlite_ext_session_changeset_main(int argc, const char** argv);
-extern int sqlite_ext_session_fuzzer_main(int argc, const char** argv);
 extern int sqlite_ext_session_speed_test_main(int argc, const char** argv);
 
 #ifdef __cplusplus
