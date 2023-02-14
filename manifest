@@ -1,5 +1,5 @@
-C Ensure\sthat\sLIMIT\sclauses\smay\sbe\spassed\sthrough\sto\svirtual\stable\simplementations\seven\sif\sthe\sWHERE\sclause\suses\soperators\sthat\smay\sonly\sbe\soptimized\sby\svirtual,\snot\sbuilt-in,\stables\s(!=,\sfunctions,\sMATCH\setc.).
-D 2023-01-04T17:46:29.753
+C Changes\sa\stestcase()\sinto\san\sassert()\sdue\sto\sthe\n[e58bba93717cd6ff]\schange.
+D 2023-01-05T14:41:18.215
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -341,7 +341,7 @@ F ext/misc/vfsstat.c 474d08efc697b8eba300082cb1eb74a5f0f3df31ed257db1cb07e72ab0e
 F ext/misc/vtablog.c 5538acd0c8ddaae372331bee11608d76973436b77d6a91e8635cfc9432fba5ae
 F ext/misc/vtshim.c 1976e6dd68dd0d64508c91a6dfab8e75f8aaf6cd
 F ext/misc/wholenumber.c a838d1bea913c514ff316c69695efbb49ea3b8cb37d22afc57f73b6b010b4546
-F ext/misc/zipfile.c bc4f8c552c8eed68fddc44600da9eed5d4de9c0e765b1256cf8750288097307f
+F ext/misc/zipfile.c f98239261488397618ce4754c500626d1de20cd2d44bf2f2d571d7ddaab668a7
 F ext/misc/zorder.c b0ff58fa643afa1d846786d51ea8d5c4b6b35aa0254ab5a82617db92f3adda64
 F ext/rbu/rbu.c 801450b24eaf14440d8fd20385aacc751d5c9d6123398df41b1b5aa804bf4ce8
 F ext/rbu/rbu1.test c62904bd9526dcdc3496a21199aaf14ae191bbadbf67f076bf16be6b3f2115c2
@@ -717,13 +717,13 @@ F src/upsert.c 5303dc6c518fa7d4b280ec65170f465c7a70b7ac2b22491598f6d0b4875b3145
 F src/utf.c ee39565f0843775cc2c81135751ddd93eceb91a673ea2c57f61c76f288b041a0
 F src/util.c 0e5cf9062a796f0f1b6b3228b121b2344932c05425f7c8b5a7cb245812473bbd
 F src/vacuum.c 84ce7f01f8a7a08748e107a441db83bcec13970190ddcb0c9ff522adbc1c23fd
-F src/vdbe.c b2f2cbaae707685b9860bd54cdd6657076c28e82c725d795ae389c10850a97a6
+F src/vdbe.c d05e97e6845f2d29a9e6d08b143946513d48449408e11b1d2465787d25713080
 F src/vdbe.h 73b904a6b3bb27f308c6cc287a5751ebc7f1f89456be0ed068a12b92844c6e8c
 F src/vdbeInt.h fc15815b7bdafbb27e7f027faba2b0112e87d382c0d72241672528806ebc0db5
 F src/vdbeapi.c 4ee67890913c1d2469c68e3ad2e7ddeab57ac5924a64bbfd0906a8ea0d542c7f
 F src/vdbeaux.c 9eb7394126b88e55f81321d5e87636e0cd5e5856818d644d8abd6bfbb9c0be9d
 F src/vdbeblob.c 5e61ce31aca17db8fb60395407457a8c1c7fb471dde405e0cd675974611dcfcd
-F src/vdbemem.c a958d07da2f1093d22ffd1b147530b07f139e781ce51e6dab5a36a15bbdad12d
+F src/vdbemem.c 316d518115f3720b4097f0231e2a3d6eefd06c787eccf44972f8d8f462153421
 F src/vdbesort.c 43756031ca7430f7aec3ef904824a7883c4ede783e51f280d99b9b65c0796e35
 F src/vdbetrace.c fe0bc29ebd4e02c8bc5c1945f1d2e6be5927ec12c06d89b03ef2a4def34bf823
 F src/vdbevtab.c aae4bd769410eb7e1d02c42613eec961d514459b1c3c1c63cfc84e92a137daac
@@ -1231,7 +1231,7 @@ F test/intarray.test bb976b0b3df0ebb6a2eddfb61768280440e672beba5460ed49679ea984c
 F test/interrupt.test 16ea879ec728cb76414c148c5f24afd5d1f91054
 F test/interrupt2.test e4408ca770a6feafbadb0801e54a0dcd1a8d108d
 F test/intpkey.test aee694afed1a65c86c4e69ad030224b3fc268113d00685234d40079fca16bad3
-F test/intreal.test 2a87e85a5949bd55e41ef04c58f5800587c5380bdbc559ff1c79b614b0e6a533
+F test/intreal.test 68829a8bb073ee1610ca3f8f9e0f99b0371fb36e0fa64862dd5ced4ef03c2343
 F test/io.test f138f3fe696d1ed8c51dfea5b325910d319a1b29e1d25ea57231a02092f02cca
 F test/ioerr.test 530d05801ff1b6327018b2e140da34a74effa2773a844ddb8dc79c32e9567318
 F test/ioerr2.test 2593563599e2cc6b6b4fcf5878b177bdd5d8df26
@@ -1960,7 +1960,7 @@ F test/writecrash.test f1da7f7adfe8d7f09ea79b42e5ca6dcc41102f27f8e334ad71539501d
 F test/zeroblob.test 7b74cefc7b281dfa2b07cd237987fbe94b4a2037a7771e9e83f2d5f608b1d99e
 F test/zeroblobfault.test 861d8191a0d944dfebb3cb4d2c5b4e46a5a119eaec5a63dd996c2389f8063441
 F test/zerodamage.test 9c41628db7e8d9e8a0181e59ea5f189df311a9f6ce99cc376dc461f66db6f8dc
-F test/zipfile.test 0d8758d8c0d63f16644f959689f78969d223789d998964276554039f067b4548
+F test/zipfile.test 4178a2de98739e9adac41cb8f0be5553df060e470c846f51fdbed247117728a7
 F test/zipfile2.test 9903388a602a3834189857a985106ff95c3bba6a3969e0134127df991889db5d
 F test/zipfilefault.test 44d4d7a7f7cca7521d569d7f71026b241d65a6b1757aa409c1a168827edbbc2c
 F tool/GetFile.cs 47852aa0d806fe47ed1ac5138bdce7f000fe87aaa7f28107d0cb1e26682aeb44
@@ -2045,7 +2045,7 @@ F tool/varint.c 5d94cb5003db9dbbcbcc5df08d66f16071aee003
 F tool/vdbe-compress.tcl 1dcb7632e57cf57105248029e6e162fddaf6c0fccb3bb9e6215603752c5a2d4a
 F tool/vdbe_profile.tcl 3ac5a4a9449f4baf77059358ea050db3e34395ccf59c5464d29b91746d5b961e
 F tool/warnings-clang.sh bbf6a1e685e534c92ec2bfba5b1745f34fb6f0bc2a362850723a9ee87c1b31a7
-F tool/warnings.sh d58dc38367cc776550f90327e205d7946802d4004fb9f291fd8b81256bc1eedd
+F tool/warnings.sh ab651bb82586c43ff8b560beceac959735bf917b44c5e0f67ba3426e474f29f8
 F tool/win/sqlite.vsix deb315d026cc8400325c5863eef847784a219a2f
 F vsixtest/App.xaml b76d3b48860e7454775c47ea38ffea9c4abe3e85
 F vsixtest/App.xaml.cpp 41158ee43269820136fa3bba00c0bd91b26cc38b650ee392aec2a8d823e54318
@@ -2068,8 +2068,8 @@ F vsixtest/vsixtest.tcl 6a9a6ab600c25a91a7acc6293828957a386a8a93
 F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
 F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
 F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P 869635fb81e0868dee80ce77653a2c1d2af41b3ffbf0a3f7b788ac99dc808887
-R 09b79d8dee52dbbaabe508a6440984a8
-U dan
-Z 3297969a556ae071bd8b9f4bfdf478f8
+P e58bba93717cd6ff950c6f9e077b4327b59b1956dd5f6668be3de9509584b8fe
+R b0693ceebcfd21105fef77667ba71a94
+U drh
+Z 1653d29d1da89afb6a78df7f43f0bf8d
 # Remove this line to create a well-formed Fossil manifest.
