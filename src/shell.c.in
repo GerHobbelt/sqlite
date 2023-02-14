@@ -11720,7 +11720,7 @@ DISPATCHABLE_COMMAND( user ? 0 0 ){
  * The .vfsinfo, .vfslist, .vfsname and .version commands
  */
 COLLECT_HELP_TEXT[
-  ".version                 Show a variety of version info",
+  ".version                 Show source, library and compiler versions",
   ".vfsinfo ?AUX?           Information about the top-level VFS",
   ".vfslist                 List all available VFSes",
   ".vfsname ?AUX?           Print the name of the VFS stack",
