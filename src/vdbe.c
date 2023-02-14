@@ -3983,13 +3983,6 @@ case OP_Transaction: {
    && pOp->p5
    && (iMeta!=pOp->p3 || pDb->pSchema->iGeneration!=pOp->p4.i)
   ){
-    /*
-    ** IMPLEMENTATION-OF: R-03189-51135 As each SQL statement runs, the schema
-    ** version is checked to ensure that the schema has not changed since the
-    ** SQL statement was prepared.
-    */
-    sqlite3DbFree(db, p->zErrMsg);
-    p->zErrMsg = sqlite3DbStrDup(db, "database schema has changed");
     /* If the schema-cookie from the database file matches the cookie 
     ** stored with the in-memory representation of the schema, do
     ** not reload the schema from the database file.
@@ -4006,6 +3999,13 @@ case OP_Transaction: {
     if( db->aDb[pOp->p1].pSchema->schema_cookie!=iMeta ){
       sqlite3ResetOneSchema(db, pOp->p1);
     }
+    /*
+    ** IMPLEMENTATION-OF: R-03189-51135 As each SQL statement runs, the schema
+    ** version is checked to ensure that the schema has not changed since the
+    ** SQL statement was prepared.
+    */
+    sqlite3DbFree(db, p->zErrMsg);
+    p->zErrMsg = sqlite3DbStrDup(db, "database schema has changed");
     p->expired = 1;
     rc = SQLITE_SCHEMA;
 

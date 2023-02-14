@@ -288,13 +288,26 @@ int sqlite3_db_status(
     case SQLITE_DBSTATUS_SCHEMA_USED: {
       int i;                      /* Used to iterate through schemas */
       int nByte = 0;              /* Used to accumulate return value */
+      int bReleaseSchema;
 
       sqlite3BtreeEnterAll(db);
+      bReleaseSchema = sqlite3LockReusableSchema(db);
       db->pnBytesFreed = &nByte;
       assert( db->lookaside.pEnd==db->lookaside.pTrueEnd );
       db->lookaside.pEnd = db->lookaside.pStart;
       for(i=0; i<db->nDb; i++){
-        Schema *pSchema = db->aDb[i].pSchema;
+        Schema *pSchema;
+#ifdef SQLITE_ENABLE_SHARED_SCHEMA
+        int bUnload = 0;
+        int nUsed = nByte;
+        if( db->aDb[i].pSPool ){
+          char *zDummy = 0;
+          rc = sqlite3SchemaLoad(db, i, &bUnload, &zDummy);
+          sqlite3_free(zDummy);
+          if( rc ) break;
+        }
+#endif /* ifdef SQLITE_ENABLE_SHARED_SCHEMA */
+        pSchema = db->aDb[i].pSchema;
         if( ALWAYS(pSchema!=0) ){
           HashElem *p;
 
@@ -316,7 +329,14 @@ int sqlite3_db_status(
             sqlite3DeleteTable(db, (Table *)sqliteHashData(p));
           }
         }
+#ifdef SQLITE_ENABLE_SHARED_SCHEMA
+        if( db->aDb[i].pSPool ){
+          if( bUnload ) sqlite3SchemaRelease(db, i);
+          sqlite3SchemaAdjustUsed(db, i, nUsed, &nByte);
+        }
+#endif /* ifdef SQLITE_ENABLE_SHARED_SCHEMA */
       }
+      sqlite3UnlockReusableSchema(db, bReleaseSchema);
       db->pnBytesFreed = 0;
       db->lookaside.pEnd = db->lookaside.pTrueEnd;
       sqlite3BtreeLeaveAll(db);

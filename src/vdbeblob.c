@@ -135,6 +135,7 @@ int sqlite3_blob_open(
   Table *pTab;
   Incrblob *pBlob = 0;
   Parse sParse;
+  int bUnlock;            /* True to unlock reusable schemas before returning */
 
 #ifdef SQLITE_ENABLE_API_ARMOR
   if( ppBlob==0 ){
@@ -151,6 +152,7 @@ int sqlite3_blob_open(
 
   sqlite3_mutex_enter(db->mutex);
 
+  bUnlock = sqlite3LockReusableSchema(db);
   pBlob = (Incrblob *)sqlite3DbMallocZero(db, sizeof(Incrblob));
   while(1){
     sqlite3ParseObjectInit(&sParse,db);
@@ -336,6 +338,7 @@ int sqlite3_blob_open(
   }
 
 blob_open_out:
+  sqlite3UnlockReusableSchema(db, bUnlock);
   if( rc==SQLITE_OK && db->mallocFailed==0 ){
     *ppBlob = (sqlite3_blob *)pBlob;
   }else{

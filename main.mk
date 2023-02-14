@@ -326,6 +326,7 @@ TESTSRC = \
   $(TOP)/src/test_quota.c \
   $(TOP)/src/test_rtree.c \
   $(TOP)/src/test_schema.c \
+  $(TOP)/src/test_schemapool.c \
   $(TOP)/src/test_sqllog.c \
   $(TOP)/src/test_superlock.c \
   $(TOP)/src/test_syscall.c \
@@ -385,6 +386,7 @@ TESTSRC2 = \
   $(TOP)/src/backup.c \
   $(TOP)/src/btree.c \
   $(TOP)/src/build.c \
+  $(TOP)/src/callback.c \
   $(TOP)/src/date.c \
   $(TOP)/src/dbpage.c \
   $(TOP)/src/dbstat.c \
