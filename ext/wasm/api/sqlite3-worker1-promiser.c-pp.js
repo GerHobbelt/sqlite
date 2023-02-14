@@ -246,9 +246,9 @@ self.sqlite3Worker1Promiser.defaultConfig = {
       const src = this.currentScript.src.split('/');
       src.pop();
       theJs = src.join('/')+'/' + theJs;
-      //sqlite3.config.warn("promiser currentScript, theJs =",this.currentScript,theJs);
+      //console.warn("promiser currentScript, theJs =",this.currentScript,theJs);
     }else{
-      //sqlite3.config.warn("promiser self.location =",self.location);
+      //console.warn("promiser self.location =",self.location);
       const urlParams = new URL(self.location.href).searchParams;
       if(urlParams.has('sqlite3.dir')){
         theJs = urlParams.get('sqlite3.dir') + '/' + theJs;
