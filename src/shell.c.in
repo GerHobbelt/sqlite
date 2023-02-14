@@ -11832,7 +11832,7 @@ COMMENT  This help text is set seperately from meta-command definition section
 COMMENT  for the always-built-in, non-customizable commands with visible help.
 COLLECT_HELP_TEXT[
   ".exit ?CODE?             Exit this program with return-code CODE or 0",
-  ".quit                    Exit this program",
+  ".quit                    Stop interpreting input stream, exit if primary.",
 ];
 
 COLLECT_HELP_TEXT[
