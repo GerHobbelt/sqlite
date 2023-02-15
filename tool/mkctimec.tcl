@@ -42,7 +42,7 @@ set ::headCode "
 ** Include the configuration header output by 'configure' if we're using the
 ** autoconf-based build
 */
-#include "sqlite3_config.h"
+#include \"sqlite3_config.h\"
 
 /* These macros are provided to \"stringify\" the value of the define
 ** for those options in which the value is meaningful. */
@@ -94,6 +94,7 @@ set boolean_defnnz_options {
 set boolean_defnil_options {
   SQLITE_32BIT_ROWID
   SQLITE_4_BYTE_ALIGNED_MALLOC
+  SQLITE_64BIT_STATS
   SQLITE_ALLOW_URI_AUTHORITY
   SQLITE_BUG_COMPATIBLE_20160819
   SQLITE_CASE_SENSITIVE_LIKE
