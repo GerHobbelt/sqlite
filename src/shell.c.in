@@ -2250,7 +2250,7 @@ static void printSchemaLine(FILE *out, const char *z, const char *zTail){
       sqlite3_free(zNew);
     }
   }
-  if( sqlite3_strglob("CREATE TABLE ['\"]*", z)==0 ){
+  if( sqlite3_strglob("CREATE TABLE ['\"[]*", z)==0 ){
     utf8_printf(out, "CREATE TABLE IF NOT EXISTS %s%s", z+13, zTail);
   }else{
     utf8_printf(out, "%s%s", z, zTail);
