@@ -9202,7 +9202,11 @@ COLLECT_HELP_TEXT[
   "     Options:",
   "        fkey-indexes     Find missing foreign key indexes",
   ".load FILE ?ENTRY?       Load an extension library",
-  ".log FILE|off            Turn logging on or off.  FILE can be stderr/stdout",
+#if !defined(SQLITE_SHELL_FIDDLE)
+  ".log FILE|on|off         Turn logging on or off.  FILE can be stderr/stdout",
+#else
+  ".log on|off              Turn logging on or off.",
+#endif
 ];
 DISPATCHABLE_COMMAND( imposter ? 3 3 ){
   int rc = 0;
@@ -9409,8 +9413,16 @@ DISPATCHABLE_COMMAND( load ? 2 3 ){
 
 DISPATCHABLE_COMMAND( log ? 2 2 ){
   const char *zFile = azArg[1];
-  if( p->bSafeMode ) return SHELL_FORBIDDEN_OP;
+  if( p->bSafeMode
+      && cli_strcmp(zFile,"on")!=0
+      && cli_strcmp(zFile,"off")!=0
+  ){
+    raw_printf(stdout, "cannot set .log to anything other "
+               "than \"on\" or \"off\"\n");
+    zFile = "off";
+  }
   output_file_close(p->pLog);
+  if( cli_strcmp(zFile,"on")==0 ) zFile = "stdout";
   p->pLog = output_file_open(zFile, 0);
   return 0;
 }
@@ -12702,9 +12714,11 @@ static void main_init(ShellState *data) {
   memcpy(data->rowSeparator,SEP_Row, 2);
   data->showHeader = 0;
   data->shellFlgs = SHFLG_Lookaside;
-  verify_uninitialized();
-  sqlite3_config(SQLITE_CONFIG_URI, 1);
   sqlite3_config(SQLITE_CONFIG_LOG, shellLog, data);
+#if !defined(SQLITE_SHELL_FIDDLE)
+  verify_uninitialized();
+#endif
+  sqlite3_config(SQLITE_CONFIG_URI, 1);
   sqlite3_config(SQLITE_CONFIG_MULTITHREAD);
   sqlite3_snprintf(sizeof(mainPrompt), mainPrompt,"sqlite> ");
   sqlite3_snprintf(sizeof(continuePrompt), continuePrompt,"   ...> ");
@@ -12899,7 +12913,9 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
   ** the size of the alternative malloc heap,
   ** and the first command to execute.
   */
+#ifndef SQLITE_SHELL_FIDDLE
   verify_uninitialized();
+#endif
   for(i=1; i<argc && rc<2; i++){
     const char *z = argv[i];
     if( z[0]!='-' ){
@@ -12938,6 +12954,7 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
       zSize = cmdline_option_value(argc, argv, ++i);
       szHeap = integerValue(zSize);
       if( szHeap>0x7fff0000 ) szHeap = 0x7fff0000;
+      verify_uninitialized();
       sqlite3_config(SQLITE_CONFIG_HEAP, malloc((int)szHeap), (int)szHeap, 64);
 #else
       (void)cmdline_option_value(argc, argv, ++i);
@@ -12951,6 +12968,7 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
       if( sz>0 && n>0 && 0xffffffffffffLL/sz<n ){
         n = 0xffffffffffffLL/sz;
       }
+      verify_uninitialized();
       sqlite3_config(SQLITE_CONFIG_PAGECACHE,
                     (n>0 && sz>0) ? malloc(n*sz) : 0, sz, n);
       data.shellFlgs |= SHFLG_Pagecache;
@@ -12960,11 +12978,13 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
       if( sz<0 ) sz = 0;
       n = (int)integerValue(cmdline_option_value(argc,argv,++i));
       if( n<0 ) n = 0;
+      verify_uninitialized();
       sqlite3_config(SQLITE_CONFIG_LOOKASIDE, sz, n);
       if( sz*n==0 ) data.shellFlgs &= ~SHFLG_Lookaside;
     }else if( cli_strcmp(z,"-threadsafe")==0 ){
       int n;
       n = (int)integerValue(cmdline_option_value(argc,argv,++i));
+      verify_uninitialized();
       switch( n ){
          case 0:  sqlite3_config(SQLITE_CONFIG_SINGLETHREAD);  break;
          case 2:  sqlite3_config(SQLITE_CONFIG_MULTITHREAD);   break;
@@ -12988,10 +13008,12 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
 #endif
     }else if( cli_strcmp(z,"-mmap")==0 ){
       sqlite3_int64 sz = integerValue(cmdline_option_value(argc,argv,++i));
+      verify_uninitialized();
       sqlite3_config(SQLITE_CONFIG_MMAP_SIZE, sz, sz);
-#ifdef SQLITE_ENABLE_SORTER_REFERENCES
+#if defined(SQLITE_ENABLE_SORTER_REFERENCES)
     }else if( cli_strcmp(z,"-sorterref")==0 ){
       sqlite3_int64 sz = integerValue(cmdline_option_value(argc,argv,++i));
+      verify_uninitialized();
       sqlite3_config(SQLITE_CONFIG_SORTERREF_SIZE, (int)sz);
 #endif
     }else if( cli_strcmp(z,"-vfs")==0 ){
@@ -13029,7 +13051,9 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
       /* catch this on the second pass (Unsafe is fine on invocation.) */
     }
   }
+#ifndef SQLITE_SHELL_FIDDLE
   verify_uninitialized();
+#endif
 
 #ifdef SQLITE_SHELL_INIT_PROC
   {
@@ -13282,6 +13306,7 @@ int SQLITE_CDECL SHELL_MAIN(int argc, const wchar_t **wargv){
           goto shell_bail;
         }
       }else{
+        echo_group_input(&data, azCmd[i]);
         rc = run_single_query(&data, azCmd[i]);
       }
     }
