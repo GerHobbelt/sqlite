@@ -7684,6 +7684,7 @@ case OP_AggFinal: {
   }
   sqlite3VdbeChangeEncoding(pMem, encoding);
   UPDATE_MAX_BLOBSIZE(pMem);
+  REGISTER_TRACE((int)(pMem-aMem), pMem);
   break;
 }
 
