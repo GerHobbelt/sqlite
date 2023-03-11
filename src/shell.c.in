@@ -6071,7 +6071,7 @@ static int db_int(sqlite3 *db, const char *zSql){
   return res;
 }
 
-#if SQLITE_SHELL_HAVE_RECOVER
+#if defined(SQLITE_SHELL_HAVE_RECOVER)
 /*
 ** Convert a 2-byte or 4-byte big-endian integer into a native integer
 */
