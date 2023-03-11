@@ -5335,8 +5335,13 @@ static void open_db(ShellState *p, int openFlags){
     }
 #endif
   }
-  if( p->bSafeModeFuture && p->db!=0 ){
-    sqlite3_set_authorizer(p->db, safeModeAuth, p);
+  if( p->db!=0 ){
+    if( p->bSafeModeFuture ){
+      sqlite3_set_authorizer(p->db, safeModeAuth, p);
+    }
+    sqlite3_db_config(
+        p->db, SQLITE_DBCONFIG_STMT_SCANSTATUS, p->scanstatsOn, (int*)0
+    );
   }
 }
 
@@ -10344,6 +10349,9 @@ DISPATCHABLE_COMMAND( scanstats ? 2 2 ){
     }else{
       p->scanstatsOn = (u8)booleanValue(azArg[1]);
     }
+    sqlite3_db_config(
+      p->db, SQLITE_DBCONFIG_STMT_SCANSTATUS, p->scanstatsOn, (int*)0
+    );
 #ifndef SQLITE_ENABLE_STMT_SCANSTATUS
     raw_printf(STD_ERR, "Warning: .scanstats not available in this build.\n");
 #endif

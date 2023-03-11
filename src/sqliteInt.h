@@ -1809,7 +1809,7 @@ struct sqlite3 {
 #define SQLITE_NullCallback   0x00000100  /* Invoke the callback once if the */
                                           /*   result set is empty */
 #define SQLITE_IgnoreChecks   0x00000200  /* Do not enforce check constraints */
-#define SQLITE_ReadUncommit   0x00000400  /* READ UNCOMMITTED in shared-cache */
+#define SQLITE_StmtScanStatus 0x00000400  /* Enable stmt_scanstats() counters */
 #define SQLITE_NoCkptOnClose  0x00000800  /* No checkpoint on close()/DETACH */
 #define SQLITE_ReverseOrder   0x00001000  /* Reverse unordered SELECTs */
 #define SQLITE_RecTriggers    0x00002000  /* Enable recursive triggers */
@@ -1835,6 +1835,7 @@ struct sqlite3 {
                                           /*   DELETE, or UPDATE and return */
                                           /*   the count using a callback. */
 #define SQLITE_CorruptRdOnly  HI(0x00002) /* Prohibit writes due to error */
+#define SQLITE_ReadUncommit   HI(0x00004) /* READ UNCOMMITTED in shared-cache */
 
 /* Flags used by the Pragma noop_update enhancement */
 #define SQLITE_NoopUpdate     HI(0x0001000) /* UPDATE operations are no-ops */
@@ -5645,6 +5646,12 @@ int sqlite3KvvfsInit(void);
  || defined(SQLITE_PERFORMANCE_TRACE) \
  || defined(SQLITE_ENABLE_STMT_SCANSTATUS)
 sqlite3_uint64 sqlite3Hwtime(void);
+#endif
+
+#ifdef SQLITE_ENABLE_STMT_SCANSTATUS
+# define IS_STMT_SCANSTATUS(db) (db->flags & SQLITE_StmtScanStatus)
+#else
+# define IS_STMT_SCANSTATUS(db) 0
 #endif
 
 #endif /* SQLITEINT_H */

@@ -2403,7 +2403,6 @@ static int SQLITE_TCLAPI test_create_null_module(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  int rc;
   sqlite3 *db;
   char *zName;
 
@@ -8317,6 +8316,7 @@ static int SQLITE_TCLAPI test_sqlite3_db_config(
     { "DQS_DML",            SQLITE_DBCONFIG_DQS_DML },
     { "DQS_DDL",            SQLITE_DBCONFIG_DQS_DDL },
     { "LEGACY_FILE_FORMAT", SQLITE_DBCONFIG_LEGACY_FILE_FORMAT },
+    { "STMT_SCANSTATUS",    SQLITE_DBCONFIG_STMT_SCANSTATUS },
   };
   int i;
   int v = 0;
