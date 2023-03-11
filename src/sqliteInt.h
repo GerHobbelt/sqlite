@@ -1895,6 +1895,7 @@ struct sqlite3 {
 #define SQLITE_SortIfFaster   0x01000000 /* ORDER BY using sorter if faster */
 #define SQLITE_IndexedExpr    0x02000000 /* Pull exprs from index when able */
 #define SQLITE_Coroutines     0x04000000 /* Co-routines for subqueries */
+#define SQLITE_NullUnusedCols 0x08000000 /* NULL unused columns in subqueries */
 #define SQLITE_AllOpts        0xffffffff /* All optimizations */
 
 /*
