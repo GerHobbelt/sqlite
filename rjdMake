@@ -52,10 +52,18 @@ patch -p1 <amiga-diff.txt
     CFLAGS="-mcrt=${C_LIB}" \
     CPPFLAGS="-mcrt=${C_LIB} -include rjdInclude.h ${_CPPFLAGS}" \
     CXXFLAGS="-mcrt=${C_LIB}" \
-    LDFLAGS="-static -athread=native -mcrt=${C_LIB}"
+    LDFLAGS="-static -athread=native -mcrt=${C_LIB} -lm"
 # Read rjdInclude.h
 
-make -j$(nproc) || { echo 1>&2 "ERROR: Failed to build LIBXML2" ; exit 1; }
+function clean_patch
+{
+    patch --reverse -p1 <amiga-diff.txt
+    find \( -name "*.rej" -o -name "*.orig" \) -delete
+}
+
+make -j$(nproc) && clean_patch || { clean_patch ;                                \
+				    echo 1>&2 "ERROR: Failed to build LIBXML2" ; \
+				    exit 1; }
 
 make install
 
