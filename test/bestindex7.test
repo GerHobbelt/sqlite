@@ -28,11 +28,7 @@ proc vtab_command {src method args} {
     }
 
     xBestIndex {
-      set hdl [lindex $args 0]
-      set clist [$hdl constraints]
-      set orderby [$hdl orderby]
-      set mask [$hdl mask]
-      
+      set clist [lindex $args 0]
       set iCons 0
       set ret [list]
       foreach cons $clist {
@@ -80,3 +76,4 @@ do_execsql_test 1.11 { select * from vt1 WHERE a IN (0, NULL) } {0}
 do_execsql_test 1.12 { select * from vt1 WHERE a IN (NULL) } {}
 
 finish_test
+

@@ -59,25 +59,21 @@ static void updateVirtualTable(
 ** it has been converted into REAL.
 */
 void sqlite3ColumnDefault(Vdbe *v, Table *pTab, int i, int iReg){
-  Column *pCol;
   assert( pTab!=0 );
-  assert( pTab->nCol>i );
-  pCol = &pTab->aCol[i];
-  if( pCol->iDflt ){
+  if( !pTab->pSelect ){
     sqlite3_value *pValue = 0;
     u8 enc = ENC(sqlite3VdbeDb(v));
-    assert( !IsView(pTab) );
-    VdbeComment((v, "%s.%s", pTab->zName, pCol->zCnName));
+    Column *pCol = &pTab->aCol[i];
+    VdbeComment((v, "%s.%s", pTab->zName, pCol->zName));
     assert( i<pTab->nCol );
-    sqlite3ValueFromExpr(sqlite3VdbeDb(v), 
-                         sqlite3ColumnExpr(pTab,pCol), enc, 
+    sqlite3ValueFromExpr(sqlite3VdbeDb(v), pCol->pDflt, enc, 
                          pCol->affinity, &pValue);
     if( pValue ){
       sqlite3VdbeAppendP4(v, pValue, P4_MEM);
     }
   }
 #ifndef SQLITE_OMIT_FLOATING_POINT
-  if( pCol->affinity==SQLITE_AFF_REAL && !IsVirtual(pTab) ){
+  if( pTab->aCol[i].affinity==SQLITE_AFF_REAL && !IsVirtual(pTab) ){
     sqlite3VdbeAddOp1(v, OP_RealAffinity, iReg);
   }
 #endif
@@ -224,7 +220,6 @@ static void updateFromSelect(
 
   assert( pTabList->nSrc>1 );
   if( pSrc ){
-    pSrc->a[0].fg.notCte = 1;
     pSrc->a[0].iCursor = -1;
     pSrc->a[0].pTab->nTabRef--;
     pSrc->a[0].pTab = 0;
@@ -240,7 +235,7 @@ static void updateFromSelect(
       pList = sqlite3ExprListAppend(pParse, pList, pNew);
     }
     eDest = IsVirtual(pTab) ? SRT_Table : SRT_Upfrom;
-  }else if( IsView(pTab) ){
+  }else if( pTab->pSelect ){
     for(i=0; i<pTab->nCol; i++){
       pList = sqlite3ExprListAppend(pParse, pList, exprRowColumn(pParse, i));
     }
@@ -254,8 +249,7 @@ static void updateFromSelect(
     }
 #endif
   }
-  assert( pChanges!=0 || pParse->db->mallocFailed );
-  if( pChanges ){
+  if( ALWAYS(pChanges) ){
     for(i=0; i<pChanges->nExpr; i++){
       pList = sqlite3ExprListAppend(pParse, pList, 
           sqlite3ExprDup(db, pChanges->a[i].pExpr, 0)
@@ -263,9 +257,8 @@ static void updateFromSelect(
     }
   }
   pSelect = sqlite3SelectNew(pParse, pList, 
-      pSrc, pWhere2, pGrp, 0, pOrderBy2, SF_UFSrcCheck|SF_IncludeHidden, pLimit2
+      pSrc, pWhere2, pGrp, 0, pOrderBy2, SF_UpdateFrom|SF_IncludeHidden, pLimit2
   );
-  if( pSelect ) pSelect->selFlags |= SF_OrderByReqd;
   sqlite3SelectDestInit(&dest, eDest, iEph);
   dest.iSDParm2 = (pPk ? pPk->nKeyCol : -1);
   sqlite3Select(pParse, pSelect, &dest);
@@ -350,11 +343,9 @@ void sqlite3Update(
 
   memset(&sContext, 0, sizeof(sContext));
   db = pParse->db;
-  assert( db->pParse==pParse );
-  if( pParse->nErr ){
+  if( pParse->nErr || db->mallocFailed ){
     goto update_cleanup;
   }
-  assert( db->mallocFailed==0 );
 
   /* Locate the table which we want to update. 
   */
@@ -367,7 +358,7 @@ void sqlite3Update(
   */
 #ifndef SQLITE_OMIT_TRIGGER
   pTrigger = sqlite3TriggersExist(pParse, pTab, TK_UPDATE, pChanges, &tmask);
-  isView = IsView(pTab);
+  isView = pTab->pSelect!=0;
   assert( pTrigger || tmask==0 );
 #else
 # define pTrigger 0
@@ -377,14 +368,6 @@ void sqlite3Update(
 #ifdef SQLITE_OMIT_VIEW
 # undef isView
 # define isView 0
-#endif
-
-#if TREETRACE_ENABLED
-  if( sqlite3TreeTrace & 0x10000 ){
-    sqlite3TreeViewLine(0, "In sqlite3Update() at %s:%d", __FILE__, __LINE__);
-    sqlite3TreeViewUpdate(pParse->pWith, pTabList, pChanges, pWhere,
-                          onError, pOrderBy, pLimit, pUpsert, pTrigger);
-  }
 #endif
 
   /* If there was a FROM clause, set nChangeFrom to the number of expressions
@@ -464,16 +447,13 @@ void sqlite3Update(
   */
   chngRowid = chngPk = 0;
   for(i=0; i<pChanges->nExpr; i++){
-    u8 hCol = sqlite3StrIHash(pChanges->a[i].zEName);
     /* If this is an UPDATE with a FROM clause, do not resolve expressions
     ** here. The call to sqlite3Select() below will do that. */
     if( nChangeFrom==0 && sqlite3ResolveExprNames(&sNC, pChanges->a[i].pExpr) ){
       goto update_cleanup;
     }
     for(j=0; j<pTab->nCol; j++){
-      if( pTab->aCol[j].hName==hCol
-       && sqlite3StrICmp(pTab->aCol[j].zCnName, pChanges->a[i].zEName)==0
-      ){
+      if( sqlite3StrICmp(pTab->aCol[j].zName, pChanges->a[i].zEName)==0 ){
         if( j==pTab->iPKey ){
           chngRowid = 1;
           pRowidExpr = pChanges->a[i].pExpr;
@@ -487,7 +467,7 @@ void sqlite3Update(
           testcase( pTab->aCol[j].colFlags & COLFLAG_STORED );
           sqlite3ErrorMsg(pParse, 
              "cannot UPDATE generated column \"%s\"",
-             pTab->aCol[j].zCnName);
+             pTab->aCol[j].zName);
           goto update_cleanup;
         }
 #endif
@@ -511,7 +491,7 @@ void sqlite3Update(
     {
       int rc;
       rc = sqlite3AuthCheck(pParse, SQLITE_UPDATE, pTab->zName,
-                            j<0 ? "ROWID" : pTab->aCol[j].zCnName,
+                            j<0 ? "ROWID" : pTab->aCol[j].zName,
                             db->aDb[iDb].zDbSName);
       if( rc==SQLITE_DENY ){
         goto update_cleanup;
@@ -543,10 +523,8 @@ void sqlite3Update(
       for(i=0; i<pTab->nCol; i++){
         if( aXRef[i]>=0 ) continue;
         if( (pTab->aCol[i].colFlags & COLFLAG_GENERATED)==0 ) continue;
-        if( sqlite3ExprReferencesUpdatedColumn(
-                sqlite3ColumnExpr(pTab, &pTab->aCol[i]),
-                 aXRef, chngRowid)
-        ){
+        if( sqlite3ExprReferencesUpdatedColumn(pTab->aCol[i].pDflt,
+                                               aXRef, chngRowid) ){
           aXRef[i] = 99999;
           bProgress = 1;
         }
@@ -665,7 +643,6 @@ void sqlite3Update(
   if( (db->flags&SQLITE_CountRows)!=0
    && !pParse->pTriggerTab
    && !pParse->nested
-   && !pParse->bReturning
    && pUpsert==0
   ){
     regRowCount = ++pParse->nMem;
@@ -734,7 +711,7 @@ void sqlite3Update(
       if( !pParse->nested && !pTrigger && !hasFK && !chngKey && !bReplace ){
         flags |= WHERE_ONEPASS_MULTIROW;
       }
-      pWInfo = sqlite3WhereBegin(pParse, pTabList, pWhere,0,0,0,flags,iIdxCur);
+      pWInfo = sqlite3WhereBegin(pParse, pTabList, pWhere, 0, 0, flags,iIdxCur);
       if( pWInfo==0 ) goto update_cleanup;
 
       /* A one-pass strategy that might update more than one row may not
@@ -821,12 +798,7 @@ void sqlite3Update(
   
     /* Top of the update loop */
     if( eOnePass!=ONEPASS_OFF ){
-      if( aiCurOnePass[0]!=iDataCur
-       && aiCurOnePass[1]!=iDataCur
-#ifdef SQLITE_ALLOW_ROWID_IN_VIEW
-       && !isView
-#endif
-      ){
+      if( !isView && aiCurOnePass[0]!=iDataCur && aiCurOnePass[1]!=iDataCur ){
         assert( pPk );
         sqlite3VdbeAddOp4Int(v, OP_NotFound, iDataCur, labelBreak, regKey,nKey);
         VdbeCoverage(v);
@@ -1031,7 +1003,7 @@ void sqlite3Update(
       }else{
         sqlite3VdbeAddOp3(v, OP_NotExists, iDataCur, labelContinue,regOldRowid);
       }
-      VdbeCoverage(v);
+      VdbeCoverageNeverTaken(v);
     }
 
     /* Do FK constraint checks. */
@@ -1134,7 +1106,9 @@ void sqlite3Update(
   ** that information.
   */
   if( regRowCount ){
-    sqlite3CodeChangeCount(v, regRowCount, "rows updated");
+    sqlite3VdbeAddOp2(v, OP_ResultRow, regRowCount, 1);
+    sqlite3VdbeSetNumCols(v, 1);
+    sqlite3VdbeSetColName(v, 0, COLNAME_NAME, "rows updated", SQLITE_STATIC);
   }
 
 update_cleanup:
@@ -1256,9 +1230,7 @@ static void updateVirtualTable(
     regRowid = ++pParse->nMem;
 
     /* Start scanning the virtual table */
-    pWInfo = sqlite3WhereBegin(
-        pParse, pSrc, pWhere, 0, 0, 0, WHERE_ONEPASS_DESIRED, 0
-    );
+    pWInfo = sqlite3WhereBegin(pParse, pSrc,pWhere,0,0,WHERE_ONEPASS_DESIRED,0);
     if( pWInfo==0 ) return;
 
     /* Populate the argument registers. */

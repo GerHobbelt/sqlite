@@ -85,13 +85,14 @@ static Btree *findBtree(sqlite3 *pErrorDb, sqlite3 *pDb, const char *zDb){
   if( i==1 ){
     Parse sParse;
     int rc = 0;
-    sqlite3ParseObjectInit(&sParse,pDb);
+    memset(&sParse, 0, sizeof(sParse));
+    sParse.db = pDb;
     if( sqlite3OpenTempDatabase(&sParse) ){
       sqlite3ErrorWithMsg(pErrorDb, sParse.rc, "%s", sParse.zErrMsg);
       rc = SQLITE_ERROR;
     }
     sqlite3DbFree(pErrorDb, sParse.zErrMsg);
-    sqlite3ParseObjectReset(&sParse);
+    sqlite3ParserReset(&sParse);
     if( rc ){
       return 0;
     }

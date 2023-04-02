@@ -46,9 +46,7 @@ proc vtab_command {method args} {
       set OP(glob) GLOB
       set OP(regexp) REGEXP
 
-      set hdl [lindex $args 0]
-      set clist [$hdl constraints]
-
+      set clist [lindex $args 0]
       set ret [list]
       set elist [list]
       set i 0

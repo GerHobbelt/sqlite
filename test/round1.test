@@ -10,7 +10,6 @@
 #***********************************************************************
 # Test cases for rounding behavior of floating point values.
 #
-# TESTRUNNER: slow
 
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl

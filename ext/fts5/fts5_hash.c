@@ -356,7 +356,7 @@ int sqlite3Fts5HashWrite(
       p->bContent = 1;
     }else{
       /* Append a new column value, if necessary */
-      assert_nc( iCol>=p->iCol );
+      assert( iCol>=p->iCol );
       if( iCol!=p->iCol ){
         if( pHash->eDetail==FTS5_DETAIL_FULL ){
           pPtr[p->nData++] = 0x01;

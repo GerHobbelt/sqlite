@@ -389,7 +389,6 @@ static int echoDestructor(sqlite3_vtab *pVtab){
 typedef struct EchoModule EchoModule;
 struct EchoModule {
   Tcl_Interp *interp;
-  sqlite3 *db;
 };
 
 /*
@@ -1353,9 +1352,6 @@ extern int getDbPointer(Tcl_Interp *interp, const char *zA, sqlite3 **ppDb);
 extern const char *sqlite3ErrName(int);
 
 static void moduleDestroy(void *p){
-  EchoModule *pMod = (EchoModule*)p;
-  sqlite3_create_function(pMod->db, "function_that_does_not_exist_0982ma98",
-                          SQLITE_ANY, 1, 0, 0, 0, 0);
   sqlite3_free(p);
 }
 
@@ -1380,7 +1376,6 @@ static int SQLITE_TCLAPI register_echo_module(
   /* Virtual table module "echo" */
   pMod = sqlite3_malloc(sizeof(EchoModule));
   pMod->interp = interp;
-  pMod->db = db;
   rc = sqlite3_create_module_v2(
       db, "echo", &echoModule, (void*)pMod, moduleDestroy
   );
@@ -1389,7 +1384,6 @@ static int SQLITE_TCLAPI register_echo_module(
   if( rc==SQLITE_OK ){
     pMod = sqlite3_malloc(sizeof(EchoModule));
     pMod->interp = interp;
-    pMod->db = db;
     rc = sqlite3_create_module_v2(db, "echo_v2", 
         &echoModuleV2, (void*)pMod, moduleDestroy
     );

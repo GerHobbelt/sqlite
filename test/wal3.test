@@ -12,7 +12,6 @@
 # focus of this file is testing the operation of the library in
 # "PRAGMA journal_mode=WAL" mode.
 #
-# TESTRUNNER: slow
 
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl

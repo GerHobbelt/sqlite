@@ -17,10 +17,6 @@
 #include <string.h>
 #include <assert.h>
 
-#ifndef SQLITE_AMALGAMATION
-typedef sqlite3_int64 i64;
-#endif
-
 /*
 ** Characters that may appear in the second argument to matchinfo().
 */
@@ -71,9 +67,9 @@ struct SnippetIter {
 struct SnippetPhrase {
   int nToken;                     /* Number of tokens in phrase */
   char *pList;                    /* Pointer to start of phrase position list */
-  i64 iHead;                      /* Next value in position list */
+  int iHead;                      /* Next value in position list */
   char *pHead;                    /* Position list data following iHead */
-  i64 iTail;                      /* Next value in trailing position list */
+  int iTail;                      /* Next value in trailing position list */
   char *pTail;                    /* Position list data following iTail */
 };
 
@@ -138,8 +134,9 @@ static MatchinfoBuffer *fts3MIBufferNew(size_t nElem, const char *zMatchinfo){
                            + sizeof(MatchinfoBuffer);
   sqlite3_int64 nStr = strlen(zMatchinfo);
 
-  pRet = sqlite3Fts3MallocZero(nByte + nStr+1);
+  pRet = sqlite3_malloc64(nByte + nStr+1);
   if( pRet ){
+    memset(pRet, 0, nByte);
     pRet->aMatchinfo[0] = (u8*)(&pRet->aMatchinfo[1]) - (u8*)pRet;
     pRet->aMatchinfo[1+nElem] = pRet->aMatchinfo[0]
                                       + sizeof(u32)*((int)nElem+1);
@@ -237,7 +234,7 @@ void sqlite3Fts3MIBufferFree(MatchinfoBuffer *p){
 ** After it returns, *piPos contains the value of the next element of the
 ** list and *pp is advanced to the following varint.
 */
-static void fts3GetDeltaPosition(char **pp, i64 *piPos){
+static void fts3GetDeltaPosition(char **pp, int *piPos){
   int iVal;
   *pp += fts3GetVarint32(*pp, &iVal);
   *piPos += (iVal-2);
@@ -346,10 +343,10 @@ static int fts3ExprPhraseCount(Fts3Expr *pExpr){
 ** arguments so that it points to the first element with a value greater
 ** than or equal to parameter iNext.
 */
-static void fts3SnippetAdvance(char **ppIter, i64 *piIter, int iNext){
+static void fts3SnippetAdvance(char **ppIter, int *piIter, int iNext){
   char *pIter = *ppIter;
   if( pIter ){
-    i64 iIter = *piIter;
+    int iIter = *piIter;
 
     while( iIter<iNext ){
       if( 0==(*pIter & 0xFE) ){
@@ -432,7 +429,7 @@ static void fts3SnippetDetails(
     SnippetPhrase *pPhrase = &pIter->aPhrase[i];
     if( pPhrase->pTail ){
       char *pCsr = pPhrase->pTail;
-      i64 iCsr = pPhrase->iTail;
+      int iCsr = pPhrase->iTail;
 
       while( iCsr<(iStart+pIter->nSnippet) && iCsr>=iStart ){
         int j;
@@ -478,7 +475,7 @@ static int fts3SnippetFindPositions(Fts3Expr *pExpr, int iPhrase, void *ctx){
   rc = sqlite3Fts3EvalPhrasePoslist(p->pCsr, pExpr, p->iCol, &pCsr);
   assert( rc==SQLITE_OK || pCsr==0 );
   if( pCsr ){
-    i64 iFirst = 0;
+    int iFirst = 0;
     pPhrase->pList = pCsr;
     fts3GetDeltaPosition(&pCsr, &iFirst);
     if( iFirst<0 ){
@@ -543,10 +540,11 @@ static int fts3BestSnippet(
   ** the required space using malloc().
   */
   nByte = sizeof(SnippetPhrase) * nList;
-  sIter.aPhrase = (SnippetPhrase *)sqlite3Fts3MallocZero(nByte);
+  sIter.aPhrase = (SnippetPhrase *)sqlite3_malloc64(nByte);
   if( !sIter.aPhrase ){
     return SQLITE_NOMEM;
   }
+  memset(sIter.aPhrase, 0, nByte);
 
   /* Initialize the contents of the SnippetIter object. Then iterate through
   ** the set of phrases in the expression to populate the aPhrase[] array.
@@ -1110,12 +1108,10 @@ static int fts3MatchinfoLcsCb(
 ** position list for the next column.
 */
 static int fts3LcsIteratorAdvance(LcsIterator *pIter){
-  char *pRead;
+  char *pRead = pIter->pRead;
   sqlite3_int64 iRead;
   int rc = 0;
 
-  if( NEVER(pIter==0) ) return 1;
-  pRead = pIter->pRead;
   pRead += sqlite3Fts3GetVarint(pRead, &iRead);
   if( iRead==0 || iRead==1 ){
     pRead = 0;
@@ -1149,8 +1145,9 @@ static int fts3MatchinfoLcs(Fts3Cursor *pCsr, MatchInfo *pInfo){
   /* Allocate and populate the array of LcsIterator objects. The array
   ** contains one element for each matchable phrase in the query.
   **/
-  aIter = sqlite3Fts3MallocZero(sizeof(LcsIterator) * pCsr->nPhrase);
+  aIter = sqlite3_malloc64(sizeof(LcsIterator) * pCsr->nPhrase);
   if( !aIter ) return SQLITE_NOMEM;
+  memset(aIter, 0, sizeof(LcsIterator) * pCsr->nPhrase);
   (void)fts3ExprIterate(pCsr->pExpr, fts3MatchinfoLcsCb, (void*)aIter);
 
   for(i=0; i<pInfo->nPhrase; i++){
@@ -1542,8 +1539,8 @@ typedef struct TermOffsetCtx TermOffsetCtx;
 
 struct TermOffset {
   char *pList;                    /* Position-list */
-  i64 iPos;                       /* Position just read from pList */
-  i64 iOff;                       /* Offset of this term from read positions */
+  int iPos;                       /* Position just read from pList */
+  int iOff;                       /* Offset of this term from read positions */
 };
 
 struct TermOffsetCtx {
@@ -1562,7 +1559,7 @@ static int fts3ExprTermOffsetInit(Fts3Expr *pExpr, int iPhrase, void *ctx){
   int nTerm;                      /* Number of tokens in phrase */
   int iTerm;                      /* For looping through nTerm phrase terms */
   char *pList;                    /* Pointer to position list for phrase */
-  i64 iPos = 0;                   /* First position in position-list */
+  int iPos = 0;                   /* First position in position-list */
   int rc;
 
   UNUSED_PARAMETER(iPhrase);
@@ -1611,7 +1608,7 @@ void sqlite3Fts3Offsets(
   if( rc!=SQLITE_OK ) goto offsets_out;
 
   /* Allocate the array of TermOffset iterators. */
-  sCtx.aTerm = (TermOffset *)sqlite3Fts3MallocZero(sizeof(TermOffset)*nToken);
+  sCtx.aTerm = (TermOffset *)sqlite3_malloc64(sizeof(TermOffset)*nToken);
   if( 0==sCtx.aTerm ){
     rc = SQLITE_NOMEM;
     goto offsets_out;
@@ -1632,13 +1629,13 @@ void sqlite3Fts3Offsets(
     const char *zDoc;
     int nDoc;
 
-    /* Initialize the contents of sCtx.aTerm[] for column iCol. This 
-    ** operation may fail if the database contains corrupt records.
+    /* Initialize the contents of sCtx.aTerm[] for column iCol. There is 
+    ** no way that this operation can fail, so the return code from
+    ** fts3ExprIterate() can be discarded.
     */
     sCtx.iCol = iCol;
     sCtx.iTerm = 0;
-    rc = fts3ExprIterate(pCsr->pExpr, fts3ExprTermOffsetInit, (void*)&sCtx);
-    if( rc!=SQLITE_OK ) goto offsets_out;
+    (void)fts3ExprIterate(pCsr->pExpr, fts3ExprTermOffsetInit, (void*)&sCtx);
 
     /* Retreive the text stored in column iCol. If an SQL NULL is stored 
     ** in column iCol, jump immediately to the next iteration of the loop.

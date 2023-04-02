@@ -78,31 +78,15 @@
 
 
 #include <sqlite3.h>
-
-#ifdef _WIN32
-# include <stdio.h>
-# include <string.h>
-# include <assert.h>
-# include <process.h>
-# include <windows.h>
-# include <sys/types.h> 
-# include <sys/stat.h> 
-# include <errno.h>
-# include <fcntl.h>
-# include <io.h>
-#else
-# include <unistd.h>
-# include <stdio.h>
-# include <pthread.h>
-# include <assert.h>
-# include <sys/types.h> 
-# include <sys/stat.h> 
-# include <string.h>
-# include <fcntl.h>
-# include <errno.h>
-
-# define O_BINARY 0
-#endif
+#include <unistd.h>
+#include <stdio.h>
+#include <pthread.h>
+#include <assert.h>
+#include <sys/types.h> 
+#include <sys/stat.h> 
+#include <string.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #include "test_multiplex.h"
 
@@ -452,13 +436,8 @@ struct Thread {
   int iTid;                       /* Thread number within test */
   void* pArg;                     /* Pointer argument passed by caller */
 
-#ifdef _WIN32
-  uintptr_t winTid;               /* Thread handle */
-#else
   pthread_t tid;                  /* Thread id */
-#endif
   char *(*xProc)(int, void*);     /* Thread main proc */
-  char *zRes;                     /* Value returned by xProc */
   Thread *pNext;                  /* Next in this list of threads */
 };
 
@@ -492,13 +471,9 @@ static void print_and_free_err(Error *p){
 
 static void system_error(Error *pErr, int iSys){
   pErr->rc = iSys;
-#if _WIN32
-  pErr->zErr = sqlite3_mprintf("%s", strerror(iSys));
-#else
   pErr->zErr = (char *)sqlite3_malloc(512);
   strerror_r(iSys, pErr->zErr, 512);
   pErr->zErr[511] = '\0';
-#endif
 }
 
 static void sqlite_error(
@@ -537,7 +512,7 @@ static void clear_error_x(
 }
 
 static int busyhandler(void *pArg, int n){
-  sqlite3_sleep(10);
+  usleep(10*1000);
   return 1;
 }
 
@@ -774,20 +749,10 @@ static void integrity_check_x(
   }
 }
 
-#ifdef _WIN32
-static unsigned __stdcall launch_thread_main(void *pArg){
-  Thread *p = (Thread *)pArg;
-  p->zRes = p->xProc(p->iTid, p->pArg);
-  _endthreadex(0);
-  return 0; /* NOT REACHED */
-}
-#else
 static void *launch_thread_main(void *pArg){
   Thread *p = (Thread *)pArg;
-  p->zRes = p->xProc(p->iTid, p->pArg);
-  return 0;
+  return (void *)p->xProc(p->iTid, p->pArg);
 }
-#endif
 
 static void launch_thread_x(
   Error *pErr,                    /* IN/OUT: Error code */
@@ -806,13 +771,7 @@ static void launch_thread_x(
     p->pArg = pArg;
     p->xProc = xProc;
 
-#ifdef _WIN32
-    rc = SQLITE_OK;
-    p->winTid = _beginthreadex(0, 0, launch_thread_main, (void*)p, 0, 0);
-    if( p->winTid==0 ) rc = errno ? errno : rc;
-#else
     rc = pthread_create(&p->tid, NULL, launch_thread_main, (void *)p);
-#endif
     if( rc!=0 ){
       system_error(pErr, rc);
       sqlite3_free(p);
@@ -830,38 +789,20 @@ static void join_all_threads_x(
   Thread *p;
   Thread *pNext;
   for(p=pThreads->pThread; p; p=pNext){
-#ifndef _WIN32
     void *ret;
-#endif
-    int rc;
     pNext = p->pNext;
-
-#ifdef _WIN32
-    do {
-      rc = WaitForSingleObjectEx((HANDLE)p->winTid, INFINITE, TRUE);
-    }while( rc==WAIT_IO_COMPLETION );
-    CloseHandle((HANDLE)p->winTid);
-#else
+    int rc;
     rc = pthread_join(p->tid, &ret);
-#endif
-
     if( rc!=0 ){
       if( pErr->rc==SQLITE_OK ) system_error(pErr, rc);
     }else{
-      printf("Thread %d says: %s\n", p->iTid, (p->zRes==0 ? "..." : p->zRes));
+      printf("Thread %d says: %s\n", p->iTid, (ret==0 ? "..." : (char *)ret));
       fflush(stdout);
     }
-    sqlite3_free(p->zRes);
     sqlite3_free(p);
   }
   pThreads->pThread = 0;
 }
-
-#ifdef _WIN32
-# define THREADTEST3_STAT _stat
-#else
-# define THREADTEST3_STAT stat
-#endif
 
 static i64 filesize_x(
   Error *pErr,
@@ -869,8 +810,8 @@ static i64 filesize_x(
 ){
   i64 iRet = 0;
   if( pErr->rc==SQLITE_OK ){
-    struct THREADTEST3_STAT sStat;
-    if( THREADTEST3_STAT(zFile, &sStat) ){
+    struct stat sStat;
+    if( stat(zFile, &sStat) ){
       iRet = -1;
     }else{
       iRet = sStat.st_size;
@@ -895,12 +836,12 @@ static void filecopy_x(
       int fd2;
       unlink(zTo);
 
-      fd1 = open(zFrom, O_RDONLY|O_BINARY);
+      fd1 = open(zFrom, O_RDONLY);
       if( fd1<0 ){
         system_error(pErr, errno);
         return;
       }
-      fd2 = open(zTo, O_RDWR|O_CREAT|O_EXCL|O_BINARY, 0644);
+      fd2 = open(zTo, O_RDWR|O_CREAT|O_EXCL, 0644);
       if( fd2<0 ){
         system_error(pErr, errno);
         close(fd1);
@@ -1026,7 +967,7 @@ static char *walthread1_ckpt_thread(int iTid, void *pArg){
 
   opendb(&err, &db, "test.db", 0);
   while( !timetostop(&err) ){
-    sqlite3_sleep(500);
+    usleep(500*1000);
     execsql(&err, &db, "PRAGMA wal_checkpoint");
     if( err.rc==SQLITE_OK ) nCkpt++;
     clear_error(&err, SQLITE_BUSY);
@@ -1474,7 +1415,7 @@ static void dynamic_triggers(int nMs){
   launch_thread(&err, &threads, dynamic_triggers_2, 0);
   launch_thread(&err, &threads, dynamic_triggers_2, 0);
 
-  sqlite3_sleep(2*1000);
+  sleep(2);
   sqlite3_enable_shared_cache(0);
 
   launch_thread(&err, &threads, dynamic_triggers_2, 0);

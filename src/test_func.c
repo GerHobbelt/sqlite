@@ -499,8 +499,7 @@ static void test_extract(
     mem.db = db;
     mem.enc = ENC(db);
     pHdr += sqlite3GetVarint(pHdr, &iSerialType);
-    sqlite3VdbeSerialGet(pBody, (u32)iSerialType, &mem);
-    pBody += sqlite3VdbeSerialTypeLen((u32)iSerialType);
+    pBody += sqlite3VdbeSerialGet(pBody, (u32)iSerialType, &mem);
 
     if( iCurrent==iIdx ){
       sqlite3_result_value(context, &mem);
@@ -548,8 +547,7 @@ static void test_decode(
     mem.db = db;
     mem.enc = ENC(db);
     pHdr += sqlite3GetVarint(pHdr, &iSerialType);
-    sqlite3VdbeSerialGet(pBody, (u32)iSerialType, &mem);
-    pBody += sqlite3VdbeSerialTypeLen((u32)iSerialType);
+    pBody += sqlite3VdbeSerialGet(pBody, (u32)iSerialType, &mem);
 
     switch( sqlite3_value_type(&mem) ){
       case SQLITE_TEXT:

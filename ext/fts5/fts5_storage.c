@@ -417,16 +417,12 @@ static int fts5StorageDeleteFromIndex(
     if( pConfig->abUnindexed[iCol-1]==0 ){
       const char *zText;
       int nText;
-      assert( pSeek==0 || apVal==0 );
-      assert( pSeek!=0 || apVal!=0 );
       if( pSeek ){
         zText = (const char*)sqlite3_column_text(pSeek, iCol);
         nText = sqlite3_column_bytes(pSeek, iCol);
-      }else if( ALWAYS(apVal) ){
+      }else{
         zText = (const char*)sqlite3_value_text(apVal[iCol-1]);
         nText = sqlite3_value_bytes(apVal[iCol-1]);
-      }else{
-        continue;
       }
       ctx.szCol = 0;
       rc = sqlite3Fts5Tokenize(pConfig, FTS5_TOKENIZE_DOCUMENT, 
@@ -1062,9 +1058,8 @@ int sqlite3Fts5StorageDocsize(Fts5Storage *p, i64 iRowid, int *aCol){
 
   assert( p->pConfig->bColumnsize );
   rc = fts5StorageGetStmt(p, FTS5_STMT_LOOKUP_DOCSIZE, &pLookup, 0);
-  if( pLookup ){
+  if( rc==SQLITE_OK ){
     int bCorrupt = 1;
-    assert( rc==SQLITE_OK );
     sqlite3_bind_int64(pLookup, 1, iRowid);
     if( SQLITE_ROW==sqlite3_step(pLookup) ){
       const u8 *aBlob = sqlite3_column_blob(pLookup, 0);
@@ -1077,8 +1072,6 @@ int sqlite3Fts5StorageDocsize(Fts5Storage *p, i64 iRowid, int *aCol){
     if( bCorrupt && rc==SQLITE_OK ){
       rc = FTS5_CORRUPT;
     }
-  }else{
-    assert( rc!=SQLITE_OK );
   }
 
   return rc;

@@ -29,7 +29,7 @@
 **
 */
 Table *sqlite3SrcListLookup(Parse *pParse, SrcList *pSrc){
-  SrcItem *pItem = pSrc->a;
+  struct SrcList_item *pItem = pSrc->a;
   Table *pTab;
   assert( pItem && pSrc->nSrc>=1 );
   pTab = sqlite3LocateTableItem(pParse, 0, pItem);
@@ -37,21 +37,11 @@ Table *sqlite3SrcListLookup(Parse *pParse, SrcList *pSrc){
   pItem->pTab = pTab;
   if( pTab ){
     pTab->nTabRef++;
-    if( pItem->fg.isIndexedBy && sqlite3IndexedByLookup(pParse, pItem) ){
-      pTab = 0;
-    }
+  }
+  if( sqlite3IndexedByLookup(pParse, pItem) ){
+    pTab = 0;
   }
   return pTab;
-}
-
-/* Generate byte-code that will report the number of rows modified 
-** by a DELETE, INSERT, or UPDATE statement.
-*/
-void sqlite3CodeChangeCount(Vdbe *v, int regCounter, const char *zColName){
-  sqlite3VdbeAddOp0(v, OP_FkCheck);
-  sqlite3VdbeAddOp2(v, OP_ResultRow, regCounter, 1);
-  sqlite3VdbeSetNumCols(v, 1);
-  sqlite3VdbeSetColName(v, 0, COLNAME_NAME, zColName, SQLITE_STATIC);
 }
 
 /* Return true if table pTab is read-only.
@@ -61,42 +51,18 @@ void sqlite3CodeChangeCount(Vdbe *v, int regCounter, const char *zColName){
 **   1) It is a virtual table and no implementation of the xUpdate method
 **      has been provided
 **
-**   2) A trigger is currently being coded and the table is a virtual table
-**      that is SQLITE_VTAB_DIRECTONLY or if PRAGMA trusted_schema=OFF and
-**      the table is not SQLITE_VTAB_INNOCUOUS.
-**
-**   3) It is a system table (i.e. sqlite_schema), this call is not
+**   2) It is a system table (i.e. sqlite_schema), this call is not
 **      part of a nested parse and writable_schema pragma has not 
 **      been specified
 **
-**   4) The table is a shadow table, the database connection is in
+**   3) The table is a shadow table, the database connection is in
 **      defensive mode, and the current sqlite3_prepare()
 **      is for a top-level SQL statement.
 */
-static int vtabIsReadOnly(Parse *pParse, Table *pTab){
-  if( sqlite3GetVTable(pParse->db, pTab)->pMod->pModule->xUpdate==0 ){
-    return 1;
-  }
-
-  /* Within triggers:
-  **   *  Do not allow DELETE, INSERT, or UPDATE of SQLITE_VTAB_DIRECTONLY
-  **      virtual tables
-  **   *  Only allow DELETE, INSERT, or UPDATE of non-SQLITE_VTAB_INNOCUOUS
-  **      virtual tables if PRAGMA trusted_schema=ON.
-  */
-  if( pParse->pToplevel!=0
-   && pTab->u.vtab.p->eVtabRisk > 
-           ((pParse->db->flags & SQLITE_TrustedSchema)!=0)
-  ){
-    sqlite3ErrorMsg(pParse, "unsafe use of virtual table \"%s\"",
-      pTab->zName);
-  }
-  return 0;
-}
 static int tabIsReadOnly(Parse *pParse, Table *pTab){
   sqlite3 *db;
   if( IsVirtual(pTab) ){
-    return vtabIsReadOnly(pParse, pTab);
+    return sqlite3GetVTable(pParse->db, pTab)->pMod->pModule->xUpdate==0;
   }
   if( (pTab->tabFlags & (TF_Readonly|TF_Shadow))==0 ) return 0;
   db = pParse->db;
@@ -108,11 +74,9 @@ static int tabIsReadOnly(Parse *pParse, Table *pTab){
 }
 
 /*
-** Check to make sure the given table is writable. 
-**
-** If pTab is not writable  ->  generate an error message and return 1.
-** If pTab is writable but other errors have occurred -> return 1.
-** If pTab is writable and no prior errors -> return 0;
+** Check to make sure the given table is writable.  If it is not
+** writable, generate an error message and return 1.  If it is
+** writable return 0;
 */
 int sqlite3IsReadOnly(Parse *pParse, Table *pTab, int viewOk){
   if( tabIsReadOnly(pParse, pTab) ){
@@ -120,7 +84,7 @@ int sqlite3IsReadOnly(Parse *pParse, Table *pTab, int viewOk){
     return 1;
   }
 #ifndef SQLITE_OMIT_VIEW
-  if( !viewOk && IsView(pTab) ){
+  if( !viewOk && pTab->pSelect ){
     sqlite3ErrorMsg(pParse,"cannot modify %s because it is a view",pTab->zName);
     return 1;
   }
@@ -154,8 +118,8 @@ void sqlite3MaterializeView(
     assert( pFrom->nSrc==1 );
     pFrom->a[0].zName = sqlite3DbStrDup(db, pView->zName);
     pFrom->a[0].zDatabase = sqlite3DbStrDup(db, db->aDb[iDb].zDbSName);
-    assert( pFrom->a[0].fg.isUsing==0 );
-    assert( pFrom->a[0].u3.pOn==0 );
+    assert( pFrom->a[0].pOn==0 );
+    assert( pFrom->a[0].pUsing==0 );
   }
   pSel = sqlite3SelectNew(pParse, 0, pFrom, pWhere, 0, 0, pOrderBy, 
                           SF_IncludeHidden, pLimit);
@@ -224,13 +188,13 @@ Expr *sqlite3LimitWhere(
   }else{
     Index *pPk = sqlite3PrimaryKeyIndex(pTab);
     if( pPk->nKeyCol==1 ){
-      const char *zName = pTab->aCol[pPk->aiColumn[0]].zCnName;
+      const char *zName = pTab->aCol[pPk->aiColumn[0]].zName;
       pLhs = sqlite3Expr(db, TK_ID, zName);
       pEList = sqlite3ExprListAppend(pParse, 0, sqlite3Expr(db, TK_ID, zName));
     }else{
       int i;
       for(i=0; i<pPk->nKeyCol; i++){
-        Expr *p = sqlite3Expr(db, TK_ID, pTab->aCol[pPk->aiColumn[i]].zCnName);
+        Expr *p = sqlite3Expr(db, TK_ID, pTab->aCol[pPk->aiColumn[i]].zName);
         pEList = sqlite3ExprListAppend(pParse, pEList, p);
       }
       pLhs = sqlite3PExpr(pParse, TK_VECTOR, 0, 0);
@@ -243,16 +207,9 @@ Expr *sqlite3LimitWhere(
   /* duplicate the FROM clause as it is needed by both the DELETE/UPDATE tree
   ** and the SELECT subtree. */
   pSrc->a[0].pTab = 0;
-  pSelectSrc = sqlite3SrcListDup(db, pSrc, 0);
+  pSelectSrc = sqlite3SrcListDup(pParse->db, pSrc, 0);
   pSrc->a[0].pTab = pTab;
-  if( pSrc->a[0].fg.isIndexedBy ){
-    assert( pSrc->a[0].fg.isCte==0 );
-    pSrc->a[0].u2.pIBIndex = 0;
-    pSrc->a[0].fg.isIndexedBy = 0;
-    sqlite3DbFree(db, pSrc->a[0].u1.zIndexedBy);
-  }else if( pSrc->a[0].fg.isCte ){
-    pSrc->a[0].u2.pCteUse->nUse++;
-  }
+  pSrc->a[0].pIBIndex = 0;
 
   /* generate the SELECT expression tree. */
   pSelect = sqlite3SelectNew(pParse, pEList, pSelectSrc, pWhere, 0 ,0, 
@@ -319,12 +276,11 @@ void sqlite3DeleteFrom(
 
   memset(&sContext, 0, sizeof(sContext));
   db = pParse->db;
-  assert( db->pParse==pParse );
-  if( pParse->nErr ){
+  if( pParse->nErr || db->mallocFailed ){
     goto delete_from_cleanup;
   }
-  assert( db->mallocFailed==0 );
   assert( pTabList->nSrc==1 );
+
 
   /* Locate the table which we want to delete.  This table has to be
   ** put in an SrcList structure because some of the subroutines we
@@ -339,7 +295,7 @@ void sqlite3DeleteFrom(
   */
 #ifndef SQLITE_OMIT_TRIGGER
   pTrigger = sqlite3TriggersExist(pParse, pTab, TK_DELETE, 0, 0);
-  isView = IsView(pTab);
+  isView = pTab->pSelect!=0;
 #else
 # define pTrigger 0
 # define isView 0
@@ -348,14 +304,6 @@ void sqlite3DeleteFrom(
 #ifdef SQLITE_OMIT_VIEW
 # undef isView
 # define isView 0
-#endif
-
-#if TREETRACE_ENABLED
-  if( sqlite3TreeTrace & 0x10000 ){
-    sqlite3TreeViewLine(0, "In sqlite3Delete() at %s:%d", __FILE__, __LINE__);
-    sqlite3TreeViewDelete(pParse->pWith, pTabList, pWhere,
-                          pOrderBy, pLimit, pTrigger);
-  }
 #endif
 
 #ifdef SQLITE_ENABLE_UPDATE_DELETE_LIMIT
@@ -439,7 +387,6 @@ void sqlite3DeleteFrom(
   if( (db->flags & SQLITE_CountRows)!=0
    && !pParse->nested
    && !pParse->pTriggerTab
-   && !pParse->bReturning
   ){
     memCnt = ++pParse->nMem;
     sqlite3VdbeAddOp2(v, OP_Integer, 0, memCnt);
@@ -473,11 +420,7 @@ void sqlite3DeleteFrom(
     }
     for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
       assert( pIdx->pSchema==pTab->pSchema );
-      if( IsPrimaryKeyIndex(pIdx) && !HasRowid(pTab) ){
-        sqlite3VdbeAddOp3(v, OP_Clear, pIdx->tnum, iDb, memCnt ? memCnt : -1);
-      }else{
-        sqlite3VdbeAddOp2(v, OP_Clear, pIdx->tnum, iDb);
-      }
+      sqlite3VdbeAddOp2(v, OP_Clear, pIdx->tnum, iDb);
     }
   }else
 #endif /* SQLITE_OMIT_TRUNCATE_OPTIMIZATION */
@@ -512,7 +455,7 @@ void sqlite3DeleteFrom(
     **  ONEPASS_SINGLE: One-pass approach - at most one row deleted.
     **  ONEPASS_MULTI:  One-pass approach - any number of rows may be deleted.
     */
-    pWInfo = sqlite3WhereBegin(pParse, pTabList, pWhere, 0, 0,0,wcf,iTabCur+1);
+    pWInfo = sqlite3WhereBegin(pParse, pTabList, pWhere, 0, 0, wcf, iTabCur+1);
     if( pWInfo==0 ) goto delete_from_cleanup;
     eOnePass = sqlite3WhereOkOnePass(pWInfo, aiCurOnePass);
     assert( IsVirtual(pTab)==0 || eOnePass!=ONEPASS_MULTI );
@@ -598,7 +541,7 @@ void sqlite3DeleteFrom(
     if( eOnePass!=ONEPASS_OFF ){
       assert( nKey==nPk );  /* OP_Found will use an unpacked key */
       if( !IsVirtual(pTab) && aToOpen[iDataCur-iTabCur] ){
-        assert( pPk!=0 || IsView(pTab) );
+        assert( pPk!=0 || pTab->pSelect!=0 );
         sqlite3VdbeAddOp4Int(v, OP_NotFound, iDataCur, addrBypass, iKey, nKey);
         VdbeCoverage(v);
       }
@@ -665,7 +608,9 @@ void sqlite3DeleteFrom(
   ** invoke the callback function.
   */
   if( memCnt ){
-    sqlite3CodeChangeCount(v, memCnt, "rows deleted");
+    sqlite3VdbeAddOp2(v, OP_ResultRow, memCnt, 1);
+    sqlite3VdbeSetNumCols(v, 1);
+    sqlite3VdbeSetColName(v, 0, COLNAME_NAME, "rows deleted", SQLITE_STATIC);
   }
 
 delete_from_cleanup:
@@ -676,7 +621,7 @@ delete_from_cleanup:
   sqlite3ExprListDelete(db, pOrderBy);
   sqlite3ExprDelete(db, pLimit);
 #endif
-  if( aToOpen ) sqlite3DbNNFreeNN(db, aToOpen);
+  sqlite3DbFree(db, aToOpen);
   return;
 }
 /* Make sure "isView" and other macros defined above are undefined. Otherwise
@@ -830,7 +775,7 @@ void sqlite3GenerateRowDelete(
   ** the update-hook is not invoked for rows removed by REPLACE, but the 
   ** pre-update-hook is.
   */ 
-  if( !IsView(pTab) ){
+  if( pTab->pSelect==0 ){
     u8 p5 = 0;
     sqlite3GenerateRowIndexDelete(pParse, pTab, iDataCur, iIdxCur,0,iIdxNoSeek);
     sqlite3VdbeAddOp2(v, OP_Delete, iDataCur, (count?OPFLAG_NCHANGE:0));
@@ -987,15 +932,13 @@ int sqlite3GenerateIndexKey(
       continue;
     }
     sqlite3ExprCodeLoadIndexColumn(pParse, pIdx, iDataCur, j, regBase+j);
-    if( pIdx->aiColumn[j]>=0 ){
-      /* If the column affinity is REAL but the number is an integer, then it
-      ** might be stored in the table as an integer (using a compact
-      ** representation) then converted to REAL by an OP_RealAffinity opcode.
-      ** But we are getting ready to store this value back into an index, where
-      ** it should be converted by to INTEGER again.  So omit the
-      ** OP_RealAffinity opcode if it is present */
-      sqlite3VdbeDeletePriorOpcode(v, OP_RealAffinity);
-    }
+    /* If the column affinity is REAL but the number is an integer, then it
+    ** might be stored in the table as an integer (using a compact
+    ** representation) then converted to REAL by an OP_RealAffinity opcode.
+    ** But we are getting ready to store this value back into an index, where
+    ** it should be converted by to INTEGER again.  So omit the OP_RealAffinity
+    ** opcode if it is present */
+    sqlite3VdbeDeletePriorOpcode(v, OP_RealAffinity);
   }
   if( regOut ){
     sqlite3VdbeAddOp3(v, OP_MakeRecord, regBase, nCol, regOut);

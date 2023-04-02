@@ -8,7 +8,6 @@ source [file join [file dirname [info script]] wapp.tcl]
 # Variables set by the "control" form:
 #
 #   G(platform) - User selected platform.
-#   G(cfgglob)  - Glob pattern that all configurations must match
 #   G(test)     - Set to "Normal", "Veryquick", "Smoketest" or "Build-Only".
 #   G(keep)     - Boolean. True to delete no files after each test.
 #   G(msvc)     - Boolean. True to use MSVC as the compiler.
@@ -16,7 +15,6 @@ source [file join [file dirname [info script]] wapp.tcl]
 #   G(jobs)     - How many sub-processes to run simultaneously.
 #
 set G(platform) $::tcl_platform(os)-$::tcl_platform(machine)
-set G(cfgglob)  *
 set G(test)     Normal
 set G(keep)     1
 set G(msvc)     0
@@ -31,7 +29,7 @@ set G(stdout)   0
 proc wapptest_init {} {
   global G
 
-  set lSave [list platform test keep msvc tcl jobs debug noui stdout cfgglob] 
+  set lSave [list platform test keep msvc tcl jobs debug noui stdout] 
   foreach k $lSave { set A($k) $G($k) }
   array unset G
   foreach k $lSave { set G($k) $A($k) }
@@ -118,10 +116,6 @@ proc set_test_array {} {
     set debug "-debug"
     if {$G(debug)==0} { set debug "-nodebug"}
     foreach {config target} [releasetest_data tests $debug $G(platform)] {
-
-      # All configuration names must match $g(cfgglob), which defaults to *
-      #
-      if {![string match -nocase $G(cfgglob) $config]} continue
 
       # If using MSVC, do not run sanitize or valgrind tests. Or the
       # checksymbols test.
@@ -791,7 +785,6 @@ default it uses "wapp" to provide an interactive interface. Supported
 command line options (all optional) are:
 
     --platform    PLATFORM         (which tests to run)
-    --config      GLOB             (only run configurations matching GLOB)
     --smoketest                    (run "make smoketest" only)
     --veryquick                    (run veryquick.test only)
     --buildonly                    (build executables, do not run tests)
@@ -881,12 +874,6 @@ for {set i 0} {$i < [llength $lTestArg]} {incr i} {
     -noui {
       set G(noui) 1
       set G(stdout) 1
-    }
-
-    -config {
-      if {$i==[llength $lTestArg]-1} { wapptest_usage }
-      incr i
-      set G(cfgglob) [lindex $lTestArg $i]
     }
 
     -stdout {

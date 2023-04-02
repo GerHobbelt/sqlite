@@ -231,12 +231,6 @@ set pragma_def {
   COLS: cid name type notnull dflt_value pk hidden
   IF:   !defined(SQLITE_OMIT_SCHEMA_PRAGMAS)
 
-  NAME: table_list
-  TYPE: TABLE_LIST
-  FLAG: NeedSchema Result1
-  COLS: schema name type ncol wr strict
-  IF:   !defined(SQLITE_OMIT_SCHEMA_PRAGMAS)
-
   NAME: stats
   FLAG: NeedSchema Result0 SchemaReq
   COLS: tbl idx wdth hght flgs
@@ -262,7 +256,7 @@ set pragma_def {
   IF:   !defined(SQLITE_OMIT_SCHEMA_PRAGMAS)
 
   NAME: database_list
-  FLAG: Result0
+  FLAG: NeedSchema Result0
   COLS: seq name file
   IF:   !defined(SQLITE_OMIT_SCHEMA_PRAGMAS)
 
@@ -310,12 +304,12 @@ set pragma_def {
   IF:   !defined(SQLITE_OMIT_CASE_SENSITIVE_LIKE_PRAGMA)
 
   NAME: integrity_check
-  FLAG: NeedSchema Result0 Result1 SchemaOpt
+  FLAG: NeedSchema Result0 Result1
   IF:   !defined(SQLITE_OMIT_INTEGRITY_CHECK)
 
   NAME: quick_check
   TYPE: INTEGRITY_CHECK
-  FLAG: NeedSchema Result0 Result1 SchemaOpt
+  FLAG: NeedSchema Result0 Result1
   IF:   !defined(SQLITE_OMIT_INTEGRITY_CHECK)
 
   NAME: encoding

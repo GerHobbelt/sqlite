@@ -44,19 +44,8 @@ SQLITE_EXTENSION_INIT1
 # include <stdio.h>
 # include <stdlib.h>
 # include <assert.h>
-# if defined(SQLITE_COVERAGE_TEST) || defined(SQLITE_MUTATION_TEST)
-#   define SQLITE_OMIT_AUXILIARY_SAFETY_CHECKS 1
-# endif
-# if defined(SQLITE_OMIT_AUXILIARY_SAFETY_CHECKS)
-#   define ALWAYS(X)      (1)
-#   define NEVER(X)       (0)
-# elif !defined(NDEBUG)
-#   define ALWAYS(X)      ((X)?1:(assert(0),0))
-#   define NEVER(X)       ((X)?(assert(0),1):0)
-# else
-#   define ALWAYS(X)      (X)
-#   define NEVER(X)       (X)
-# endif
+# define ALWAYS(X)  1
+# define NEVER(X)   0
   typedef unsigned char u8;
   typedef unsigned short u16;
   typedef unsigned int u32;

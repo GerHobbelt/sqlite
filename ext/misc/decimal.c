@@ -459,11 +459,10 @@ static void decimalSubFunc(
   Decimal *pA = decimal_new(context, argv[0], 0, 0);
   Decimal *pB = decimal_new(context, argv[1], 0, 0);
   UNUSED_PARAMETER(argc);
-  if( pB ){
-    pB->sign = !pB->sign;
-    decimal_add(pA, pB);
-    decimal_result(context, pA);
-  }
+  if( pB==0 ) return;
+  pB->sign = !pB->sign;
+  decimal_add(pA, pB);
+  decimal_result(context, pA);
   decimal_free(pA);
   decimal_free(pB);
 }
