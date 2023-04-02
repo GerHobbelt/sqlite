@@ -37,9 +37,12 @@ function create_amiga_SDK_package
 	mkdir -p "${sdk_dir}"
 	find "${INSTALL_PREFIX}" -type d -iname "$(basename ${sdk_dir})" -exec cp -r {}/. "${sdk_dir}" \;
     done
-    lha a libsqlite3.lha local/
+    lha a libsqlite3_3_34.lha local/
 
 }
+
+## We will apply the patch in amiga-diff.txt. See http://aminet.net/package/biz/dbase/sqlite-3.34.0-amiga.
+patch -p1 <amiga-diff.txt
 
 ./configure \
     --host=ppc-amigaos \
@@ -58,6 +61,6 @@ make install
 
 create_amiga_SDK_package
 
-echo "FINISHED. See libsqlite3.lha"
+echo "FINISHED. See libsqlite3_3_34.lha"
 
 exit 0
