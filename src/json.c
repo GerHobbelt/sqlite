@@ -140,7 +140,7 @@
 ** string must correspond to the JSONB_* integer above.
 */
 static const char * const jsonbType[] = {
-  "null", "true", "false", "integer", "integer", 
+  "null", "true", "false", "integer", "integer",
   "real", "real", "text",  "text",    "text",
   "text", "array", "object", "", "", "", ""
 };
@@ -285,7 +285,7 @@ struct JsonString {
 **       input is JSONB instead of text JSON.
 **
 **   2.  The aBlob[] array is searched using the JSON path notation, if needed.
-**       
+**
 **   3.  Zero or more changes are made to aBlob[] (via json_remove() or
 **       json_replace() or json_patch() or similar).
 **
@@ -1540,7 +1540,7 @@ json_parse_restart:
         }
         j += json5Whitespace(&z[j]);
         op = JSONB_TEXT;
-        if( sqlite3JsonId1(z[j]) 
+        if( sqlite3JsonId1(z[j])
          || (z[j]=='\\' && jsonIs4HexB(&z[j+1], &op))
         ){
           int k = j+1;
@@ -1623,7 +1623,7 @@ json_parse_restart:
   case '[': {
     /* Parse array */
     iThis = pParse->nBlob;
-    assert( i<=pParse->nJson );
+    assert( i<=(u32)pParse->nJson );
     jsonBlobAppendNode(pParse, JSONB_ARRAY, pParse->nJson - i, 0);
     iStart = pParse->nBlob;
     if( pParse->oom ) return -1;
@@ -1992,7 +1992,7 @@ static int jsonConvertTextToBlob(
     assert( pParse->iDepth==0 );
     if( sqlite3Config.bJsonSelfcheck ){
       assert( jsonbValidityCheck(pParse, 0, pParse->nBlob, 0)==0 );
-    }   
+    }
 #endif
     while( jsonIsspace(zJson[i]) ) i++;
     if( zJson[i] ){
@@ -2885,7 +2885,7 @@ static u32 jsonLookupStep(
       return rc;
     }
   }else{
-    return JSON_LOOKUP_PATHERROR; 
+    return JSON_LOOKUP_PATHERROR;
   }
   return JSON_LOOKUP_NOTFOUND;
 }
@@ -3312,7 +3312,7 @@ static JsonParse *jsonParseFuncArg(
   JsonParse *p = 0;            /* Value to be returned */
   JsonParse *pFromCache = 0;   /* Value taken from cache */
   sqlite3 *db;                 /* The database connection */
-  
+
   assert( ctx!=0 );
   eType = sqlite3_value_type(pArg);
   if( eType==SQLITE_NULL ){
@@ -3453,7 +3453,7 @@ static void jsonReturnParse(
 
 #if SQLITE_DEBUG
 /*
-** Decode JSONB bytes in aBlob[] starting at iStart through but not 
+** Decode JSONB bytes in aBlob[] starting at iStart through but not
 ** including iEnd.  Indent the
 ** content by nIndent spaces.
 */
@@ -4001,7 +4001,7 @@ static int jsonMergePatch(
         rc = jsonMergePatch(pTarget, iTValue, pPatch, iPValue);
         if( rc ) return rc;
         pTarget->delta += savedDelta;
-      }        
+      }
     }else if( x>0 ){  /* Algorithm line 13 */
       /* No match and patch value is not NULL */
       u32 szNew = szPLabel+nPLabel;
@@ -4009,7 +4009,7 @@ static int jsonMergePatch(
         jsonBlobEdit(pTarget, iTEnd, 0, 0, szPValue+nPValue+szNew);
         if( pTarget->oom ) return JSON_MERGE_OOM;
         memcpy(&pTarget->aBlob[iTEnd], &pPatch->aBlob[iPLabel], szNew);
-        memcpy(&pTarget->aBlob[iTEnd+szNew], 
+        memcpy(&pTarget->aBlob[iTEnd+szNew],
                &pPatch->aBlob[iPValue], szPValue+nPValue);
       }else{
         int rc, savedDelta;
@@ -4364,7 +4364,7 @@ static void jsonValidFunc(
       JsonParse px;
       if( (flags & 0x3)==0 ) break;
       memset(&px, 0, sizeof(px));
-     
+
       p = jsonParseFuncArg(ctx, argv[0], JSON_KEEPERROR);
       if( p ){
         if( p->oom ){
@@ -4758,7 +4758,7 @@ static void jsonEachCursorReset(JsonEachCursor *p){
 static int jsonEachClose(sqlite3_vtab_cursor *cur){
   JsonEachCursor *p = (JsonEachCursor*)cur;
   jsonEachCursorReset(p);
-  
+
   sqlite3DbFree(p->db, cur);
   return SQLITE_OK;
 }
@@ -4944,6 +4944,9 @@ static int jsonEachColumn(
     case JEACH_VALUE: {
       u32 i = jsonSkipLabel(p);
       jsonReturnFromBlob(&p->sParse, i, ctx, 1);
+      if( (p->sParse.aBlob[i] & 0x0f)>=JSONB_ARRAY ){
+        sqlite3_result_subtype(ctx, JSON_SUBTYPE);
+      }
       break;
     }
     case JEACH_TYPE: {
@@ -4990,9 +4993,9 @@ static int jsonEachColumn(
     case JEACH_JSON: {
       if( p->sParse.zJson==0 ){
         sqlite3_result_blob(ctx, p->sParse.aBlob, p->sParse.nBlob,
-                            SQLITE_STATIC);
+                            SQLITE_TRANSIENT);
       }else{
-        sqlite3_result_text(ctx, p->sParse.zJson, -1, SQLITE_STATIC);
+        sqlite3_result_text(ctx, p->sParse.zJson, -1, SQLITE_TRANSIENT);
       }
       break;
     }
@@ -5103,7 +5106,7 @@ static int jsonEachFilter(
     if( p->sParse.zJson==0 ){
       p->i = p->iEnd = 0;
       return SQLITE_OK;
-    }      
+    }
     if( jsonConvertTextToBlob(&p->sParse, 0) ){
       if( p->sParse.oom ){
         return SQLITE_NOMEM;

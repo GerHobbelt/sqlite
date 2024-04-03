@@ -421,7 +421,7 @@ typedef int (*sqlite3_callback)(void*,int,char**, char**);
 ** <li> The application must not modify the SQL statement text passed into
 **      the 2nd parameter of sqlite3_exec() while sqlite3_exec() is running.
 ** <li> The application must not dereference the arrays or string pointers
-**       passed as the 3rd and 4th parameters after the callback returns.
+**       passed as the 3rd and 4th callback parameters after it returns.
 ** </ul>
 */
 int sqlite3_exec(
@@ -2337,7 +2337,7 @@ struct sqlite3_mem_methods {
 ** or negative to leave the setting unchanged.
 ** The second parameter is a pointer to an integer into which is written
 ** 0 or 1 to indicate whether output-for-triggers has been disabled - 0 if
-** it is not disabled, 1 if it is. 
+** it is not disabled, 1 if it is.
 ** </dd>
 **
 ** [[SQLITE_DBCONFIG_RESET_DATABASE]] <dt>SQLITE_DBCONFIG_RESET_DATABASE</dt>
@@ -2351,7 +2351,7 @@ struct sqlite3_mem_methods {
 **      database, or calling sqlite3_table_column_metadata(), ignoring any
 **      errors.  This step is only necessary if the application desires to keep
 **      the database in WAL mode after the reset if it was in WAL mode before
-**      the reset. 
+**      the reset.
 ** <li> sqlite3_db_config(db, SQLITE_DBCONFIG_RESET_DATABASE, 1, 0);
 ** <li> [sqlite3_exec](db, "[VACUUM]", 0, 0, 0);
 ** <li> sqlite3_db_config(db, SQLITE_DBCONFIG_RESET_DATABASE, 0, 0);
@@ -3679,7 +3679,7 @@ void sqlite3_progress_handler(sqlite3*, int, int(*)(void*), void*);
 **     property on a database file that does in fact change can result
 **     in incorrect query results and/or [SQLITE_CORRUPT] errors.
 **     See also: [SQLITE_IOCAP_IMMUTABLE].
-**      
+**
 ** </ul>
 **
 ** ^Specifying an unknown parameter in the query component of a URI is not an
@@ -4375,7 +4375,7 @@ const char *sqlite3_normalized_sql(sqlite3_stmt *pStmt);
 ** the content of the database file.
 **
 ** Note that [application-defined SQL functions] or
-** [virtual tables] might change the database indirectly as a side effect. 
+** [virtual tables] might change the database indirectly as a side effect.
 ** ^(For example, if an application defines a function "eval()" that
 ** calls [sqlite3_exec()], then the following SQL statement would
 ** change the database file through side-effects:
@@ -5100,7 +5100,7 @@ int sqlite3_data_count(sqlite3_stmt *pStmt);
 ** The return value of sqlite3_column_type() can be used to decide which
 ** of the first six interface should be used to extract the column value.
 ** The value returned by sqlite3_column_type() is only meaningful if no
-** automatic type conversions have occurred for the value in question. 
+** automatic type conversions have occurred for the value in question.
 ** After a type conversion, the result of calling sqlite3_column_type()
 ** is undefined, though harmless.  Future
 ** versions of SQLite may change the behavior of sqlite3_column_type()
@@ -5354,7 +5354,7 @@ int sqlite3_reset(sqlite3_stmt *pStmt);
 ** ^The second parameter is the name of the SQL function to be created or
 ** redefined.  ^The length of the name is limited to 255 bytes in a UTF-8
 ** representation, exclusive of the zero-terminator.  ^Note that the name
-** length limit is in UTF-8 bytes, not characters nor UTF-16 bytes. 
+** length limit is in UTF-8 bytes, not characters nor UTF-16 bytes.
 ** ^Any attempt to create a function with a longer name
 ** will result in [SQLITE_MISUSE] being returned.
 **
@@ -5442,7 +5442,7 @@ int sqlite3_reset(sqlite3_stmt *pStmt);
 ** nArg parameter is a better match than a function implementation with
 ** a negative nArg.  ^A function where the preferred text encoding
 ** matches the database encoding is a better
-** match than a function where the encoding is different. 
+** match than a function where the encoding is different.
 ** ^A function where the encoding difference is between UTF16le and UTF16be
 ** is a closer match than a function where the encoding difference is
 ** between UTF8 and UTF16.
@@ -5911,7 +5911,7 @@ sqlite3 *sqlite3_context_db_handle(sqlite3_context*);
 ** query execution, under some circumstances the associated auxiliary data
 ** might be preserved.  An example of where this might be useful is in a
 ** regular-expression matching function. The compiled version of the regular
-** expression can be stored as auxiliary data associated with the pattern string. 
+** expression can be stored as auxiliary data associated with the pattern string.
 ** Then as long as the pattern string remains the same,
 ** the compiled regular expression can be reused on multiple
 ** invocations of the same function.
@@ -6018,7 +6018,7 @@ void sqlite3_set_auxdata(sqlite3_context*, int N, void*, void (*)(void*));
 ** languages or in other circumstances where it might be possible for an
 ** an attacker to invoke them.  Any agent that can invoke these interfaces
 ** can probably also take control of the process.
-** 
+**
 ** Database connection client data is only available for SQLite
 ** version 3.44.0 ([dateof:3.44.0]) and later.
 **
@@ -7276,7 +7276,7 @@ typedef struct sqlite3_module sqlite3_module;
 ** KEYWORDS: sqlite3_module {virtual table module}
 **
 ** This structure, sometimes called a "virtual table module",
-** defines the implementation of a [virtual table]. 
+** defines the implementation of a [virtual table].
 ** This structure consists mostly of methods for the module.
 **
 ** ^A virtual table module is created by filling in a persistent
@@ -7653,7 +7653,7 @@ int sqlite3_declare_vtab(sqlite3*, const char *zSQL);
 ** METHOD: sqlite3
 **
 ** ^(Virtual tables can provide alternative implementations of functions
-** using the [xFindFunction] method of the [virtual table module]. 
+** using the [xFindFunction] method of the [virtual table module].
 ** But global versions of those functions
 ** must exist in order to be overloaded.)^
 **
@@ -8043,7 +8043,7 @@ int sqlite3_vfs_unregister(sqlite3_vfs*);
 ** implemented by sqlite3_mutex_try().  On those systems, sqlite3_mutex_try()
 ** will always return SQLITE_BUSY. In most cases the SQLite core only uses
 ** sqlite3_mutex_try() as an optimization, so this is acceptable
-** behavior. The exceptions are unix builds that set the 
+** behavior. The exceptions are unix builds that set the
 ** SQLITE_ENABLE_SETLK_TIMEOUT build option. In that case a working
 ** sqlite3_mutex_try() is required.)^
 **
@@ -8466,7 +8466,7 @@ char *sqlite3_str_finish(sqlite3_str*);
 ** ^This method can be used, for example, to add whitespace indentation.
 **
 ** ^The [sqlite3_str_reset(X)] method resets the string under construction
-** inside [sqlite3_str] object X back to zero bytes in length. 
+** inside [sqlite3_str] object X back to zero bytes in length.
 **
 ** These methods do not return a result code.  ^If an error occurs, that fact
 ** is recorded in the [sqlite3_str] object and can be recovered by a
@@ -8568,7 +8568,7 @@ int sqlite3_status64(
 ** <dd>This parameter records the largest memory allocation request
 ** handed to [sqlite3_malloc()] or [sqlite3_realloc()] (or their
 ** internal equivalents).  Only the value returned in the
-** *pHighwater parameter to [sqlite3_status()] is of interest. 
+** *pHighwater parameter to [sqlite3_status()] is of interest.
 ** The value written into the *pCurrent parameter is undefined.</dd>)^
 **
 ** [[SQLITE_STATUS_MALLOC_COUNT]] ^(<dt>SQLITE_STATUS_MALLOC_COUNT</dt>
@@ -8594,7 +8594,7 @@ int sqlite3_status64(
 ** [[SQLITE_STATUS_PAGECACHE_SIZE]] ^(<dt>SQLITE_STATUS_PAGECACHE_SIZE</dt>
 ** <dd>This parameter records the largest memory allocation request
 ** handed to the [pagecache memory allocator].  Only the value returned in the
-** *pHighwater parameter to [sqlite3_status()] is of interest. 
+** *pHighwater parameter to [sqlite3_status()] is of interest.
 ** The value written into the *pCurrent parameter is undefined.</dd>)^
 **
 ** [[SQLITE_STATUS_SCRATCH_USED]] <dt>SQLITE_STATUS_SCRATCH_USED</dt>
@@ -8788,7 +8788,7 @@ int sqlite3_db_status(sqlite3*, int op, int *pCur, int *pHiwtr, int resetFlg);
 ** statements.  For example, if the number of table steps greatly exceeds
 ** the number of table searches or result rows, that would tend to indicate
 ** that the prepared statement is using a full table scan rather than
-** an index. 
+** an index.
 **
 ** ^(This interface is used to retrieve and reset counter values from
 ** a [prepared statement].  The first argument is the prepared statement
@@ -8977,7 +8977,7 @@ struct sqlite3_pcache_page {
 ** it is purely advisory.  ^On a cache where bPurgeable is false, SQLite will
 ** never invoke xUnpin() except to deliberately delete a page.
 ** ^In other words, calls to xUnpin() on a cache with bPurgeable set to
-** false will always have the "discard" flag set to true. 
+** false will always have the "discard" flag set to true.
 ** ^Hence, a cache created with bPurgeable false will
 ** never contain any unpinned pages.
 **
@@ -9618,7 +9618,7 @@ int sqlite3_wal_checkpoint(sqlite3 *db, const char *zDb);
 **   ^Checkpoint as many frames as possible without waiting for any database
 **   readers or writers to finish, then sync the database file if all frames
 **   in the log were checkpointed. ^The [busy-handler callback]
-**   is never invoked in the SQLITE_CHECKPOINT_PASSIVE mode. 
+**   is never invoked in the SQLITE_CHECKPOINT_PASSIVE mode.
 **   ^On the other hand, passive mode might leave the checkpoint unfinished
 **   if there are concurrent readers or writers.
 **
@@ -10255,14 +10255,14 @@ int sqlite3_stmt_scanstatus(
   int idx,                  /* Index of loop to report on */
   int iScanStatusOp,        /* Information desired.  SQLITE_SCANSTAT_* */
   void *pOut                /* Result written here */
-);    
+);
 int sqlite3_stmt_scanstatus_v2(
   sqlite3_stmt *pStmt,      /* Prepared statement for which info desired */
   int idx,                  /* Index of loop to report on */
   int iScanStatusOp,        /* Information desired.  SQLITE_SCANSTAT_* */
   int flags,                /* Mask of flags defined below */
   void *pOut                /* Result written here */
-);    
+);
 
 /*
 ** CAPI3REF: Prepared Statement Scan Status
@@ -10440,7 +10440,7 @@ int sqlite3_preupdate_blobwrite(sqlite3 *);
 ** The return value is OS-dependent.  For example, on unix systems, after
 ** [sqlite3_open_v2()] returns [SQLITE_CANTOPEN], this interface could be
 ** called to get back the underlying "errno" that caused the problem, such
-** as ENOSPC, EAUTH, EISDIR, and so forth. 
+** as ENOSPC, EAUTH, EISDIR, and so forth.
 */
 int sqlite3_system_errno(sqlite3*);
 
