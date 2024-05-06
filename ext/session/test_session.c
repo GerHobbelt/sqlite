@@ -1047,7 +1047,6 @@ static Tcl_Obj *testIterData(sqlite3_changeset_iter *pIter){
   Tcl_Obj *pOld;                  /* Vector of old.* values */
   Tcl_Obj *pNew;                  /* Vector of new.* values */
   int bIndirect;
-
   char *zPK;
   unsigned char *abPK;
   int i;
@@ -1725,6 +1724,7 @@ int TestSession_Init(Tcl_Interp *interp){
   } aCmd[] = {
     { "sqlite3session", test_sqlite3session },
     { "sqlite3changegroup", test_sqlite3changegroup },
+    { "sqlite3changeset_start", test_sqlite3changeset_start },
     { "sqlite3session_foreach", test_sqlite3session_foreach },
     { "sqlite3changeset_invert", test_sqlite3changeset_invert },
     { "sqlite3changeset_concat", test_sqlite3changeset_concat },
