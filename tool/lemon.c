@@ -5571,7 +5571,7 @@ int Symbol_count(void)
 /* Return an array of pointers to all data in the table.
 ** The array is obtained from malloc.  Return NULL if memory allocation
 ** problems, or if the array is empty. */
-struct symbol **Symbol_arrayof()
+struct symbol **Symbol_arrayof(void)
 {
   struct symbol **array;
   int i,arrSize;
