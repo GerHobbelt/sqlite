@@ -182,7 +182,7 @@ static sqlite3_uint64 vlog_time(){
 #elif SQLITE_OS_WIN
 #include <windows.h>
 #include <time.h>
-static sqlite3_uint64 vlog_time(){
+static sqlite3_uint64 vlog_time(void){
   FILETIME ft;
   sqlite3_uint64 u64time = 0;
  

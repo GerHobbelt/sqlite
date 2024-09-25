@@ -172,7 +172,7 @@ void testCaseFinish(int rc){
   fflush(stdout);
 }
 
-void testCaseSkip(){
+void testCaseSkip(void){
   printf("Skipped\n");
 }
 

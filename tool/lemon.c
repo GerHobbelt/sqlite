@@ -48,7 +48,7 @@ extern int access(const char *path, int mode);
 #define MAXRHS 1000
 #endif
 
-extern void memory_error();
+extern void memory_error(void);
 static int showPrecedenceConflict = 0;
 static char *msort(char*,char**,int(*)(const char*,const char*));
 
@@ -430,7 +430,7 @@ struct lemon {
 };
 
 #define MemoryCheck(X) if((X)==0){ \
-  extern void memory_error(); \
+  extern void memory_error(void); \
   memory_error(); \
 }
 
@@ -5563,7 +5563,7 @@ struct symbol *Symbol_Nth(int n)
 }
 
 /* Return the size of the array */
-int Symbol_count()
+int Symbol_count(void)
 {
   return x2a ? x2a->count : 0;
 }
@@ -5622,7 +5622,7 @@ PRIVATE unsigned statehash(struct config *a)
 }
 
 /* Allocate a new state structure */
-struct state *State_new()
+struct state *State_new(void)
 {
   struct state *newstate;
   newstate = (struct state *)calloc(1, sizeof(struct state) );

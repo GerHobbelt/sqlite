@@ -242,7 +242,7 @@
 #define FTS5_DLIDX_ROWID(segid, height, pgno) fts5_dri(segid, 1, height, pgno)
 
 #ifdef SQLITE_DEBUG
-int sqlite3Fts5Corrupt() { return SQLITE_CORRUPT_VTAB; }
+int sqlite3Fts5Corrupt(void) { return SQLITE_CORRUPT_VTAB; }
 #endif
 
 

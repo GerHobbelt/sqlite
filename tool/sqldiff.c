@@ -1857,7 +1857,7 @@ static void module_name_func(
 ** Return the text of an SQL statement that itself returns the list of
 ** tables to process within the database.
 */
-const char *all_tables_sql(){
+const char *all_tables_sql(void) {
   if( g.bHandleVtab ){
     int rc;
 

@@ -125,7 +125,7 @@ static void fileOpen(const char *zPrg, const char *zName){
 /*
 ** Close the database file opened by fileOpen()
 */
-static void fileClose(){
+static void fileClose(void) {
   if( g.bRaw==0 ){
     sqlite3_close(g.pDb);
     g.pDb = 0;

@@ -228,7 +228,7 @@ static sqlite3_uint64 vfslog_time(){
 }
 #elif SQLITE_OS_WIN
 #include <time.h>
-static sqlite3_uint64 vfslog_time(){
+static sqlite3_uint64 vfslog_time(void){
   FILETIME ft;
   sqlite3_uint64 u64time = 0;
  

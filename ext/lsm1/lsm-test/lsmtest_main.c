@@ -2,7 +2,7 @@
 #include "lsmtest.h"
 #include <sqlite3.h>
 
-void test_failed(){ 
+void test_failed(void){ 
   assert( 0 );
   return; 
 }
@@ -569,7 +569,7 @@ static void do_speed_write_hook2(
 #define ST_TRANS   8
 
 
-static void print_speed_test_help(){
+static void print_speed_test_help(void){
   printf(
 "\n"
 "Repeat the following $repeat times:\n"
