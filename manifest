@@ -1,5 +1,5 @@
-C Version\s3.47.0
-D 2024-10-21T16:30:22.476
+C Avoid\sloading\sthe\sentire\srecord\sinto\smemory\sfor\san\ssqlite3_preupdate_old()\scall\sthat\sretrieves\san\sIPK\svalue.
+D 2024-11-04T16:59:02.337
 F .fossil-settings/empty-dirs dbb81e8fc0401ac46a1491ab34a7f2c7c0452f2f06b54ebb845d024ca8283ef1
 F .fossil-settings/ignore-glob 35175cdfcf539b2318cb04a9901442804be81cd677d8b889fcc9149c21f239ea
 F LICENSE.md df5091916dbb40e6e9686186587125e1b2ff51f022cc334e886c19a0e9982724
@@ -585,6 +585,7 @@ F ext/session/session_speed_test.c dcf0ef58d76b70c8fbd9eab3be77cf9deb8bc1638fed8
 F ext/session/sessionalter.test e852acb3d2357aac7d0b920a2109da758c4331bfdf85b41d39aa3a8c18914f65
 F ext/session/sessionat.test 00c8badb35e43a2f12a716d2734a44d614ff62361979b6b85419035bc04b45ee
 F ext/session/sessionbig.test 47c381e7acfabeef17d98519a3080d69151723354d220afa2053852182ca7adf
+F ext/session/sessionblob.test 87faf667870b72f08e91969abd9f52a383ab7b514506ee194d64a39d8faff00a
 F ext/session/sessionchange.test 77c4702050f24270b58070e2cf01c95c3d232a3ef164b70f31974b386ce69903
 F ext/session/sessionconflict.test 8b8cbd98548e2e636ddc17d0986276f60e833fb865617dd4f88ea5bbe3a16b96
 F ext/session/sessiondiff.test e89f7aedcdd89e5ebac3a455224eb553a171e9586fc3e1e6a7b3388d2648ba8d
@@ -844,9 +845,9 @@ F src/util.c ceebf912f673247e305f16f97f0bb7285fca1d37413b79680714a553a9021d33
 F src/vacuum.c b763b6457bd058d2072ef9364832351fd8d11e8abf70cbb349657360f7d55c40
 F src/vdbe.c 1f56a0ae24115c2e37213e77cf79aa3b8c8d0366755707385564f6b8dd83d0fb
 F src/vdbe.h c2549a215898a390de6669cfa32adba56f0d7e17ba5a7f7b14506d6fd5f0c36a
-F src/vdbeInt.h af7d7e8291edd0b19f2cd698e60e4d4031078f9a2f2328ac8f0b7efb134f8a1d
-F src/vdbeapi.c 53c7e26a2c0821a892b20eee2cde4656e31998212f3d515576c780dfaa45fd17
-F src/vdbeaux.c f06f011e4fac948941ea821ac365a9f1c163ef473e63756d6e499a37c6bda9ef
+F src/vdbeInt.h 2da01c73e8e3736a9015d5b04aa04d209bc9023d279d237d4d409205e921ea1e
+F src/vdbeapi.c 6353de05e8e78e497ccb33381ba5662ccc11c0339e5b1455faff01b6dacc3075
+F src/vdbeaux.c f0706ad786b8a6c5bc7ea622f3916c2ba2b883abc872d0b4911c4f021945c0e5
 F src/vdbeblob.c 255be187436da38b01f276c02e6a08103489bbe2a7c6c21537b7aecbe0e1f797
 F src/vdbemem.c df568ef0187e4be2788c35174f6d9b8566ab9475f9aff2d73907ed05aa5684b2
 F src/vdbesort.c d0a3c7056c081703c8b6d91ad60f17da5e062a5c64bf568ed0fa1b5f4cae311f
@@ -2198,32 +2199,8 @@ F tool/version-info.c 3b36468a90faf1bbd59c65fd0eb66522d9f941eedd364fabccd7227350
 F tool/warnings-clang.sh bbf6a1e685e534c92ec2bfba5b1745f34fb6f0bc2a362850723a9ee87c1b31a7
 F tool/warnings.sh 49a486c5069de041aedcbde4de178293e0463ae9918ecad7539eedf0ec77a139
 F tool/win/sqlite.vsix deb315d026cc8400325c5863eef847784a219a2f
-F vsixtest/App.xaml b76d3b48860e7454775c47ea38ffea9c4abe3e85
-F vsixtest/App.xaml.cpp 41158ee43269820136fa3bba00c0bd91b26cc38b650ee392aec2a8d823e54318
-F vsixtest/App.xaml.h 4a9768e2983d05600ad1e1c2f1b00a132967da9f
-F vsixtest/Assets/LockScreenLogo.scale-200.png e820c9a3deb909197081b0bf3216c06e13905f0a
-F vsixtest/Assets/SplashScreen.scale-200.png cab70988ca71bebec7bfeb3b6dbafe17b9ab0b4a
-F vsixtest/Assets/Square150x150Logo.scale-200.png e17b40817db7a239fc239d83efcc951fb824e3ff
-F vsixtest/Assets/Square44x44Logo.scale-200.png 2f166237094dea94d952d10b9eeae81806844f1c
-F vsixtest/Assets/Square44x44Logo.targetsize-24_altform-unplated.png 5f6a6d391b95a3061ccca6e6fdd6955ede63b4ed
-F vsixtest/Assets/StoreLogo.png 0828b7257db74a4ecd5eeb6b7b4971f0fdc4d9d1
-F vsixtest/Assets/Wide310x150Logo.scale-200.png 04ddefe5bc5f43ae12a7433f6f236ddab101ac42
-F vsixtest/MainPage.xaml 34f49897e3ca533a7e74506ba0759b66eebce151
-F vsixtest/MainPage.xaml.cpp 7f31fc6de751b64676c0924c97a5485d950a91d7
-F vsixtest/MainPage.xaml.h cc05cca10d50a003f6c6e4448b701cdd07f52f29
-F vsixtest/Package.appxmanifest 6b6db1eb7df3a315c5d681059754d5f0e0c47a93
-F vsixtest/pch.cpp cb823cfac36f1a39a7eb0acbd7e9a0b0de8f23af
-F vsixtest/pch.h 9cab7980f2ac4baa40807d8b5e52af32a21cf78c
-F vsixtest/vsixtest.sln 77cadbe4e96c1fe1bf51cd77de9e9b0a12ada547
-F vsixtest/vsixtest.tcl 6195aba1f12a5e10efc2b8c0009532167be5e301abe5b31385638080bb302912
-F vsixtest/vsixtest.vcxproj.data 2ed517e100c66dc455b492e1a33350c1b20fbcdc
-F vsixtest/vsixtest.vcxproj.filters 37e51ffedcdb064aad6ff33b6148725226cd608e
-F vsixtest/vsixtest_TemporaryKey.pfx e5b1b036facdb453873e7084e1cae9102ccc67a0
-P e904b37fb2621e6bd5e761f3ecb75adb34350f2d1d7b229e655e74bc6a2f5321
-R a76584af8bedcd13de97df48304b6b29
-T +sym-major-release *
-T +sym-release *
-T +sym-version-3.47.0 *
-U drh
-Z 06d21548d99c4222144faa895fe216f7
+P af0a345b3b287f82b54249cfa574ef3ce52305a6452058aac98cd473c361919e
+R 84f5bc88e95886a46e23b56039713592
+U dan
+Z ba372c464e587d954c923d1075bdeb25
 # Remove this line to create a well-formed Fossil manifest.
