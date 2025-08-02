@@ -6113,7 +6113,7 @@ void sqlite3Fts3EvalPhraseCleanup(Fts3Phrase *pPhrase){
 ** Return SQLITE_CORRUPT_VTAB.
 */
 #ifdef SQLITE_DEBUG
-int sqlite3Fts3Corrupt(){
+int sqlite3Fts3Corrupt(void){
   return SQLITE_CORRUPT_VTAB;
 }
 #endif
