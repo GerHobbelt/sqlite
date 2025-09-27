@@ -218,7 +218,7 @@ int lsm_config(lsm_db *, int, ...);
 **   The amount of uncheckpointed data already written to the database file
 **   is a global parameter. After performing database work (writing to the
 **   database file), the process checks if the total amount of uncheckpointed 
-**   data exceeds the value of this paramter. If so, a checkpoint is performed.
+**   data exceeds the value of this parameter. If so, a checkpoint is performed.
 **   This means that this option may cause the connection to perform a 
 **   checkpoint even if the current connection has itself written very little
 **   data into the database file.

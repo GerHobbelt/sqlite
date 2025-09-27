@@ -120,7 +120,7 @@ void sqlite3async_run(void);
 ** SQLITEASYNC_DELAY or SQLITEASYNC_LOCKFILES. The second argument must
 ** be passed the new value for the parameter as type "int".
 **
-** When querying the current value of a paramter, the first argument must
+** When querying the current value of a parameter, the first argument must
 ** be one of SQLITEASYNC_GET_HALT, GET_DELAY or GET_LOCKFILES. The second 
 ** argument to this function must be of type (int *). The current value
 ** of the queried parameter is copied to the memory pointed to by the
